@@ -5,13 +5,26 @@
 [client]
 toolbarMode = "auto"
 
-# Aplicativo desktop: o servidor escuta no loopback, na porta padrão, e
-# abre o navegador sozinho. ``headless = false`` é o que faz o Streamlit
-# disparar ``http://localhost:8501`` quando o servidor fica pronto.
+# Aplicativo desktop: o servidor escuta no loopback e abre o navegador
+# sozinho. ``headless = false`` é o que faz o Streamlit disparar
+# ``http://localhost:8501`` quando o servidor fica pronto.
+#
+# A porta NÃO é fixada aqui de propósito. O launcher escolhe uma porta
+# livre (8501..8510) e a repassa em ``--server.port``. Em um bundle
+# PyInstaller o Streamlit infere ``global.developmentMode = true``
+# (o ``config.py`` não está em ``site-packages``), e nesse modo ele
+# recusa a opção ``server.port``; fixá-la no arquivo quebra a importação
+# do ``app`` no ``--autoteste``. Deixar a porta fora do TOML mantém o
+# pacote importável em qualquer modo, e o launcher continua mandando a
+# porta efetiva.
 [server]
 headless = false
 address = "localhost"
-port = 8501
+
+# Limite de upload em MB. É a primeira barreira contra PDFs/arquivos
+# gigantes; services/document_parser.py repete o limite em código para
+# chamadas diretas à API e limita o PDF a 500 páginas.
+maxUploadSize = 100
 
 [browser]
 gatherUsageStats = false

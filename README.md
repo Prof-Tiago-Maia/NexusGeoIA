@@ -227,8 +227,10 @@ NexusGeoIA_v0.9.0_Portatil/
 ```
 
 Os dados do usuário (histórico, documentos, banco e `config_local.json`)
-ficam **na própria pasta extraída**: mover a pasta leva o acervo junto. O
-executável instalado via Inno Setup usa `%LOCALAPPDATA%\NexusGeoIA`.
+ficam **na própria pasta extraída**: mover a pasta leva o acervo junto. Se
+a pasta extraída não for gravável (por exemplo, `C:\Program Files`), o
+launcher cai automaticamente para `%LOCALAPPDATA%\NexusGeoIA`. O
+executável instalado via Inno Setup também usa `%LOCALAPPDATA%\NexusGeoIA`.
 
 ### Problemas comuns
 

@@ -390,10 +390,22 @@ class TestInstallerIss(unittest.TestCase):
 
     def test_instala_o_ollama_silenciosamente(self):
         self.assertIn("OllamaSetup.exe", self.iss)
-        self.assertIn("/VERYSILENT", self.iss)
-        self.assertIn("/NORESTART", self.iss)
         self.assertIn("CurStepChanged", self.iss)
         self.assertIn("ssPostInstall", self.iss)
+        self.assertIn(
+            "ExtractTemporaryFile('instalar_ollama.ps1')",
+            self.iss,
+        )
+        self.assertIn("-File", self.iss)
+        self.assertNotIn("-Command", self.iss)
+
+        script = ler(PACKAGING / "instalar_ollama.ps1")
+
+        self.assertIn("/VERYSILENT", script)
+        self.assertIn("/NORESTART", script)
+        self.assertIn("Get-AuthenticodeSignature", script)
+        self.assertIn("Invoke-WebRequest", script)
+        self.assertIn("SignerCertificate.Subject", script)
 
     def test_instala_sem_uac_por_padrao(self):
         # Sem prompt de Administrador em PCs academicos/laboratorios.
@@ -423,12 +435,18 @@ class TestConfigStreamlit(unittest.TestCase):
     def test_headless_desligado(self):
         self.assertIs(self.config["server"]["headless"], False)
 
-    def test_porta_e_endereco_do_aplicativo(self):
-        self.assertEqual(self.config["server"]["port"], 8501)
+    def test_endereco_do_aplicativo_sem_porta_fixa(self):
+        # A porta e escolhida pelo launcher (8501..8510) e repassada em
+        # --server.port. Fixa-la no TOML quebra a importacao do app no
+        # bundle PyInstaller, onde o Streamlit infere developmentMode.
         self.assertEqual(self.config["server"]["address"], "localhost")
+        self.assertNotIn("port", self.config["server"])
 
     def test_metricas_de_uso_desativadas(self):
         self.assertIs(self.config["browser"]["gatherUsageStats"], False)
+
+    def test_limite_de_upload_configurado(self):
+        self.assertEqual(self.config["server"]["maxUploadSize"], 100)
 
 
 class TestLauncher(unittest.TestCase):
@@ -522,6 +540,69 @@ class TestLauncher(unittest.TestCase):
     def test_inclui_ollama_no_path_da_sessao(self):
         self.assertIn("adicionar_ollama_ao_path", self.codigo)
         self.assertIn('"Programs" / "Ollama"', self.codigo)
+
+    def test_preserva_pasta_portatil_quando_gravavel(self):
+        base = RAIZ / "build" / "_tmp_fallback_dados"
+        shutil.rmtree(base, ignore_errors=True)
+        base.mkdir(parents=True, exist_ok=True)
+
+        try:
+            pacote = base / "pacote"
+            pacote.mkdir()
+            local = base / "localappdata"
+
+            with mock.patch.object(
+                launcher_desktop,
+                "diretorio_localappdata",
+                return_value=local,
+            ), mock.patch.dict(
+                os.environ,
+                {"ASSISTENTE_DATA_DIR": str(pacote)},
+            ):
+                resultado = launcher_desktop.configurar_diretorio_dados()
+
+                self.assertEqual(resultado, pacote)
+                self.assertEqual(
+                    os.environ["ASSISTENTE_DATA_DIR"],
+                    str(pacote),
+                )
+        finally:
+            shutil.rmtree(base, ignore_errors=True)
+
+    def test_cai_para_localappdata_quando_pasta_portatil_e_protegida(self):
+        base = RAIZ / "build" / "_tmp_fallback_dados"
+        shutil.rmtree(base, ignore_errors=True)
+        base.mkdir(parents=True, exist_ok=True)
+
+        try:
+            pacote = base / "Program Files" / "NexusGeoIA"
+            local = base / "localappdata"
+            local.mkdir()
+
+            def gravavel(caminho):
+                return Path(caminho) == local
+
+            with mock.patch.object(
+                launcher_desktop,
+                "diretorio_localappdata",
+                return_value=local,
+            ), mock.patch.object(
+                launcher_desktop,
+                "_diretorio_gravavel",
+                side_effect=gravavel,
+            ), mock.patch.dict(
+                os.environ,
+                {"ASSISTENTE_DATA_DIR": str(pacote)},
+            ):
+                resultado = launcher_desktop.configurar_diretorio_dados()
+
+                self.assertEqual(resultado, local)
+                self.assertEqual(
+                    os.environ["ASSISTENTE_DATA_DIR"],
+                    str(local),
+                )
+        finally:
+            shutil.rmtree(base, ignore_errors=True)
 
 
 class TestPortaDinamicaLauncher(unittest.TestCase):
@@ -626,7 +707,27 @@ class TestPortaDinamicaLauncher(unittest.TestCase):
         self.assertTrue(resultado)
         self.assertEqual(chamadas, ["http://localhost:8502"])
 
-    def test_iniciar_streamlit_repassa_server_port(self):
+    def test_porta_do_argumento_aceita_as_duas_formas(self):
+        self.assertEqual(
+            launcher_desktop.porta_do_argumento(
+                ["--servidor-streamlit", "--porta", "8504"]
+            ),
+            8504,
+        )
+        self.assertEqual(
+            launcher_desktop.porta_do_argumento(["--porta=8506"]),
+            8506,
+        )
+        self.assertEqual(
+            launcher_desktop.porta_do_argumento(["--porta", "x"]),
+            launcher_desktop.PORTA_PREFERIDA,
+        )
+        self.assertEqual(
+            launcher_desktop.porta_do_argumento([]),
+            launcher_desktop.PORTA_PREFERIDA,
+        )
+
+    def test_executar_servidor_streamlit_roda_o_cli_e_registra(self):
         lidos = {}
         argumentos_originais = list(sys.argv)
         self.addCleanup(
@@ -644,17 +745,97 @@ class TestPortaDinamicaLauncher(unittest.TestCase):
         ), mock.patch.object(
             launcher_desktop, "preparar_ambiente"
         ), mock.patch.object(
-            launcher_desktop, "agendar_abertura_navegador"
-        ) as navegador, mock.patch(
+            launcher_desktop, "_gravar_registro_instancia"
+        ) as gravar, mock.patch.object(
+            launcher_desktop, "_remover_registro_instancia"
+        ) as remover, mock.patch(
             "streamlit.web.cli.main",
             side_effect=main_falso,
         ):
+            codigo = launcher_desktop.executar_servidor_streamlit(8504)
+
+        self.assertEqual(codigo, 0)
+        self.assertIn("--server.port=8504", lidos["argv"])
+        self.assertIn("--server.headless=true", lidos["argv"])
+        gravar.assert_called_once_with(8504)
+        remover.assert_called_once_with()
+
+    def test_argumentos_do_streamlit_usam_a_porta_escolhida(self):
+        argumentos = launcher_desktop.argumentos_streamlit(8502)
+
+        self.assertIn("--server.port=8502", argumentos)
+        self.assertNotIn("--server.port", argumentos)
+        self.assertIn("--server.headless=true", argumentos)
+        self.assertIn("--global.developmentMode=false", argumentos)
+        self.assertIn(str(RAIZ / "app.py"), argumentos)
+
+    def test_comando_do_servidor_reexecuta_o_launcher(self):
+        comando = launcher_desktop.comando_servidor(8504)
+
+        self.assertEqual(comando[0], str(sys.executable))
+        self.assertIn(launcher_desktop.ARG_SERVIDOR, comando)
+        self.assertEqual(
+            comando[comando.index(launcher_desktop.ARG_PORTA) + 1],
+            "8504",
+        )
+
+    def test_iniciar_streamlit_usa_subprocesso_e_job_object(self):
+        class ProcessoFalso:
+            """Subprocesso falso: registra a espera e devolve o código."""
+
+            pid = 4242
+
+            def __init__(self):
+                self.aguardou = False
+
+            def wait(self):
+                self.aguardou = True
+
+                return 0
+
+            def poll(self):
+                return 0
+
+        processo = ProcessoFalso()
+        job = mock.Mock()
+        job.ativo = True
+        job.criar.return_value = True
+        job.associar.return_value = True
+
+        with mock.patch.object(
+            launcher_desktop,
+            "caminho_app",
+            return_value=RAIZ / "app.py",
+        ), mock.patch.object(
+            launcher_desktop, "preparar_ambiente"
+        ), mock.patch.object(
+            launcher_desktop, "registrar_limpeza_encerramento"
+        ) as registrar, mock.patch.object(
+            launcher_desktop,
+            "JobObjectWindows",
+            return_value=job,
+        ), mock.patch.object(
+            launcher_desktop, "subprocess"
+        ) as modulo_subprocesso, mock.patch.object(
+            launcher_desktop, "agendar_abertura_navegador"
+        ) as navegador, mock.patch.object(
+            launcher_desktop, "_limpar_servidor"
+        ):
+            modulo_subprocesso.Popen.return_value = processo
+
             codigo = launcher_desktop.iniciar_streamlit(8502)
 
         self.assertEqual(codigo, 0)
-        self.assertIn("--server.port=8502", lidos["argv"])
-        self.assertNotIn("--server.port", lidos["argv"])
-        self.assertIn("--server.headless=true", lidos["argv"])
+        self.assertTrue(processo.aguardou)
+
+        comando = modulo_subprocesso.Popen.call_args.args[0]
+
+        self.assertIn(launcher_desktop.ARG_SERVIDOR, comando)
+        self.assertIn("8502", comando)
+
+        registrar.assert_called_once()
+        job.criar.assert_called_once()
+        job.associar.assert_called_once_with(processo)
         navegador.assert_called_once_with(8502)
 
 
@@ -1004,6 +1185,43 @@ class TestSmokeTestArtefatos(unittest.TestCase):
 
         (interna / "prompts").mkdir(parents=True, exist_ok=True)
         (interna / ".streamlit").mkdir(parents=True, exist_ok=True)
+        (interna / "certifi").mkdir(parents=True, exist_ok=True)
+
+        try:
+            (pacote / "NexusGeoIA.exe").write_bytes(b"MZ" + b"0" * 64)
+            (interna / "app.py").write_text("", encoding="utf-8")
+            (interna / "prompts" / "system_base.txt").write_text(
+                "", encoding="utf-8"
+            )
+            (interna / ".streamlit" / "config.toml").write_text(
+                "", encoding="utf-8"
+            )
+            (interna / "certifi" / "cacert.pem").write_text(
+                "-----BEGIN CERTIFICATE-----",
+                encoding="utf-8",
+            )
+
+            falhas = []
+
+            with mock.patch.object(modulo, "TAMANHO_MINIMO_MB", 0):
+                resultado = modulo.verificar_pacote_onedir(pacote, falhas)
+
+            self.assertEqual(falhas, [])
+            self.assertIsNotNone(resultado)
+            self.assertIsNotNone(resultado["internal_mb"])
+        finally:
+            shutil.rmtree(pasta, ignore_errors=True)
+
+    def test_reprova_pacote_onedir_sem_cacert_pem(self):
+        # Bug 1: sem _internal/certifi/cacert.pem o import de
+        # services.llm_service quebra no bundle congelado.
+        modulo = self._modulo()
+        pasta = RAIZ / "build" / "_tmp_smoke_onedir_sem_certifi"
+        pacote = pasta / "NexusGeoIA"
+        interna = pacote / "_internal"
+
+        (interna / "prompts").mkdir(parents=True, exist_ok=True)
+        (interna / ".streamlit").mkdir(parents=True, exist_ok=True)
 
         try:
             (pacote / "NexusGeoIA.exe").write_bytes(b"MZ" + b"0" * 64)
@@ -1018,13 +1236,44 @@ class TestSmokeTestArtefatos(unittest.TestCase):
             falhas = []
 
             with mock.patch.object(modulo, "TAMANHO_MINIMO_MB", 0):
-                resultado = modulo.verificar_pacote_onedir(pacote, falhas)
+                modulo.verificar_pacote_onedir(pacote, falhas)
 
-            self.assertEqual(falhas, [])
-            self.assertIsNotNone(resultado)
-            self.assertIsNotNone(resultado["internal_mb"])
+            self.assertTrue(
+                any("cacert.pem" in falha for falha in falhas),
+                falhas,
+            )
         finally:
             shutil.rmtree(pasta, ignore_errors=True)
+
+    def test_ambiente_sem_venv_remove_o_ambiente_do_build(self):
+        modulo = self._modulo()
+
+        ambiente = modulo._ambiente_sem_venv(
+            {
+                "PATH": r"C:\Windows;C:\proj\.venv\Scripts;C:\py\Lib\site-packages",
+                "PYTHONPATH": "x",
+                "PYTHONHOME": "y",
+                "VIRTUAL_ENV": "z",
+            }
+        )
+
+        self.assertEqual(ambiente["PATH"], r"C:\Windows")
+
+        for chave in ("PYTHONPATH", "PYTHONHOME", "VIRTUAL_ENV"):
+            self.assertNotIn(chave, ambiente)
+
+    def test_smoke_executa_imports_congelados(self):
+        codigo = ler(PACKAGING / "smoke_test_artefatos.py")
+
+        for trecho in (
+            "--verificar-imports",
+            "ASSISTENTE_IMPORTS_REPORT",
+            "verificar_imports_congelados",
+            "_ambiente_sem_venv",
+            "services_llm_service",
+            "certifi/cacert.pem",
+        ):
+            self.assertIn(trecho, codigo)
 
     def test_reprova_pacote_onedir_sem_internal(self):
         modulo = self._modulo()
@@ -1169,6 +1418,31 @@ class TestScriptsPowerShell(unittest.TestCase):
         self.assertIn("exclude_binaries", codigo)
         self.assertIn("COLLECT(", codigo)
         self.assertIn('contents_directory', codigo)
+
+    def test_build_portatil_exige_certifi_no_internal(self):
+        codigo = ler(PACKAGING / "build_portatil.ps1")
+
+        # Bug 1: o build falha se o cacert.pem do certifi nao chegar ao
+        # bundle, em vez de gerar um .exe que so quebra no primeiro uso.
+        self.assertIn("collect_data_files", codigo)
+        self.assertIn("certifi\\cacert.pem", codigo)
+        self.assertGreaterEqual(
+            codigo.count('"certifi\\cacert.pem"'),
+            2,
+            "o certificado deve ser conferido em _internal e no staging",
+        )
+
+    def test_build_portatil_preserva_certificado_na_copia_do_internal(self):
+        codigo = ler(PACKAGING / "build_portatil.ps1")
+
+        # O robocopy excluia "*.pem" e o pacote portatil ficava sem o
+        # cacert.pem mesmo com dist\NexusGeoIA\_internal correto.
+        self.assertIn("[switch]$ManterCertificados", codigo)
+        self.assertIn('$exclusoesArquivo += "*.pem"', codigo)
+        self.assertIn(
+            "Copy-PastaPublicavel $PastaApp $Staging -ManterCertificados",
+            codigo,
+        )
 
     def test_build_portatil_exclui_certificados_do_internal_da_varredura(self):
         codigo = ler(PACKAGING / "build_portatil.ps1")
@@ -1486,6 +1760,461 @@ class TestScriptsPowerShell(unittest.TestCase):
         posicao_erro = codigo.index("set \"CODIGO_SAIDA=%ERRORLEVEL%\"", posicao_label)
 
         self.assertLess(posicao_label, posicao_erro)
+
+
+class TestCertificadosTls(unittest.TestCase):
+    """Bug 1: o ``certifi/cacert.pem`` precisa existir e ser usado.
+
+    A cadeia do erro real foi ``app`` -> ``core.assistant`` ->
+    ``core.smart_router`` -> ``services.llm_service`` -> ``ollama`` ->
+    ``httpx`` -> ``ssl.create_default_context``. O bundle não levava o
+    ``cacert.pem`` e o ``.exe`` quebrava no boot com FileNotFoundError.
+    """
+
+    def setUp(self):
+        self.spec = ler(PACKAGING / "assistente.spec")
+        self.launcher = ler(RAIZ / "launcher_desktop.py")
+        self.app = ler(RAIZ / "app.py")
+
+    def test_spec_coleta_o_certifi_com_collect_data_files(self):
+        self.assertIn("collect_data_files('certifi')", self.spec)
+        self.assertIn("collect_data_files(\"certifi\")", self.spec)
+        self.assertIn("dados_certifi", self.spec)
+        self.assertIn("datas += dados_certifi", self.spec)
+        self.assertIn("certifi/cacert.pem", self.spec)
+
+    def test_spec_inclui_a_cadeia_de_boot_do_llm(self):
+        for modulo in (
+            "ollama",
+            "httpx",
+            "httpcore",
+            "pydantic",
+            "pydantic_core",
+            "pypdf",
+            "docx",
+            "services.llm_service",
+            "core.smart_router",
+            "core.assistant",
+        ):
+            self.assertIn(f'"{modulo}"', self.spec, modulo)
+
+    def test_launcher_configura_ssl_cert_file_antes_do_config(self):
+        for trecho in (
+            "configurar_certificados",
+            "SSL_CERT_FILE",
+            "REQUESTS_CA_BUNDLE",
+            "VARIAVEIS_CERTIFICADO",
+            "certifi.where()",
+        ):
+            self.assertIn(trecho, self.launcher)
+
+        posicao_certificado = self.launcher.index(
+            "CAMINHO_CERTIFICADOS = configurar_certificados()"
+        )
+        posicao_config = self.launcher.index("import config  # noqa: E402")
+
+        self.assertLess(
+            posicao_certificado,
+            posicao_config,
+            "o certificado precisa ser configurado antes de import config",
+        )
+
+    def test_app_configura_ssl_cert_file_antes_de_core_e_services(self):
+        for trecho in (
+            "SSL_CERT_FILE",
+            "REQUESTS_CA_BUNDLE",
+            "_CAMINHO_CERTIFICADOS",
+            'import_module("certifi")',
+        ):
+            self.assertIn(trecho, self.app)
+
+        posicao_certificado = self.app.index("_CAMINHO_CERTIFICADOS = str(")
+        posicao_config = self.app.index("from config import APP_NAME")
+        posicao_llm = self.app.index("from services.llm_service import")
+
+        self.assertLess(posicao_certificado, posicao_config)
+        self.assertLess(posicao_certificado, posicao_llm)
+
+    def test_configurar_certificados_corrige_caminho_invalido(self):
+        import certifi
+
+        esperado = str(certifi.where())
+
+        with mock.patch.dict(
+            os.environ,
+            {
+                "SSL_CERT_FILE": r"C:\inexistente\cacert.pem",
+                "REQUESTS_CA_BUNDLE": "",
+            },
+            clear=False,
+        ):
+            caminho = launcher_desktop.configurar_certificados()
+
+            self.assertEqual(caminho, esperado)
+            self.assertEqual(os.environ["SSL_CERT_FILE"], esperado)
+            self.assertEqual(os.environ["REQUESTS_CA_BUNDLE"], esperado)
+
+    def test_configurar_certificados_preserva_caminho_valido(self):
+        pasta = RAIZ / "build" / "_tmp_certificado"
+        pasta.mkdir(parents=True, exist_ok=True)
+        arquivo = pasta / "ca.pem"
+
+        try:
+            arquivo.write_text("-----BEGIN CERTIFICATE-----", encoding="utf-8")
+
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "SSL_CERT_FILE": str(arquivo),
+                    "REQUESTS_CA_BUNDLE": str(arquivo),
+                },
+                clear=False,
+            ):
+                launcher_desktop.configurar_certificados()
+
+                self.assertEqual(os.environ["SSL_CERT_FILE"], str(arquivo))
+                self.assertEqual(
+                    os.environ["REQUESTS_CA_BUNDLE"],
+                    str(arquivo),
+                )
+        finally:
+            shutil.rmtree(pasta, ignore_errors=True)
+
+    def test_verificar_certificados_abre_o_contexto_ssl(self):
+        resultado = launcher_desktop.verificar_certificados()
+
+        self.assertTrue(Path(resultado["certifi"]).is_file())
+        self.assertTrue(
+            Path(resultado["ssl_cert_file"]).is_file()
+        )
+        self.assertTrue(
+            Path(resultado["requests_ca_bundle"]).is_file()
+        )
+
+
+class TestJobObjectEEncerramento(unittest.TestCase):
+    """Bug 2: o servidor não pode ficar órfão ao fechar o launcher."""
+
+    def setUp(self):
+        self.codigo = ler(RAIZ / "launcher_desktop.py")
+
+    def test_job_object_usa_kill_on_job_close(self):
+        for trecho in (
+            "JobObjectWindows",
+            "CreateJobObjectW",
+            "SetInformationJobObject",
+            "JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE",
+            "AssignProcessToJobObject",
+            "class _ExtendedLimitInformation",
+        ):
+            self.assertIn(trecho, self.codigo)
+
+    def test_registra_handlers_de_encerramento(self):
+        for trecho in (
+            "SetConsoleCtrlHandler",
+            "AttachConsole",
+            "anexar_console_pai",
+            "atexit.register",
+            "taskkill",
+            "/F",
+            "/T",
+            "/PID",
+            "encerrar_arvore_processos",
+            "_limpar_servidor",
+        ):
+            self.assertIn(trecho, self.codigo)
+
+    def test_anexa_ao_console_do_iniciar_bat(self):
+        if os.name != "nt":
+            self.skipTest("AttachConsole é específico do Windows")
+
+        with mock.patch.object(
+            launcher_desktop.ctypes, "windll", create=True
+        ) as windll:
+            windll.kernel32.GetConsoleWindow.return_value = 0
+            windll.kernel32.AttachConsole.return_value = 1
+
+            self.assertTrue(launcher_desktop.anexar_console_pai())
+
+        windll.kernel32.AttachConsole.assert_called_once_with(-1)
+
+    def test_anexar_console_sem_pai_nao_levanta(self):
+        if os.name != "nt":
+            self.skipTest("AttachConsole é específico do Windows")
+
+        with mock.patch.object(
+            launcher_desktop.ctypes, "windll", create=True
+        ) as windll:
+            windll.kernel32.GetConsoleWindow.return_value = 0
+            windll.kernel32.AttachConsole.return_value = 0
+
+            self.assertFalse(launcher_desktop.anexar_console_pai())
+
+    def test_job_object_real_pode_ser_criado_e_fechado(self):
+        if os.name != "nt":
+            self.skipTest("Job Object é específico do Windows")
+
+        job = launcher_desktop.JobObjectWindows()
+
+        self.assertTrue(job.criar(), job.motivo)
+        self.assertTrue(job.ativo)
+
+        job.fechar()
+
+        self.assertFalse(job.ativo)
+
+    def test_encerrar_arvore_usa_taskkill_no_windows(self):
+        class ProcessoFalso:
+            pid = 1234
+
+            def poll(self):
+                return 0
+
+        with mock.patch.object(
+            launcher_desktop.subprocess,
+            "run",
+            return_value=subprocess.CompletedProcess([], 0),
+        ) as executar:
+            resultado = launcher_desktop.encerrar_arvore_processos(
+                pid=1234,
+                processo=ProcessoFalso(),
+            )
+
+        self.assertTrue(resultado)
+
+        if os.name == "nt":
+            comando = executar.call_args.args[0]
+
+            self.assertEqual(
+                comando[:4],
+                ["taskkill", "/F", "/T", "/PID"],
+            )
+            self.assertIn("check", executar.call_args.kwargs)
+
+    def test_limpar_servidor_e_idempotente(self):
+        processo = mock.Mock()
+        processo.pid = 4242
+        job = mock.Mock()
+
+        launcher_desktop._SERVIDOR["processo"] = processo
+        launcher_desktop._SERVIDOR["job"] = job
+
+        try:
+            with mock.patch.object(
+                launcher_desktop, "encerrar_arvore_processos"
+            ) as encerrar, mock.patch.object(
+                launcher_desktop, "_remover_registro_instancia"
+            ) as remover:
+                launcher_desktop._limpar_servidor()
+                launcher_desktop._limpar_servidor()
+        finally:
+            launcher_desktop._SERVIDOR["processo"] = None
+            launcher_desktop._SERVIDOR["job"] = None
+
+        encerrar.assert_any_call(4242, processo)
+        self.assertEqual(encerrar.call_count, 2)
+        job.fechar.assert_called_once_with()
+        remover.assert_called()
+
+    def test_registrar_limpeza_instala_atexit_e_console_handler(self):
+        with mock.patch.object(
+            launcher_desktop.atexit, "register"
+        ) as registrar, mock.patch.object(
+            launcher_desktop.ctypes, "windll", create=True
+        ) as windll:
+            launcher_desktop._ENCERRAMENTO_REGISTRADO = False
+            launcher_desktop._HANDLER_CONSOLE = None
+
+            try:
+                launcher_desktop.registrar_limpeza_encerramento()
+            finally:
+                launcher_desktop._ENCERRAMENTO_REGISTRADO = True
+
+        registrar.assert_called_once_with(launcher_desktop._limpar_servidor)
+
+        if os.name == "nt":
+            windll.kernel32.SetConsoleCtrlHandler.assert_called_once()
+
+
+class TestInstanciaUnica(unittest.TestCase):
+    """Uma segunda abertura reaproveita a instância saudável."""
+
+    def setUp(self):
+        self.codigo = ler(RAIZ / "launcher_desktop.py")
+
+    def test_detecta_instancia_por_registro(self):
+        with mock.patch.object(
+            launcher_desktop,
+            "_ler_registro_instancia",
+            return_value=8504,
+        ), mock.patch.object(
+            launcher_desktop,
+            "aplicacao_respondendo",
+            return_value=True,
+        ), mock.patch.object(
+            launcher_desktop,
+            "pagina_do_aplicativo",
+            return_value=True,
+        ):
+            self.assertEqual(launcher_desktop.instancia_ativa(), 8504)
+
+    def test_detecta_instancia_na_faixa_de_portas(self):
+        with mock.patch.object(
+            launcher_desktop,
+            "_ler_registro_instancia",
+            return_value=None,
+        ), mock.patch.object(
+            launcher_desktop,
+            "aplicacao_respondendo",
+            side_effect=lambda porta, *_: porta == 8503,
+        ), mock.patch.object(
+            launcher_desktop,
+            "pagina_do_aplicativo",
+            return_value=True,
+        ):
+            self.assertEqual(launcher_desktop.instancia_ativa(), 8503)
+
+    def test_sem_instancia_devolve_none(self):
+        with mock.patch.object(
+            launcher_desktop,
+            "_ler_registro_instancia",
+            return_value=None,
+        ), mock.patch.object(
+            launcher_desktop,
+            "aplicacao_respondendo",
+            return_value=False,
+        ):
+            self.assertIsNone(launcher_desktop.instancia_ativa())
+
+    def test_ignora_healthcheck_que_nao_e_streamlit(self):
+        with mock.patch.object(
+            launcher_desktop,
+            "_ler_registro_instancia",
+            return_value=8504,
+        ), mock.patch.object(
+            launcher_desktop,
+            "aplicacao_respondendo",
+            return_value=True,
+        ), mock.patch.object(
+            launcher_desktop,
+            "pagina_do_aplicativo",
+            return_value=False,
+        ):
+            self.assertIsNone(launcher_desktop.instancia_ativa())
+
+    def test_registro_da_instancia_em_disco(self):
+        pasta = RAIZ / "build" / "_tmp_registro_instancia"
+        pasta.mkdir(parents=True, exist_ok=True)
+
+        try:
+            with mock.patch.object(
+                launcher_desktop,
+                "DIRETORIO_DADOS",
+                pasta,
+            ):
+                self.assertTrue(
+                    launcher_desktop._gravar_registro_instancia(8504)
+                )
+                self.assertEqual(
+                    launcher_desktop._ler_registro_instancia(),
+                    8504,
+                )
+
+                launcher_desktop._remover_registro_instancia()
+
+                self.assertIsNone(
+                    launcher_desktop._ler_registro_instancia()
+                )
+        finally:
+            shutil.rmtree(pasta, ignore_errors=True)
+
+    def test_segunda_abertura_nao_sobe_servidor(self):
+        with mock.patch.object(
+            launcher_desktop, "instancia_ativa", return_value=8504
+        ), mock.patch.object(
+            launcher_desktop, "abrir_instancia_existente"
+        ) as abrir, mock.patch.object(
+            launcher_desktop, "iniciar_streamlit"
+        ) as servidor, mock.patch.object(
+            launcher_desktop, "executar_setup"
+        ) as setup:
+            codigo = launcher_desktop.main([])
+
+        self.assertEqual(codigo, 0)
+        abrir.assert_called_once_with(8504)
+        servidor.assert_not_called()
+        setup.assert_not_called()
+
+    def test_nova_instancia_ignora_a_existente(self):
+        with mock.patch.object(
+            launcher_desktop, "instancia_ativa", return_value=8504
+        ) as ativa, mock.patch.object(
+            launcher_desktop, "configuracao_pendente", return_value=False
+        ), mock.patch.object(
+            launcher_desktop, "_encontrar_porta_livre", return_value=8501
+        ), mock.patch.object(
+            launcher_desktop, "iniciar_streamlit", return_value=0
+        ) as servidor:
+            codigo = launcher_desktop.main(["--nova-instancia"])
+
+        self.assertEqual(codigo, 0)
+        ativa.assert_not_called()
+        servidor.assert_called_once_with(8501)
+
+    def test_codigo_mostra_o_fluxo_de_instancia_unica(self):
+        for trecho in (
+            "instancia_ativa(",
+            "abrir_instancia_existente(",
+            "ARG_NOVA_INSTANCIA",
+            "NOME_ARQUIVO_INSTANCIA",
+            "instancia_ativa.json",
+        ):
+            self.assertIn(trecho, self.codigo)
+
+
+class TestBotaoEncerrarServidor(unittest.TestCase):
+    """Ação discreta na barra lateral para fechar tudo pela página web."""
+
+    def setUp(self):
+        self.app = ler(RAIZ / "app.py")
+        self.i18n = ler(RAIZ / "utils" / "i18n.py")
+
+    def test_app_tem_acao_de_encerrar(self):
+        for trecho in (
+            "_encerrar_servidor_streamlit",
+            "Runtime.instance().stop()",
+            't("encerrar_servidor")',
+            't("ajuda_encerrar_servidor")',
+            't("aviso_encerrando_servidor")',
+            "st.stop()",
+        ):
+            self.assertIn(trecho, self.app)
+
+        # O botão fica dentro da barra lateral, depois do rodapé.
+        posicao_sidebar = self.app.index("with st.sidebar:")
+        posicao_botao = self.app.index('t("encerrar_servidor")')
+
+        self.assertLess(posicao_sidebar, posicao_botao)
+
+    def test_textos_existem_nos_dois_idiomas(self):
+        from utils.i18n import TEXTOS_I18N, t
+
+        for chave in (
+            "encerrar_servidor",
+            "ajuda_encerrar_servidor",
+            "aviso_encerrando_servidor",
+        ):
+            self.assertIn(chave, TEXTOS_I18N["pt"])
+            self.assertIn(chave, TEXTOS_I18N["en"])
+            self.assertNotEqual(t(chave, "pt"), t(chave, "en"))
+
+    def test_encerrar_streamlit_usa_a_api_do_runtime(self):
+        # A função vive no app.py (script executado pelo Streamlit), então
+        # o contrato é verificado pelo texto: usa a API pública do
+        # Runtime e tem rede de segurança por Timer + os._exit.
+        self.assertIn("Runtime.instance().stop()", self.app)
+        self.assertIn("threading.Timer", self.app)
+        self.assertIn("os._exit(0)", self.app)
 
 
 class EntradaFalsa:

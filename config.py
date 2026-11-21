@@ -403,7 +403,7 @@ RIGEO_BASE_URL = os.getenv(
 
 GEOBUSCA_BASE_URL = os.getenv(
     "GEOBUSCA_BASE_URL",
-    "http://geobusca.sgb.gov.br"
+    "https://geobusca.sgb.gov.br"
 )
 
 SGB_TIMEOUT = float(

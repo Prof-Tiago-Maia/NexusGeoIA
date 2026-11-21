@@ -25,12 +25,15 @@ Além dos textos de interface, o módulo guarda:
   system prompt para orientar o idioma da resposta técnica do LLM
   (usada por ``core.assistant.responder``).
 
-Nenhuma dependência externa é necessária: o módulo usa apenas
-``streamlit`` para ler o estado da sessão, com proteção para quando é
-importado fora de um script Streamlit (testes unitários, CLI).
+Nenhuma dependência externa é necessária: o módulo reaproveita o
+``streamlit`` **somente quando a interface já o importou**, para ler o
+estado da sessão, com proteção para quando é importado fora de um script
+Streamlit (testes unitários, CLI). O import é deliberadamente tardio:
+``services.document_parser`` importa este módulo para traduzir mensagens
+de limite e não pode carregar o runtime da interface durante o parsing.
 """
 
-import streamlit as st
+import sys
 
 from config import APP_DISPLAY_NAME, APP_NAME
 
@@ -170,6 +173,12 @@ TEXTOS_I18N = {
         "detalhe_paginas": "{paginas} página(s) convertida(s)",
         "detalhe_ocr": " · {paginas} via OCR",
         "detalhe_cache": " · cache reaproveitado",
+        "limite_arquivo_documento": (
+            "O arquivo excede o limite de 100 MB para indexação."
+        ),
+        "limite_paginas_pdf": (
+            "O PDF excede o limite de 500 páginas para indexação."
+        ),
         "titulo_arquivo_nao_indexado": "Arquivo não indexado",
         "titulo_arquivo_sem_texto": "Arquivo sem texto selecionável",
         "documentos_contagem": "{n} arquivo(s) em data/docs:",
@@ -477,6 +486,14 @@ TEXTOS_I18N = {
         "rodape_modelo": (
             f"{APP_DISPLAY_NAME} · Modelo ativo: {{modelo}} · "
             "Documentos indexados: {documentos}"
+        ),
+        "encerrar_servidor": "⏻ Encerrar servidor / Sair",
+        "ajuda_encerrar_servidor": (
+            "Fecha o servidor local do aplicativo e libera a porta. O "
+            "histórico já salvo é preservado."
+        ),
+        "aviso_encerrando_servidor": (
+            "Encerrando o servidor... você já pode fechar esta aba."
         ),
         "spinner_ollama": "Iniciando o serviço do Ollama...",
         # -- Chat ---------------------------------------------------
@@ -984,6 +1001,12 @@ TEXTOS_I18N = {
         "detalhe_paginas": "{paginas} page(s) converted",
         "detalhe_ocr": " · {paginas} via OCR",
         "detalhe_cache": " · cached copy reused",
+        "limite_arquivo_documento": (
+            "The file exceeds the 100 MB limit for indexing."
+        ),
+        "limite_paginas_pdf": (
+            "The PDF exceeds the 500-page limit for indexing."
+        ),
         "titulo_arquivo_nao_indexado": "File not indexed",
         "titulo_arquivo_sem_texto": "File with no selectable text",
         "documentos_contagem": "{n} file(s) in data/docs:",
@@ -1282,6 +1305,14 @@ TEXTOS_I18N = {
         "rodape_modelo": (
             f"{APP_DISPLAY_NAME} · Active model: {{modelo}} · "
             "Indexed documents: {documentos}"
+        ),
+        "encerrar_servidor": "⏻ Shutdown server / Exit",
+        "ajuda_encerrar_servidor": (
+            "Stops the application's local server and frees the port. "
+            "History already saved is preserved."
+        ),
+        "aviso_encerrando_servidor": (
+            "Shutting down the server... you can close this tab now."
         ),
         "spinner_ollama": "Starting the Ollama service...",
         # -- Chat ---------------------------------------------------
@@ -1820,12 +1851,30 @@ def normalizar_idioma(idioma):
     return codigo if codigo in IDIOMAS_SUPORTADOS else IDIOMA_PADRAO
 
 
+def _streamlit_carregado():
+    """Devolve o ``streamlit`` já importado, sem forçar um novo import.
+
+    O ``document_parser`` usa ``t()`` para as mensagens de limite, mas o
+    parsing não deve carregar o runtime da interface (nem emitir o aviso
+    de ``ScriptRunContext``). Quando o app Streamlit já está em execução,
+    o módulo está em ``sys.modules`` e o idioma ativo é respeitado; em
+    CLI/testes, o padrão PT-BR é usado sem importar streamlit.
+    """
+
+    return sys.modules.get("streamlit")
+
+
 def idioma_atual():
     """Lê o idioma ativo de ``st.session_state``, com fallback seguro.
 
     Fora de um script Streamlit (testes unitários, CLI), a leitura falha
     silenciosamente e o padrão ``"pt"`` é devolvido.
     """
+
+    st = _streamlit_carregado()
+
+    if st is None:
+        return IDIOMA_PADRAO
 
     try:
         return normalizar_idioma(st.session_state.get("idioma"))

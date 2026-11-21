@@ -193,10 +193,37 @@ function Assert-DentroDoProjeto {
 # Copia uma pasta publicavel sem caches, testes, estado local nem
 # segredos. robocopy e usado porque lida bem com arvores grandes e
 # devolve codigos distintos para "copiou" e "falhou".
+#
+# -ManterCertificados existe para a copia do pacote --onedir: o
+# _internal\certifi\cacert.pem e uma CA publica necessaria ao HTTPS e
+# era removido pelo filtro "*.pem" (foi assim que o pacote portatil
+# ficou sem o certificado mesmo com o dist\NexusGeoIA correto). Para as
+# pastas do projeto (prompts\, .streamlit\) o filtro continua valendo e
+# a varredura de segredos abaixo confere o resultado.
 function Copy-PastaPublicavel {
-    param([string]$Origem, [string]$DestinoPasta)
+    param(
+        [string]$Origem,
+        [string]$DestinoPasta,
+        [switch]$ManterCertificados
+    )
 
     New-Item -ItemType Directory -Force -Path $DestinoPasta | Out-Null
+
+    $exclusoesArquivo = @(
+        "*.pyc",
+        "*.pyo",
+        "secrets.toml",
+        ".env",
+        ".env.*",
+        "*.env",
+        "*.key",
+        "*.p12",
+        "*.pfx"
+    )
+
+    if (-not $ManterCertificados) {
+        $exclusoesArquivo += "*.pem"
+    }
 
     $argumentos = @(
         $Origem,
@@ -214,18 +241,8 @@ function Copy-PastaPublicavel {
         ".ruff_cache",
         ".pytest_cache",
         ".venv",
-        "/XF",
-        "*.pyc",
-        "*.pyo",
-        "secrets.toml",
-        ".env",
-        ".env.*",
-        "*.env",
-        "*.pem",
-        "*.key",
-        "*.p12",
-        "*.pfx"
-    )
+        "/XF"
+    ) + $exclusoesArquivo
 
     & robocopy @argumentos | Out-Null
 
@@ -376,6 +393,18 @@ foreach ($dadoEmbutido in @('RAIZ / "app.py"', 'RAIZ / "prompts"', 'RAIZ / ".str
     if (-not $ConteudoSpec.Contains($dadoEmbutido)) {
         throw "assistente.spec nao embute o dado obrigatorio: $dadoEmbutido"
     }
+}
+
+# Bug corrigido: sem o cacert.pem do certifi em _internal\certifi o
+# import de services.llm_service (ollama -> httpx -> ssl) falha com
+# FileNotFoundError no executavel congelado. O build aborta se a coleta
+# sair da especificacao.
+if ($ConteudoSpec -notmatch 'collect_data_files\("certifi"\)') {
+    throw "assistente.spec nao coleta o certifi (collect_data_files(""certifi""))."
+}
+
+if ($ConteudoSpec -notmatch 'certifi/cacert\.pem') {
+    throw "assistente.spec nao valida certifi/cacert.pem no bundle."
 }
 
 # O iniciar.bat do pacote portatil precisa saber abrir o executavel e
@@ -662,8 +691,9 @@ if (-not (Test-Path -LiteralPath $PastaInterna -PathType Container)) {
 }
 
 # O _internal precisa trazer os recursos lidos por caminho: o
-# sys._MEIPASS do modo --onedir aponta para ele.
-foreach ($recursoInterno in @("app.py", "prompts\system_base.txt", ".streamlit\config.toml")) {
+# sys._MEIPASS do modo --onedir aponta para ele. O certifi/cacert.pem e
+# obrigatorio: sem ele o import de services.llm_service quebra no boot.
+foreach ($recursoInterno in @("app.py", "prompts\system_base.txt", ".streamlit\config.toml", "certifi\cacert.pem")) {
     $caminhoRecurso = Join-Path $PastaInterna $recursoInterno
 
     if (-not (Test-Path -LiteralPath $caminhoRecurso -PathType Leaf)) {
@@ -840,8 +870,9 @@ New-Item -ItemType Directory -Force -Path $Staging | Out-Null
 # Todo o conteudo do pacote --onedir vai para a raiz do staging:
 # NexusGeoIA.exe + _internal\. O Copy-PastaPublicavel aplica a mesma
 # higiene (caches, testes, estado local e segredos) e usa robocopy para
-# lidar com a arvore grande de _internal.
-Copy-PastaPublicavel $PastaApp $Staging
+# lidar com a arvore grande de _internal. -ManterCertificados preserva
+# o cacert.pem do certifi, que e dado publico do bundle e nao segredo.
+Copy-PastaPublicavel $PastaApp $Staging -ManterCertificados
 Copy-Item -LiteralPath (Join-Path $Raiz "iniciar.bat") -Destination (Join-Path $Staging "iniciar.bat") -Force
 Copy-Item -LiteralPath (Join-Path $Raiz "setup_llm.py") -Destination (Join-Path $Staging "setup_llm.py") -Force
 
@@ -886,6 +917,8 @@ abre NexusGeoIA.exe, que escolhe a primeira porta livre a partir de 8501 e
 abre o navegador. Historico, documentos, banco SQLite e config_local.json
 ficam em data\ e database\ ao lado do executavel; a pasta pode ser copiada
 para outro computador com Windows x64 (o Ollama precisa estar instalado).
+Se a pasta do pacote nao for gravavel (por exemplo, C:\Program Files), o
+launcher usa %LOCALAPPDATA%\NexusGeoIA como fallback automaticamente.
 
 Conteudo do pacote:
 
@@ -973,8 +1006,9 @@ foreach ($item in $conteudoEsperado) {
 }
 
 # O _internal e a saida do PyInstaller: precisa continuar ao lado do .exe
-# e conter os recursos lidos por caminho (sys._MEIPASS no --onedir).
-foreach ($recursoPortatil in @("app.py", "prompts\system_base.txt", ".streamlit\config.toml")) {
+# e conter os recursos lidos por caminho (sys._MEIPASS no --onedir),
+# incluindo o certificado TLS usado pelo httpx/ollama.
+foreach ($recursoPortatil in @("app.py", "prompts\system_base.txt", ".streamlit\config.toml", "certifi\cacert.pem")) {
     $caminhoRecursoPortatil = Join-Path $StagingInterna $recursoPortatil
 
     if (-not (Test-Path -LiteralPath $caminhoRecursoPortatil -PathType Leaf)) {

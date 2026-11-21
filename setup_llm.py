@@ -4,8 +4,10 @@ Este script roda **antes da primeira abertura** do NexusGeo IA. Ele:
 
 1. verifica se o Ollama está instalado e acessível em ``/api/tags``.
    Quando o executável não existe, baixa o ``OllamaSetup.exe`` oficial
-   para ``%TEMP%`` (com progresso em MB/percentual na janela ou no
-   terminal) e o instala em silêncio com ``/VERYSILENT /NORESTART``;
+   para uma pasta temporária única (com progresso em MB/percentual na
+   janela ou no terminal), exige assinatura Authenticode válida do
+   fornecedor Ollama e só então o instala em silêncio com
+   ``/VERYSILENT /NORESTART``;
    em seguida inclui ``%LOCALAPPDATA%\\Programs\\Ollama`` no ``PATH`` da
    sessão e sobe ``ollama serve`` em segundo plano, sem janela, quando o
    serviço ainda não está respondendo;
@@ -760,21 +762,53 @@ def baixar_instalador_ollama(
     callback_progresso=None,
     timeout=TIMEOUT_DOWNLOAD_OLLAMA,
 ):
-    """Baixa o ``OllamaSetup.exe`` oficial para ``%TEMP%``.
+    """Baixa o ``OllamaSetup.exe`` oficial para uma pasta temporária única.
 
     Reporta progresso em MB e percentual pelo ``callback_progresso`` e
     devolve o caminho local do instalador. Levanta
     :class:`ErroInstalacaoOllama` em qualquer falha de rede ou disco.
+
+    O destino padrão é uma pasta criada por ``tempfile.mkdtemp`` com nome
+    imprevisível, em vez de ``%TEMP%\\OllamaSetup.exe``. Isso reduz a
+    janela de corrida em que outro processo poderia substituir o arquivo
+    antes da execução.
     """
 
+    pasta_temporaria = None
+
     if destino is None:
-        destino = Path(tempfile.gettempdir()) / NOME_INSTALADOR_OLLAMA
+        try:
+            pasta_temporaria = Path(
+                tempfile.mkdtemp(prefix="nexusgeo_ollama_")
+            )
+        except OSError as erro:
+            raise ErroInstalacaoOllama(
+                "Não foi possível criar a pasta temporária do "
+                f"instalador: {erro}"
+            ) from erro
+
+        destino = pasta_temporaria / NOME_INSTALADOR_OLLAMA
     else:
         destino = Path(destino)
+
+    def _limpar_download():
+        """Remove o arquivo parcial e a pasta única criada por mkdtemp."""
+
+        try:
+            destino.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+        if pasta_temporaria is not None:
+            try:
+                pasta_temporaria.rmdir()
+            except OSError:
+                pass
 
     try:
         destino.parent.mkdir(parents=True, exist_ok=True)
     except OSError as erro:
+        _limpar_download()
         raise ErroInstalacaoOllama(
             f"Não foi possível preparar a pasta do instalador: {erro}"
         ) from erro
@@ -823,20 +857,14 @@ def baixar_instalador_ollama(
                         },
                     )
     except (urllib.error.URLError, OSError, ValueError) as erro:
-        try:
-            destino.unlink(missing_ok=True)
-        except OSError:
-            pass
+        _limpar_download()
 
         raise ErroInstalacaoOllama(
             f"Falha ao baixar o instalador do Ollama: {erro}"
         ) from erro
 
     if baixado <= 0:
-        try:
-            destino.unlink(missing_ok=True)
-        except OSError:
-            pass
+        _limpar_download()
 
         raise ErroInstalacaoOllama(
             "O download do instalador do Ollama veio vazio."
@@ -857,18 +885,119 @@ def baixar_instalador_ollama(
     return str(destino)
 
 
+def _resumir_stderr_assinatura(stderr, limite=160):
+    """Reduz o stderr do PowerShell a uma linha curta e objetiva.
+
+    O ``Get-AuthenticodeSignature`` escreve blocos longos de categoria e
+    rastreamento no stderr quando reprova. Despejar isso na mensagem da
+    interface confunde o usuário, então fica apenas a última linha com
+    conteúdo, normalizada e truncada.
+    """
+
+    for linha in reversed(str(stderr or "").splitlines()):
+        texto = " ".join(linha.split())
+
+        if not texto:
+            continue
+
+        if len(texto) > limite:
+            return texto[:limite].rstrip() + "…"
+
+        return texto
+
+    return ""
+
+
+def _verificar_assinatura_instalador(caminho):
+    """Exige assinatura Authenticode válida do fornecedor Ollama.
+
+    O instalador é baixado da internet e executado com privilégios do
+    usuário. Sem essa checagem, um compromise do CDN, um proxy TLS
+    malicioso ou um arquivo preparado em ``%TEMP%`` poderia executar
+    código arbitrário. A verificação usa ``Get-AuthenticodeSignature``
+    e falha fechado: qualquer status diferente de ``Valid`` ou qualquer
+    signatário que não contenha "Ollama" interrompe a instalação.
+    """
+
+    if os.name != "nt":
+        raise ErroInstalacaoOllama(
+            "A verificação de assinatura do instalador exige Windows."
+        )
+
+    script = (
+        "$s = Get-AuthenticodeSignature -LiteralPath $env:NEXUSGEO_INSTALADOR; "
+        "if ($s.Status -ne 'Valid' -or "
+        "$s.SignerCertificate.Subject -notmatch 'Ollama') { "
+        "Write-Error ('Assinatura invalida: ' + $s.Status); exit 1 }"
+    )
+
+    ambiente = os.environ.copy()
+    ambiente["NEXUSGEO_INSTALADOR"] = str(caminho)
+
+    try:
+        resultado = subprocess.run(
+            [
+                "powershell.exe",
+                "-NoProfile",
+                "-NonInteractive",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-Command",
+                script,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            env=ambiente,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+    except (OSError, subprocess.SubprocessError) as erro:
+        raise ErroInstalacaoOllama(
+            f"Não foi possível verificar a assinatura do Ollama: {erro}"
+        ) from erro
+
+    if resultado.returncode != 0:
+        detalhe = _resumir_stderr_assinatura(
+            getattr(resultado, "stderr", "")
+        )
+        raise ErroInstalacaoOllama(
+            "O instalador do Ollama não tem assinatura Authenticode válida. "
+            "Instale manualmente em https://ollama.com/download/windows. "
+            + (f"Detalhe: {detalhe}" if detalhe else "")
+        )
+
+    return True
+
+
+def _remover_instalador_temporario(caminho):
+    """Remove o instalador e a pasta única criada por ``mkdtemp``."""
+
+    try:
+        alvo = Path(caminho)
+        alvo.unlink(missing_ok=True)
+
+        if alvo.parent.name.startswith("nexusgeo_ollama_"):
+            alvo.parent.rmdir()
+    except OSError:
+        pass
+
+
 def executar_instalador_ollama(caminho_instalador):
-    """Executa o instalador do Ollama em modo silencioso.
+    """Executa o instalador do Ollama em modo silencioso e verificado.
 
     Usa ``/VERYSILENT /NORESTART`` (Inno Setup), como o instalador
-    oficial. Devolve ``True``; levanta :class:`ErroInstalacaoOllama`
-    quando o instalador falha ou não pode ser executado.
+    oficial. Antes de executar, exige Authenticode válido do fornecedor
+    Ollama. Devolve ``True``; levanta :class:`ErroInstalacaoOllama`
+    quando a assinatura é inválida, o instalador falha ou não pode ser
+    executado.
     """
 
     if os.name != "nt":
         raise ErroInstalacaoOllama(
             "A instalação automática do Ollama só é suportada no Windows."
         )
+
+    _verificar_assinatura_instalador(caminho_instalador)
 
     comando = [
         str(caminho_instalador),
@@ -940,6 +1069,8 @@ def garantir_ollama_instalado(callback_progresso=None, host=HOST_OLLAMA_LOCAL):
             },
         )
 
+        instalador = None
+
         try:
             instalador = baixar_instalador_ollama(
                 callback_progresso=callback_progresso,
@@ -965,6 +1096,9 @@ def garantir_ollama_instalado(callback_progresso=None, host=HOST_OLLAMA_LOCAL):
                 },
             )
             raise
+        finally:
+            if instalador:
+                _remover_instalador_temporario(instalador)
 
         instalado_agora = True
 

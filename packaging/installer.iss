@@ -73,6 +73,11 @@ Name: "desktopicon"; Description: "Criar atalhos na Area de Trabalho"; GroupDesc
 ; pasta do projeto e embarcada diretamente pelo instalador.
 Source: "..\dist\NexusGeoIA\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
+; Script fixo de download/verificacao/instalacao do Ollama. Fica em
+; {tmp} apenas durante o setup (dontcopy + ExtractTemporaryFile) e nao
+; entra na pasta instalada.
+Source: "instalar_ollama.ps1"; DestDir: "{tmp}"; Flags: dontcopy deleteafterinstall
+
 [Icons]
 ; Menu Iniciar
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Comment: "Abrir o NexusGeo IA"
@@ -96,9 +101,6 @@ Filename: "{app}\{#MyAppExeName}"; Parameters: "--setup-modelo"; Description: "A
   nao precisa instalar o Ollama manualmente antes de abrir o NexusGeo.
   --------------------------------------------------------------------------- }
 
-const
-  UrlInstaladorOllama = 'https://ollama.com/download/OllamaSetup.exe';
-
 function OllamaInstalado(): Boolean;
 begin
   Result :=
@@ -116,16 +118,19 @@ begin
   Result := False;
   Instalador := ExpandConstant('{tmp}\OllamaSetup.exe');
 
-  { O PowerShell faz o download e executa o instalador do Ollama com as
-    flags silenciosas. A janela do console fica oculta (SW_HIDE). }
+  { O script fixo faz download, verifica Authenticode e so entao executa
+    o instalador. O caminho chega por parametro; nao ha interpolacao de
+    conteudo variavel dentro de um comando inline. }
+  try
+    ExtractTemporaryFile('instalar_ollama.ps1');
+  except
+    Exit;
+  end;
+
   Comando :=
-    '-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "' +
-    '$ProgressPreference = ''SilentlyContinue''; ' +
-    '$ErrorActionPreference = ''Stop''; ' +
-    'Invoke-WebRequest -UseBasicParsing -Uri ''' + UrlInstaladorOllama + '''' +
-    ' -OutFile ''' + Instalador + '''; ' +
-    'Start-Process -FilePath ''' + Instalador + '''' +
-    ' -ArgumentList ''/VERYSILENT'',''/NORESTART'' -Wait"';
+    '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' +
+    ExpandConstant('{tmp}\instalar_ollama.ps1') + '"' +
+    ' -Instalador "' + Instalador + '"';
 
   { Roda como o usuario original sempre que possivel: o Ollama e
     instalado em %LOCALAPPDATA%\Programs\Ollama do usuario, nao no

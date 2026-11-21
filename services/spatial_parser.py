@@ -632,8 +632,14 @@ def _extrair_gms(texto):
     return [feicao for feicao in feicoes if feicao is not None]
 
 
-def _adicionar_decimal(feicoes, encontrado, texto):
-    """Acrescenta o par decimal de um ``match`` já validado."""
+def _adicionar_decimal(feicoes, encontrado, texto, permitir_inversao=True):
+    """Acrescenta o par decimal de um ``match`` já validado.
+
+    ``permitir_inversao`` fica ligado apenas para pares sem rótulo. Em
+    ``Lat: ... / Lon: ...`` e ``Coordenadas: lat, lon`` a ordem é
+    explícita: trocar os eixos para "fazer caber" transformaria uma
+    coordenada inválida (lat 95) em um ponto falso no oceano.
+    """
 
     lat = _numero(encontrado.group("lat"))
     lon = _numero(encontrado.group("lon"))
@@ -641,10 +647,10 @@ def _adicionar_decimal(feicoes, encontrado, texto):
     if lat is None or lon is None:
         return
 
-    # Par invertido (lon, lat) é comum em planilhas e relatórios: aceito
-    # quando a leitura direta não fecha geograficamente.
+    # Par invertido (lon, lat) é comum em planilhas e relatórios sem
+    # rótulo: aceito quando a leitura direta não fecha geograficamente.
     if not coordenada_valida(lat, lon):
-        if coordenada_valida(lon, lat):
+        if permitir_inversao and coordenada_valida(lon, lat):
             lat, lon = lon, lat
         else:
             return
@@ -673,8 +679,17 @@ def _extrair_decimais(texto):
         _PADRAO_DECIMAL_COORDENADAS,
         _PADRAO_DECIMAL_PAR,
     ):
+        # Só o par solto aceita inversão: os padrões rotulados já dizem
+        # qual número é latitude e qual é longitude.
+        permitir_inversao = padrao is _PADRAO_DECIMAL_PAR
+
         for encontrado in padrao.finditer(texto):
-            _adicionar_decimal(feicoes, encontrado, texto)
+            _adicionar_decimal(
+                feicoes,
+                encontrado,
+                texto,
+                permitir_inversao=permitir_inversao,
+            )
 
     return feicoes
 

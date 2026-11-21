@@ -16,6 +16,10 @@ Gera o pacote no modo ``--onedir`` em ``dist/NexusGeoIA/``:
   inicializacao e reduz falsos positivos de antivirus;
 - ``streamlit`` completo (``collect_all``) e os metadados que ele le em
   tempo de execucao (``copy_metadata``);
+- o ``certifi/cacert.pem`` (``collect_data_files('certifi')``) e os
+  modulos da cadeia de boot ``ollama``/``httpx``/``pydantic``: sem o
+  certificado o import de ``services.llm_service`` falha com
+  ``FileNotFoundError`` antes de qualquer consulta ao modelo;
 - os dados do RapidOCR (``.yaml`` de configuracao e modelos ONNX), que
   ele resolve por caminho dentro do pacote;
 - as bibliotecas opcionais de exportacao/leitura de documentos
@@ -80,6 +84,18 @@ PACOTES_METADADOS = (
     "pandas",
     "pyarrow",
     "plotly",
+    # Metadados das dependencias do boot (LLM local e HTTP). Algumas
+    # bibliotecas consultam a propria versao por ``importlib.metadata``
+    # e sem o ``.dist-info`` dentro de ``_internal`` o executavel
+    # congelado aborta com ``PackageNotFoundError``.
+    "certifi",
+    "httpx",
+    "httpcore",
+    "ollama",
+    "pydantic",
+    "pydantic-core",
+    "requests",
+    "urllib3",
 )
 
 for pacote in PACOTES_METADADOS:
@@ -92,6 +108,92 @@ for pacote in PACOTES_METADADOS:
         # Distribuicao opcional ausente neste ambiente: o Streamlit
         # funciona sem ela e o PyInstaller nao precisa falhar por isso.
         continue
+
+# ---------------------------------------------------------------------------
+# Certificados TLS (certifi/cacert.pem)
+# ---------------------------------------------------------------------------
+#
+# BUG CORRIGIDO: ``services.llm_service`` importa ``ollama`` e instancia
+# ``ollama.Client(...)`` no topo do modulo. O cliente cria um contexto
+# SSL do ``httpx``, que no Windows le o ``cacert.pem`` do ``certifi``. No
+# bundle ``--onedir`` esse arquivo precisa estar em
+# ``_internal/certifi/cacert.pem``; sem ele o import falha com::
+#
+#     FileNotFoundError: [Errno 2] No such file or directory
+#     ... httpx/_config.py -> ssl.create_default_context
+#
+# ``collect_all("streamlit")`` nao traz o certifi e o filtro de higiene
+# nao tem relacao com o problema: o arquivo simplesmente nunca era
+# coletado. Como ``certifi`` e dependencia dura de ``requests`` e do
+# ``httpx`` (usados no boot), a coleta aqui NAO fica em try/except: se o
+# pacote nao existir no ambiente do build, o build falha agora em vez de
+# gerar um .exe que so quebra na primeira consulta ao Ollama.
+dados_certifi = collect_data_files("certifi")
+
+if not any(
+    str(origem).replace("\\", "/").endswith("certifi/cacert.pem")
+    for origem, _ in dados_certifi
+):
+    raise RuntimeError(
+        "collect_data_files('certifi') nao encontrou certifi/cacert.pem; "
+        "o executavel congelado falharia no import de services.llm_service."
+    )
+
+datas += dados_certifi
+
+# ---------------------------------------------------------------------------
+# Dependencias do boot (imports que o modulegraph pode perder)
+# ---------------------------------------------------------------------------
+#
+# A cadeia que quebrou na validacao real foi:
+# ``app.py`` -> ``core.assistant`` -> ``core.smart_router`` ->
+# ``services.llm_service`` -> ``ollama`` -> ``httpx``. ``streamlit``
+# importa ``httpx``/``pydantic`` de forma dinamica e o ``ollama`` tem
+# submodulos resolvidos por nome. A lista garante que todos entrem mesmo
+# quando um coletor automatico mudar de comportamento; cada item so e
+# adicionado quando o modulo existe no ambiente (nada de hidden import
+# "not found" quando a biblioteca opcional nao esta instalada).
+MODULOS_BOOT = (
+    "certifi",
+    "ssl",
+    "httpx",
+    "httpx._config",
+    "httpx._client",
+    "httpcore",
+    "h11",
+    "anyio",
+    "sniffio",
+    "idna",
+    "requests",
+    "urllib3",
+    "charset_normalizer",
+    "ollama",
+    "ollama._client",
+    "ollama._types",
+    "pydantic",
+    "pydantic_core",
+    "pydantic.deprecated",
+    "pydantic.v1",
+    "pypdf",
+    "docx",
+    "services.llm_service",
+    "core.smart_router",
+    "core.assistant",
+)
+
+
+def _modulo_instalado_boot(nome):
+    """Diz se ``nome`` pode ser importado no Python que roda o build."""
+
+    try:
+        return importlib.util.find_spec(nome) is not None
+    except (ImportError, AttributeError, ValueError):
+        return False
+
+
+for modulo in MODULOS_BOOT:
+    if _modulo_instalado_boot(modulo) and modulo not in hiddenimports:
+        hiddenimports.append(modulo)
 
 # ---------------------------------------------------------------------------
 # RapidOCR (OCR opcional dos PDFs escaneados)

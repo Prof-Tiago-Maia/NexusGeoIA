@@ -18,6 +18,8 @@ from unittest import mock
 import config
 import setup_llm
 
+RAIZ = Path(__file__).resolve().parent.parent
+
 
 def novo_diretorio_temporario():
     """Pasta temporaria dentro de ``tests/`` (gravavel e sem rede).
@@ -725,6 +727,134 @@ class TestDownloadInstaladorOllama(unittest.TestCase):
 
         self.assertFalse(self.destino.exists())
 
+    def test_falha_antes_da_execucao_remove_pasta_temporaria(self):
+        """A2/Baixo 1: mkdtemp não pode vazar em falha de download.
+
+        Sem destino explícito, o instalador vai para uma pasta única. Se o
+        download falhar antes de executar, tanto o arquivo parcial quanto
+        a pasta precisam desaparecer.
+        """
+
+        base = RAIZ / "build" / "_tmp_ollama_falha"
+        shutil.rmtree(base, ignore_errors=True)
+        base.mkdir(parents=True, exist_ok=True)
+
+        try:
+            with mock.patch.object(
+                setup_llm.tempfile,
+                "mkdtemp",
+                return_value=str(base),
+            ), mock.patch.object(
+                setup_llm,
+                "_abrir_url",
+                side_effect=OSError("TLS indisponível"),
+            ):
+                with self.assertRaises(setup_llm.ErroInstalacaoOllama):
+                    setup_llm.baixar_instalador_ollama()
+
+            self.assertFalse(base.exists())
+        finally:
+            shutil.rmtree(base, ignore_errors=True)
+
+    def test_resumo_do_stderr_nao_despeja_texto_longo(self):
+        stderr = "\n".join(
+            ["Categoria: erro muito longo " * 20, "Assinatura invalida: NotSigned"]
+        )
+
+        self.assertEqual(
+            setup_llm._resumir_stderr_assinatura(stderr),
+            "Assinatura invalida: NotSigned",
+        )
+
+        resumo = setup_llm._resumir_stderr_assinatura("x" * 1000)
+
+        self.assertLessEqual(len(resumo), 161)
+        self.assertTrue(resumo.endswith("…"))
+
+
+@unittest.skipUnless(os.name == "nt", "assinatura Authenticode é do Windows")
+class TestAssinaturaInstaladorOllama(unittest.TestCase):
+    """A2: o instalador só executa com assinatura Authenticode válida."""
+
+    def test_assinatura_valida_retorna_true(self):
+        resultado = mock.Mock(returncode=0, stderr="")
+
+        with mock.patch.object(
+            setup_llm.subprocess,
+            "run",
+            return_value=resultado,
+        ) as executar:
+            self.assertTrue(
+                setup_llm._verificar_assinatura_instalador(
+                    r"C:\Temp\OllamaSetup.exe"
+                )
+            )
+
+        argumentos = executar.call_args.args[0]
+        self.assertIn("Get-AuthenticodeSignature", " ".join(argumentos))
+        self.assertEqual(
+            executar.call_args.kwargs["env"]["NEXUSGEO_INSTALADOR"],
+            r"C:\Temp\OllamaSetup.exe",
+        )
+
+    def test_assinatura_invalida_reprova(self):
+        resultado = mock.Mock(returncode=1, stderr="Assinatura invalida")
+
+        with mock.patch.object(
+            setup_llm.subprocess,
+            "run",
+            return_value=resultado,
+        ):
+            with self.assertRaises(setup_llm.ErroInstalacaoOllama):
+                setup_llm._verificar_assinatura_instalador(
+                    r"C:\Temp\OllamaSetup.exe"
+                )
+
+    def test_instalador_nao_executa_sem_assinatura(self):
+        with mock.patch.object(
+            setup_llm,
+            "_verificar_assinatura_instalador",
+            side_effect=setup_llm.ErroInstalacaoOllama("sem assinatura"),
+        ), mock.patch.object(
+            setup_llm.subprocess,
+            "run",
+        ) as executar:
+            with self.assertRaises(setup_llm.ErroInstalacaoOllama):
+                setup_llm.executar_instalador_ollama(
+                    r"C:\Temp\OllamaSetup.exe"
+                )
+
+        executar.assert_not_called()
+
+    def test_destino_padrao_usa_pasta_unica(self):
+        resposta = RespostaDownloadFalsa([b"a"], content_length=1)
+        base = RAIZ / "build" / "nexusgeo_ollama_teste"
+        shutil.rmtree(base, ignore_errors=True)
+        base.mkdir(parents=True, exist_ok=True)
+
+        with mock.patch.object(
+            setup_llm,
+            "_abrir_url",
+            return_value=resposta,
+        ), mock.patch.object(
+            setup_llm.tempfile,
+            "mkdtemp",
+            return_value=str(base),
+        ):
+            caminho = setup_llm.baixar_instalador_ollama()
+
+        alvo = Path(caminho)
+
+        try:
+            self.assertTrue(
+                alvo.parent.name.startswith("nexusgeo_ollama_")
+            )
+            self.assertTrue(alvo.is_file())
+        finally:
+            setup_llm._remover_instalador_temporario(caminho)
+
+        self.assertFalse(alvo.parent.exists())
+
 
 @unittest.skipUnless(os.name == "nt", "instalação silenciosa é do Windows")
 class TestInstalacaoSilenciosaOllama(unittest.TestCase):
@@ -794,6 +924,10 @@ class TestInstalacaoSilenciosaOllama(unittest.TestCase):
             "baixar_instalador_ollama",
             return_value=str(self.instalador),
         ) as baixar, mock.patch.object(
+            setup_llm,
+            "_verificar_assinatura_instalador",
+            return_value=True,
+        ), mock.patch.object(
             setup_llm.subprocess,
             "run",
         ) as executar, mock.patch.object(
@@ -838,6 +972,10 @@ class TestInstalacaoSilenciosaOllama(unittest.TestCase):
             setup_llm,
             "baixar_instalador_ollama",
             return_value=str(self.instalador),
+        ), mock.patch.object(
+            setup_llm,
+            "_verificar_assinatura_instalador",
+            return_value=True,
         ), mock.patch.object(
             setup_llm.subprocess,
             "run",

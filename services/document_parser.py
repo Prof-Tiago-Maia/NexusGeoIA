@@ -43,6 +43,11 @@ from typing import Callable, Sequence
 
 from config import DATA_DIR
 
+# ``utils.i18n`` resolve o streamlit de forma tardia: importar este módulo
+# (e validar limites em CLI/testes) não carrega o runtime da interface nem
+# exige ``ScriptRunContext``. As mensagens de limite usam ``t()`` normal.
+from utils.i18n import t
+
 LOGGER = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -69,6 +74,12 @@ DPI_OCR = 200
 # OCR. O mesmo piso é usado para dizer se o arquivo inteiro é útil.
 MINIMO_CARACTERES_PAGINA = 40
 MINIMO_CARACTERES_UTEIS = 40
+
+# Limites de segurança para entrada não confiável. O upload padrão do
+# Streamlit também é limitado a 100 MB em .streamlit/config.toml; estes
+# valores são a segunda barreira para chamadas diretas à API.
+TAMANHO_MAXIMO_ARQUIVO = 100 * 1024 * 1024
+MAXIMO_PAGINAS_PDF = 500
 
 # Linhas curtas repetidas em pelo menos 60% das páginas são tratadas como
 # cabeçalho/rodapé do modelo e removidas a partir da segunda ocorrência.
@@ -911,6 +922,9 @@ def _converter_pdf(
 
         total = documento.page_count
 
+        if total > MAXIMO_PAGINAS_PDF:
+            raise ErroConversao(t("limite_paginas_pdf"))
+
         if total <= 0:
             return "", 0, 0, ["O PDF não possui páginas."]
 
@@ -1042,6 +1056,16 @@ def converter_arquivo(
 
     if not caminho_origem.is_file():
         raise ErroConversao(f"O arquivo {caminho_origem.name} não existe.")
+
+    try:
+        tamanho = caminho_origem.stat().st_size
+    except OSError as erro:
+        raise ErroConversao(
+            f"Não foi possível ler o arquivo {caminho_origem.name}: {erro}"
+        ) from erro
+
+    if tamanho > TAMANHO_MAXIMO_ARQUIVO:
+        raise ErroConversao(t("limite_arquivo_documento"))
 
     sufixo = caminho_origem.suffix.lower()
 

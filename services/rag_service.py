@@ -453,6 +453,55 @@ class DocumentoSalvo:
         return self.caminho.name
 
 
+_NOMES_RESERVADOS_WINDOWS = {
+    "CON",
+    "PRN",
+    "AUX",
+    "NUL",
+    *(f"COM{numero}" for numero in range(1, 10)),
+    *(f"LPT{numero}" for numero in range(1, 10)),
+}
+
+
+def _sanitizar_nome_documento(nome_arquivo):
+    """Reduz o nome a um arquivo seguro no Windows.
+
+    Remove diretórios, fluxos alternativos (arquivo.txt:stream),
+    caracteres inválidos, pontos/espaços finais e prefixa nomes
+    reservados do Windows (CON, NUL, COM1...). O nome final continua
+    sendo apenas um arquivo dentro de data/docs.
+    """
+
+    nome = str(nome_arquivo or "").strip()
+
+    # Trata separadores POSIX e Windows independentemente do SO em que o
+    # teste roda: "..\..\arquivo.txt" precisa virar "arquivo.txt" também
+    # no Linux, onde a barra invertida não é separador de caminho.
+    nome = Path(nome.replace("\\", "/")).name.strip()
+
+    # Um dois-pontos cria Alternate Data Stream no NTFS; descarta o fluxo.
+    nome = nome.split(":", 1)[0].strip()
+    nome = "".join(
+        "_" if (ord(caractere) < 32 or caractere in '<>:"|?*') else caractere
+        for caractere in nome
+    )
+    nome = nome.rstrip(" .")
+
+    if not nome or nome in {".", ".."}:
+        raise DocumentoInvalidoError("Nome de arquivo inválido.")
+
+    # O Windows reserva o radical antes do primeiro ponto e ignora espaços
+    # à direita ("CON .txt") e variantes Unicode de dígitos ("COM¹").
+    # NFKC converte ¹/²/³ em 1/2/3 antes da comparação.
+    radical = Path(nome).stem
+    radical = unicodedata.normalize("NFKC", radical).strip(" .").upper()
+
+    if radical in _NOMES_RESERVADOS_WINDOWS:
+        nome = f"_{nome}"
+
+    return nome
+
+
 def salvar_documento(nome_arquivo, conteudo, ao_progredir=None):
     """Grava um documento enviado e o converte em Markdown.
 
@@ -475,10 +524,7 @@ def salvar_documento(nome_arquivo, conteudo, ao_progredir=None):
 
     garantir_diretorio()
 
-    nome = Path(str(nome_arquivo or "")).name.strip()
-
-    if not nome or nome in {".", ".."}:
-        raise DocumentoInvalidoError("Nome de arquivo inválido.")
+    nome = _sanitizar_nome_documento(nome_arquivo)
 
     sufixo = Path(nome).suffix.lower()
 

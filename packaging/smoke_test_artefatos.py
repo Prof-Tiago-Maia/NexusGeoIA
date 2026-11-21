@@ -13,10 +13,13 @@ Valida, sem abrir janela nem servidor, o que o build deixa em ``dist``:
    ``config_local.json``, ``estrutura.txt``, ``tmp*/``);
 3. a pasta de staging, quando ainda existe, tem as mesmas garantias;
 4. o executavel passa no autoteste interno (``--autoteste``), que importa
-   os modulos criticos e gera um ``.docx`` e um ``.xlsx`` de verdade -
-   **somente com ``--com-executavel``**, porque o aplicativo e desktop
-   (sobe o Streamlit e nao termina sozinho) e executar o binario depende
-   da politica de execucao da maquina.
+   os modulos criticos e gera um ``.docx`` e um ``.xlsx`` de verdade, e
+   na verificacao de imports congelados (``--verificar-imports``), que
+   roda com um ``PATH`` sem ``.venv`` e importa ``app`` e
+   ``services.llm_service`` de dentro de ``_internal`` - **somente com
+   ``--com-executavel``**, porque o aplicativo e desktop (sobe o
+   Streamlit e nao termina sozinho) e executar o binario depende da
+   politica de execucao da maquina.
 
 Uso:
 
@@ -138,6 +141,10 @@ def verificar_pacote_onedir(pacote, falhas):
         "app.py",
         "prompts/system_base.txt",
         ".streamlit/config.toml",
+        # Bug corrigido: sem o cacert.pem em _internal/certifi o import
+        # de services.llm_service (ollama -> httpx -> ssl) quebra com
+        # FileNotFoundError antes de a interface abrir.
+        "certifi/cacert.pem",
     ):
         if not (interna / relativo).is_file():
             falhas.append(
@@ -251,6 +258,129 @@ def verificar_staging(staging, falhas, avisos):
         )
 
     return {"arquivos": len(nomes)}
+
+
+def _ambiente_sem_venv(base=None):
+    """Copia o ambiente removendo qualquer caminho do ``.venv``.
+
+    O executável precisa resolver ``app``/``services.llm_service`` de
+    dentro de ``_internal``, e não do ambiente virtual usado no build.
+    Remover ``.venv``/``site-packages`` do ``PATH`` e as variáveis
+    ``PYTHON*`` torna o teste uma prova real do bundle.
+    """
+
+    ambiente = dict(os.environ if base is None else base)
+
+    partes = []
+
+    for parte in ambiente.get("PATH", "").split(os.pathsep):
+        if not parte.strip():
+            continue
+
+        normalizada = parte.replace("\\", "/").lower()
+
+        if ".venv" in normalizada or "site-packages" in normalizada:
+            continue
+
+        partes.append(parte)
+
+    ambiente["PATH"] = os.pathsep.join(partes)
+
+    for chave in (
+        "PYTHONPATH",
+        "PYTHONHOME",
+        "PYTHONSTARTUP",
+        "VIRTUAL_ENV",
+    ):
+        ambiente.pop(chave, None)
+
+    return ambiente
+
+
+def verificar_imports_congelados(exe, raiz, falhas, avisos, timeout=600):
+    """Importa ``app``/``services.llm_service`` dentro do executável.
+
+    Roda ``NexusGeoIA.exe --verificar-imports`` (sem GUI, sem servidor e
+    sem navegador) com um ``PATH`` sem ``.venv``. O modo valida o
+    ``certifi/cacert.pem``, cria um contexto SSL do ``httpx`` e importa a
+    cadeia que quebrou na validação real.
+    """
+
+    if not exe.is_file():
+        falhas.append(f"executavel ausente: {exe}")
+
+        return None
+
+    pasta_relatorio = raiz / "build" / "smoke_artefatos"
+    pasta_relatorio.mkdir(parents=True, exist_ok=True)
+
+    relatorio = pasta_relatorio / "imports.json"
+
+    if relatorio.is_file():
+        relatorio.unlink()
+
+    ambiente = _ambiente_sem_venv()
+    ambiente["ASSISTENTE_IMPORTS_REPORT"] = str(relatorio)
+    ambiente["ASSISTENTE_DATA_DIR"] = str(pasta_relatorio / "dados_imports")
+
+    try:
+        processo = subprocess.run(
+            [str(exe), "--verificar-imports"],
+            env=ambiente,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        falhas.append(
+            f"a verificacao de imports excedeu {timeout}s "
+            "(possivel travamento no import do bundle)"
+        )
+
+        return None
+
+    if not relatorio.is_file():
+        falhas.append(
+            "o executavel nao gravou o relatorio de imports "
+            f"(codigo {processo.returncode})"
+        )
+
+        return None
+
+    dados = json.loads(relatorio.read_text(encoding="utf-8"))
+
+    if not dados.get("ok"):
+        falhas.append(f"imports do bundle reprovados: {dados.get('falhas')}")
+
+    nomes = [
+        verificacao.get("nome")
+        for verificacao in dados.get("verificacoes", [])
+        if verificacao.get("ok")
+    ]
+
+    for obrigatorio in ("certificados", "services_llm_service", "app"):
+        if obrigatorio not in nomes:
+            falhas.append(
+                f"verificacao ausente no bundle: {obrigatorio}"
+            )
+
+    if dados.get("congelado") is not True:
+        avisos.append(
+            "o relatorio de imports nao indica modo congelado; "
+            "confirme que o .exe foi executado"
+        )
+
+    if ".venv" in dados.get("ssl_cert_file", "").replace("\\", "/").lower():
+        falhas.append(
+            "o bundle usou o cacert.pem do .venv em vez do _internal"
+        )
+
+    return {
+        "ok": bool(dados.get("ok")),
+        "verificacoes": nomes,
+        "certificado": dados.get("ssl_cert_file"),
+    }
 
 
 def verificar_executavel(exe, raiz, falhas, avisos, timeout=600):
@@ -379,6 +509,11 @@ def main(argv=None):
     if argumentos.com_executavel:
         print("  [extra] autoteste do executavel (--autoteste)")
         relatorio["autoteste"] = verificar_executavel(
+            exe, RAIZ, falhas, avisos
+        )
+
+        print("  [extra] imports congelados (--verificar-imports, sem .venv)")
+        relatorio["imports_congelados"] = verificar_imports_congelados(
             exe, RAIZ, falhas, avisos
         )
     else:

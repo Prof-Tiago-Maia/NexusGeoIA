@@ -1572,11 +1572,46 @@ def nome_arquivo_tabela(tabela: dict, extensao: str) -> str:
     return "_".join(parte for parte in partes if parte) + f".{extensao}"
 
 
+_CARACTERES_FORMULA = ("=", "+", "-", "@", "\t", "\r")
+
+
+def _neutralizar_formula_csv(valor):
+    """Prefixa apóstrofo para o Excel tratar o valor como texto.
+
+    Dados de APIs públicas, documentos enviados pelo usuário e respostas
+    do LLM são não confiáveis. Uma célula iniciada por ``=``, ``+``,
+    ``-`` ou ``@`` pode virar fórmula ao abrir o CSV no Excel.
+    """
+
+    if isinstance(valor, str) and valor.startswith(_CARACTERES_FORMULA):
+        return "'" + valor
+
+    return valor
+
+
+def _forcar_texto_no_excel(aba):
+    """Impede que o openpyxl grave células perigosas como fórmula.
+
+    O pandas/openpyxl transforma automaticamente strings iniciadas por
+    ``=`` em células do tipo ``f`` (fórmula). Forçar ``data_type = "s"``
+    mantém o valor exatamente como veio da fonte, sem executar nada ao
+    abrir o arquivo.
+    """
+
+    for linha in aba.iter_rows():
+        for celula in linha:
+            if isinstance(celula.value, str) and celula.value.startswith(
+                _CARACTERES_FORMULA
+            ):
+                celula.data_type = "s"
+
+
 def gerar_csv(tabela: dict) -> bytes:
     """CSV UTF-8 (com BOM), separador ``;`` e decimal com vírgula.
 
     É o formato que o Excel em português abre com duplo clique e que o
-    QGIS importa diretamente como camada de texto delimitado.
+    QGIS importa diretamente como camada de texto delimitado. Células que
+    começam com caracteres de fórmula recebem um apóstrofo de proteção.
     """
 
     df = tabela.get("df_limpo")
@@ -1586,6 +1621,13 @@ def gerar_csv(tabela: dict) -> bytes:
 
     if df is None:
         return b""
+
+    df = df.copy()
+    df.columns = [
+        _neutralizar_formula_csv(str(coluna)) for coluna in df.columns
+    ]
+
+    df = df.map(_neutralizar_formula_csv)
 
     return df.to_csv(
         index=False,
@@ -1695,6 +1737,10 @@ def gerar_excel(tabela: dict) -> bytes:
         df_limpo.to_excel(escritor, sheet_name="Dados", index=False)
         df_bruto.to_excel(escritor, sheet_name="Dados brutos", index=False)
         metadados.to_excel(escritor, sheet_name="Metadados", index=False)
+
+        # Fórmulas nunca são geradas a partir de dados de fontes externas.
+        for aba in escritor.book.worksheets:
+            _forcar_texto_no_excel(aba)
 
         _formatar_aba_excel(escritor.sheets["Dados"], df_limpo)
         _formatar_aba_excel(escritor.sheets["Dados brutos"], df_bruto)

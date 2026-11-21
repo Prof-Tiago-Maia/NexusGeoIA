@@ -51,9 +51,45 @@ fontes, tanto na resposta nova quanto ao renderizar o histórico.
 """
 
 import json
+import os
 import re
+import threading
 import urllib.parse
+from importlib import import_module
 from pathlib import Path
+
+# ---------------------------------------------------------------------------
+# Certificados TLS antes dos imports de terceiros, core e services
+# ---------------------------------------------------------------------------
+#
+# BUG CORRIGIDO: no executável congelado o contexto SSL criado pelo
+# ``ollama``/``httpx`` não encontrava o ``cacert.pem`` do ``certifi`` e o
+# import de ``services.llm_service`` morria com ``FileNotFoundError``. A
+# correção vive também no ``launcher_desktop.py``; repetir aqui cobre a
+# execução direta (``streamlit run app.py`` em desenvolvimento) e a
+# importação do ``app`` pelo smoke test do bundle.
+#
+# O caminho definido pelo usuário só é substituído quando está vazio ou
+# aponta para um arquivo inexistente.
+try:
+    _certifi = import_module("certifi")
+except Exception:  # noqa: BLE001 - ambiente sem certifi
+    _certifi = None
+
+_CAMINHO_CERTIFICADOS = ""
+
+if _certifi is not None:
+    try:
+        _CAMINHO_CERTIFICADOS = str(_certifi.where())
+    except Exception:  # noqa: BLE001 - certifi sem arquivo de CAs
+        _CAMINHO_CERTIFICADOS = ""
+
+if _CAMINHO_CERTIFICADOS and os.path.isfile(_CAMINHO_CERTIFICADOS):
+    for _variavel_certificado in ("SSL_CERT_FILE", "REQUESTS_CA_BUNDLE"):
+        _valor_atual = os.environ.get(_variavel_certificado, "").strip()
+
+        if not _valor_atual or not os.path.isfile(_valor_atual):
+            os.environ[_variavel_certificado] = _CAMINHO_CERTIFICADOS
 
 import pandas as pd
 import requests
@@ -4498,6 +4534,46 @@ indice_modelo_padrao = (
 # Barra lateral: base documental, histórico, fontes e ajustes
 # ---------------------------------------------------------------------------
 
+def _encerrar_servidor_streamlit():
+    """Encerra o servidor a pedido do usuário (botão da barra lateral).
+
+    Usa ``Runtime.instance().stop()``, seguro a partir da thread do
+    script, para desligar o servidor de forma ordenada: o processo do
+    servidor termina e o launcher (que o espera) encerra em seguida,
+    fechando o Job Object no Windows. Um ``Timer`` de segurança garante
+    a saída do processo caso a API interna do Streamlit mude.
+    """
+
+    parou = False
+
+    try:
+        from streamlit.runtime import Runtime
+
+        Runtime.instance().stop()
+        parou = True
+    except Exception:  # noqa: BLE001 - API interna indisponível
+        parou = False
+
+    def _sair_a_forca():
+        """Sai do processo do servidor depois de desenhar o aviso."""
+
+        os._exit(0)
+
+    if parou:
+        # Rede de segurança: se o runtime não concluir o desligamento, o
+        # processo termina de qualquer forma (sem deixar órfãos). O timer
+        # é daemon para não atrasar o encerramento normal.
+        segundos = 5.0
+    else:
+        segundos = 0.5
+
+    timer = threading.Timer(segundos, _sair_a_forca)
+    timer.daemon = True
+    timer.start()
+
+    return parou
+
+
 with st.sidebar:
     # -- 0. Seletor de idioma (topo absoluto da barra lateral) -----------
     # Duas colunas iguais com os botões de bandeira. O botão do idioma
@@ -5080,6 +5156,18 @@ with st.sidebar:
             documentos=len(documentos),
         )
     )
+
+    # Ação discreta de encerramento: libera a porta e fecha o servidor
+    # (e o launcher, que o espera). O histórico já salvo é preservado.
+    if st.button(
+        t("encerrar_servidor"),
+        key="encerrar_servidor",
+        width="stretch",
+        help=t("ajuda_encerrar_servidor"),
+    ):
+        _encerrar_servidor_streamlit()
+        st.info(t("aviso_encerrando_servidor"))
+        st.stop()
 
 
 # Texto atual da caixa de edição, mesmo que o editor esteja fechado.

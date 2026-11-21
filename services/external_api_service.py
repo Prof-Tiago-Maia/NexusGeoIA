@@ -116,6 +116,7 @@ import copy
 import hashlib
 import html
 import json
+import logging
 import os
 import re
 import threading
@@ -166,6 +167,8 @@ from services.glossario_bilingue import (
 FONTE_SGB = "SGB"
 FONTE_RIGEO = "RIGeo"
 FONTE_GEOBUSCA = "GeoBusca"
+
+LOGGER = logging.getLogger(__name__)
 
 CAMINHO_BUSCA_RIGEO = "/server/api/discover/search/objects"
 CAMINHO_COMUNIDADES_RIGEO = "/server/api/core/communities"
@@ -1387,16 +1390,49 @@ def _extrair_geobusca(pagina, limite):
     return registros
 
 
+def _base_geobusca_segura():
+    """Diz se a base do GeoBusca é um endpoint HTTPS válido.
+
+    O GeoBusca é apenas um fallback: não deve haver downgrade silencioso
+    para HTTP nem tentativa contra uma URL vazia/malformada. Quando a
+    base configurada não é HTTPS, o fallback é ignorado de forma limpa.
+    """
+
+    try:
+        base = str(GEOBUSCA_BASE_URL or "").strip()
+        partes = urllib.parse.urlsplit(base)
+    except (AttributeError, TypeError, ValueError):
+        return False
+
+    return partes.scheme == "https" and bool(partes.netloc)
+
+
 def _consultar_geobusca(pergunta, limite):
     """Fallback opcional: busca no GeoBusca com Playwright headless.
 
-    Qualquer indisponibilidade (pacote, navegador ou página) resulta em
-    lista vazia, sem interromper a consulta ao SGB.
+    Qualquer indisponibilidade (pacote, navegador, TLS ou página) resulta
+    em lista vazia, sem interromper a consulta ao SGB. Não existe segundo
+    fallback para HTTP: se o endpoint HTTPS falhar, o resultado é
+    previsível e a falha fica registrada no log.
     """
+
+    texto = str(pergunta or "").strip()
+
+    if not texto or not isinstance(limite, int) or limite <= 0:
+        return []
+
+    if not _base_geobusca_segura():
+        LOGGER.warning(
+            "GeoBusca ignorado: GEOBUSCA_BASE_URL não é um endpoint "
+            "HTTPS válido (%s).",
+            GEOBUSCA_BASE_URL,
+        )
+        return []
 
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:
+        LOGGER.info("GeoBusca indisponível: playwright não instalado.")
         return []
 
     try:
@@ -1411,7 +1447,7 @@ def _consultar_geobusca(pergunta, limite):
                     wait_until="domcontentloaded"
                 )
 
-                if not _preencher_busca(pagina, pergunta):
+                if not _preencher_busca(pagina, texto):
                     return []
 
                 pagina.wait_for_timeout(8000)
@@ -1419,7 +1455,11 @@ def _consultar_geobusca(pergunta, limite):
                 return _extrair_geobusca(pagina, limite)
             finally:
                 navegador.close()
-    except Exception:
+    except Exception as erro:  # noqa: BLE001 - fallback nunca derruba o SGB
+        LOGGER.info(
+            "GeoBusca indisponível (%s); fallback ignorado.",
+            type(erro).__name__,
+        )
         return []
 
 
@@ -5797,14 +5837,18 @@ def _requisitar_anm(url, parametros, prazo, timeout=ANM_TIMEOUT):
         return None, False, None
 
     limite = min(timeout, restante)
-    verificar = ANM_SSL_VERIFY and not _ANM_SSL_FALHOU
-    rotulo_verificado = "verificada" if verificar else (
-        "verificacao-desligada" if not ANM_SSL_VERIFY else "sem-verificacao"
+
+    # A verificação TLS só é desligada quando o usuário opta
+    # explicitamente por ANM_SSL_VERIFY=0. Um erro de certificado NÃO
+    # autoriza repetir a chamada sem TLS: o fallback silencioso anterior
+    # permitia MITM e injetava processos minerários falsos no prompt.
+    # Quando o certificado do servidor está incompleto, a etapa falha e o
+    # cache local é usado.
+    verificar = ANM_SSL_VERIFY
+    rotulo_verificado = (
+        "verificada" if verificar else "verificacao-desligada"
     )
     tentativas = [(verificar, rotulo_verificado)]
-
-    if verificar:
-        tentativas.append((False, "sem-verificacao"))
 
     for verificar, rotulo in tentativas:
         try:

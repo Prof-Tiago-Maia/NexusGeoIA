@@ -6,6 +6,7 @@ ENV/
 
 # Estado local do harness de desenvolvimento (nunca versionar)
 .dsh/
+.claude/
 
 # Bytecode e caches Python
 __pycache__/
