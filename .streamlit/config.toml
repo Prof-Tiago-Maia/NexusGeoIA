@@ -1,0 +1,17 @@
+# ``auto`` mantém a barra superior (menu ``⋮`` e botão ``Parar``) visível em
+# execução local. O modo ``minimal`` faz o Streamlit não renderizar o menu
+# principal nem o botão de interromper a execução; o botão ``Deploy``
+# continua oculto pelo CSS de ``app.py`` (``CSS_INTERFACE``).
+[client]
+toolbarMode = "auto"
+
+# Aplicativo desktop: o servidor escuta no loopback, na porta padrão, e
+# abre o navegador sozinho. ``headless = false`` é o que faz o Streamlit
+# disparar ``http://localhost:8501`` quando o servidor fica pronto.
+[server]
+headless = false
+address = "localhost"
+port = 8501
+
+[browser]
+gatherUsageStats = false

@@ -1,0 +1,3 @@
+# Mantém a pasta data/historico no versionamento mesmo vazia.
+# Cada conversa da interface é gravada aqui como <session_id>.json e
+# esses arquivos são dados locais do usuário (ignorados pelo Git).

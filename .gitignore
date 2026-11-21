@@ -4,6 +4,9 @@ venv/
 env/
 ENV/
 
+# Estado local do harness de desenvolvimento (nunca versionar)
+.dsh/
+
 # Bytecode e caches Python
 __pycache__/
 *.py[cod]
@@ -25,12 +28,41 @@ dist/
 *.egg-info/
 .eggs/
 
+# Binarios e pacotes de distribuicao (nunca versionar; publique em Releases)
+*.zip
+*.exe
+*.msi
+
+# Especificacoes temporarias geradas pelo PyInstaller na raiz ou em build/.
+# packaging/assistente.spec e fonte versionada e NAO deve ser ignorado.
+/*.spec
+build/**/*.spec
+
+# Scripts do Inno Setup gerados fora de packaging/ (o oficial e versionado).
+/*.iss
+build/**/*.iss
+
+# Residuos de smoke test e diretorios temporarios de empacotamento
+build/smoke_*/
+build/tmp_*/
+build/temp_*/
+build/smoke_autoteste.json
+build/test_run_*.log
+
 # Variaveis de ambiente e segredos locais
 .env
 .env.*
+*.env
 !.env.example
 !.env.sample
 .streamlit/secrets.toml
+*.pem
+*.key
+*.p12
+*.pfx
+*.keystore
+id_rsa*
+id_ed25519*
 
 # Bancos SQLite locais e arquivos auxiliares
 *.db
@@ -46,6 +78,35 @@ dist/
 *.sqlite3-wal
 *.sqlite3-shm
 
+# Documentos locais enviados pelo usuario (conteudo pessoal; a pasta e mantida vazia)
+data/docs/*
+!data/docs/.gitkeep
+
+# Historico de conversas (dados locais do usuario; a pasta e mantida vazia)
+data/historico/*
+!data/historico/.gitkeep
+data/history/*
+!data/history/.gitkeep
+
+# Markdown convertido a partir de data/docs (cache recriavel)
+data/cache_md/*
+!data/cache_md/.gitkeep
+
+# Cache local do inventario de estacoes da ANA (recriavel; a pasta e mantida
+# vazia no versionamento e o cache e regravado a cada consulta bem-sucedida)
+data/cache_ana/*
+!data/cache_ana/.gitkeep
+
+# Cache local dos serviços geológicos internacionais (recriavel)
+data/cache_api/*
+!data/cache_api/.gitkeep
+
+# Configuracao local do assistente de modelos LLM (gerada por setup_llm.py)
+config_local.json
+
+# Artefatos temporarios dos testes de empacotamento
+tests/_tmp_setup_llm/
+
 # Logs e arquivos temporarios
 *.log
 *.tmp
@@ -54,6 +115,12 @@ dist/
 *.swp
 *.swo
 *~
+
+# Pastas temporarias de build/teste na raiz (ex.: tmpa4czdpvx/)
+/tmp*/
+
+# Inventario local de arquivos (gerado por scripts de analise)
+estrutura.txt
 
 # Configuracoes locais de editores
 .idea/

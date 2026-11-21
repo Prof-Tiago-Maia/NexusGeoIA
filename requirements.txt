@@ -1,3 +1,45 @@
 httpx>=0.27,<1.0
 ollama>=0.4,<1.0
+playwright>=1.40,<2.0
+requests>=2.31,<3.0
 streamlit>=1.40,<2.0
+
+# --- Conversão de documentos locais em Markdown -----------------------
+# PyMuPDF: leitura e renderização de páginas de PDF em CPU (sem binários
+# externos, com rodas prontas para Windows).
+pymupdf>=1.24,<2.0
+
+# pymupdf4llm: conversão página a página para Markdown. A faixa <1.0 é
+# intencional: as versões 1.2x/2.x publicadas no PyPI são apenas
+# "shims" sem código e dependem do pacote pymupdf-layout.
+pymupdf4llm>=0.3,<1.0
+
+# OCR leve em CPU, embutido no processo (RapidOCR sobre ONNX Runtime),
+# sem exigir a instalação do Tesseract no Windows.
+onnxruntime>=1.20,<2.0
+
+# rapidocr-onnxruntime: pacote histórico do RapidOCR (Python < 3.13).
+# rapidocr: pacote atual, com o mesmo motor ONNX, para Python >= 3.13.
+rapidocr-onnxruntime>=1.3,<2.0; python_version < "3.13"
+rapidocr>=3.0,<4.0; python_version >= "3.13"
+
+# --- Dados tabulares, exploração e exportação -------------------------
+# pandas: tipagem automática, filtros e resumos estatísticos das tabelas
+# extraídas dos documentos e das APIs.
+pandas>=2.2,<4.0
+
+# openpyxl: escrita do Excel em memória, com abas de dados, dados brutos
+# e metadados de origem.
+openpyxl>=3.1,<4.0
+
+# --- Geração do Parecer Técnico em Word -------------------------------
+# python-docx: monta o .docx inteiramente em memória (io.BytesIO), sem
+# binários externos além do lxml. É a única dependência do gerador de
+# parecer; o relatório em Markdown usa apenas a biblioteca padrão.
+python-docx>=1.1,<2.0
+
+# --- Pesquisa na Web sem chave de API ---------------------------------
+# ddgs: cliente DuckDuckGo mantido, que substituiu o duckduckgo-search.
+# O conector também aceita o nome antigo e, sem qualquer um dos dois,
+# devolve lista vazia: o aplicativo continua funcionando offline.
+ddgs>=9.0,<10.0

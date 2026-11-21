@@ -1,0 +1,3 @@
+# Markdown convertido a partir de data/docs (cache recriavel)
+data/cache_md/*
+!data/cache_md/.gitkeep
