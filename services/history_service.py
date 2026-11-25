@@ -419,6 +419,22 @@ def carregar_conversa(session_id):
 
     return _ler_arquivo(caminho)
 
+def ler_conversa_de_arquivo(caminho):
+    """Lê uma conversa de um arquivo JSON fora do diretório padrão.
+
+    A migração da Fase D1 usa esta função para importar o histórico
+    legado para o SQLite a partir de uma pasta arbitrária (backup ou
+    teste). Arquivo ausente, JSON inválido ou estrutura desconhecida
+    devolvem ``None``, sem levantar exceção.
+    """
+
+    caminho = Path(caminho)
+
+    if not caminho.is_file():
+        return None
+
+    return _ler_arquivo(caminho)
+
 
 # ---------------------------------------------------------------------------
 # Gravação e exclusão

@@ -16,6 +16,7 @@ from services.external_api_service import (
     OPCOES_REGIOES_INTERNACIONAIS,
     REGIAO_TODAS,
 )
+from tests._apptest_isolation import isolar_ambiente_apptest
 
 RAIZ = Path(__file__).resolve().parent.parent
 APP = str(RAIZ / "app.py")
@@ -35,9 +36,11 @@ class TestInterfaceServicosInternacionais(unittest.TestCase):
     """Toggle mestre, seletor condicional e guia inicial."""
 
     def setUp(self):
+        isolar_ambiente_apptest(self)
+
         self._patch_modelos = patch(
             "services.llm_service.listar_modelos_locais",
-            return_value=["qwen3:14b"],
+            return_value=["nexusgeo-qwen3-4b-v2-q4"],
         )
         self._patch_modelos.start()
         self.addCleanup(self._patch_modelos.stop)
@@ -183,9 +186,6 @@ class TestInterfaceServicosInternacionais(unittest.TestCase):
         with patch(
             "core.assistant.responder",
             return_value=resultado,
-        ), patch(
-            "services.history_service.salvar_conversa",
-            return_value="data/historico/teste.json",
         ), patch(
             "services.history_service.gerar_titulo",
             return_value="Ouro no Canadá",

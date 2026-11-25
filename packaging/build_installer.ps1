@@ -7,13 +7,19 @@
        e packaging\assistente.spec estao de acordo com ela;
     2. executa packaging\build_portatil.ps1, que roda a suite offline,
        compila o pacote --onedir (dist\NexusGeoIA\NexusGeoIA.exe +
-       dist\NexusGeoIA\_internal\) com PyInstaller e monta o .zip
+       dist\NexusGeoIA\_internal\) com PyInstaller, copia os modulos e
+       configuracoes da release (.streamlit\, ui\ com
+       workstation_layout.py e finetuning\Modelfile.*) e monta o .zip
        portatil (use -SemPortatil para reaproveitar o pacote atual);
-    3. localiza o compilador do Inno Setup (ISCC.exe) no PATH, nos
+    3. confere no pacote --onedir o .streamlit\config.toml, ui\ e os
+       Modelfile; com -SemPortatil recompoe o que faltar a partir do
+       projeto, porque o Inno Setup embute dist\NexusGeoIA\* e um
+       pacote antigo geraria um instalador sem esses arquivos;
+    4. localiza o compilador do Inno Setup (ISCC.exe) no PATH, nos
        diretorios padrao de instalacao e no registro do Windows;
-    4. executa "ISCC.exe packaging\installer.iss" e gera
-       dist\NexusGeoIA_v0.9.0_Setup.exe;
-    5. roda packaging\smoke_test_artefatos.py, que valida os tres
+    5. executa "ISCC.exe packaging\installer.iss" e gera
+       dist\NexusGeoIA_v1.0.0_Setup.exe;
+    6. roda packaging\smoke_test_artefatos.py, que valida os tres
        artefatos finais (assinaturas, conteudo do .zip sem estado local
        nem segredos e o autoteste do executavel com imports criticos,
        Word e Excel).
@@ -122,6 +128,51 @@ function Assert-Arquivo {
 
     if (-not (Test-Path -LiteralPath $Caminho -PathType Leaf)) {
         throw "$Descricao nao encontrado: $Caminho"
+    }
+}
+
+# Copia uma pasta publicavel para o pacote --onedir com a mesma higiene
+# do build portatil: sem __pycache__, caches, estado local nem segredos.
+# Usada apenas quando -SemPortatil reaproveita um pacote antigo que ainda
+# nao tem ui ou finetuning\Modelfile.*.
+function Copy-ModuloPublicavel {
+    param([string]$Origem, [string]$DestinoPasta)
+
+    New-Item -ItemType Directory -Force -Path $DestinoPasta | Out-Null
+
+    $argumentos = @(
+        $Origem,
+        $DestinoPasta,
+        "/E",
+        "/NFL",
+        "/NDL",
+        "/NJH",
+        "/NJS",
+        "/NP",
+        "/XD",
+        "__pycache__",
+        ".git",
+        ".dsh",
+        ".ruff_cache",
+        ".pytest_cache",
+        ".venv",
+        "/XF",
+        "*.pyc",
+        "*.pyo",
+        "secrets.toml",
+        ".env",
+        ".env.*",
+        "*.env",
+        "*.key",
+        "*.p12",
+        "*.pfx",
+        "*.pem"
+    )
+
+    & robocopy @argumentos | Out-Null
+
+    if ($LASTEXITCODE -ge 8) {
+        throw "robocopy falhou (codigo $LASTEXITCODE) ao copiar $Origem"
     }
 }
 
@@ -305,6 +356,86 @@ else {
 }
 
 # ---------------------------------------------------------------------------
+# Modulos e configuracoes da release no pacote --onedir
+# ---------------------------------------------------------------------------
+#
+# O Inno Setup embute dist\NexusGeoIA\* recursivamente: tudo o que estiver
+# no pacote onedir entra no Setup. O .streamlit\config.toml vem do .spec
+# para _internal\.streamlit\; ui\ e finetuning\Modelfile.* sao copiados
+# pelo build portatil. Com -SemPortatil o pacote pode ser de um build
+# antigo: o instalador recompoe o que faltar a partir do projeto e falha
+# antes do ISCC se continuar ausente, em vez de publicar um Setup sem os
+# modulos da release.
+
+Write-Etapa "Conferindo .streamlit, ui e finetuning no pacote onedir"
+
+$ModelfilesNexusGeo = @(
+    "Modelfile.nexusgeo-qwen3-4b-v2",
+    "Modelfile.nexusgeo-qwen3-4b-v2-q4"
+)
+
+$ConfigStreamlitPacote = Join-Path $PastaApp "_internal\.streamlit\config.toml"
+
+if (-not (Test-Path -LiteralPath $ConfigStreamlitPacote -PathType Leaf)) {
+    throw @"
+O pacote --onedir nao contem _internal\.streamlit\config.toml.
+
+O tema escuro do Streamlit nao seria instalado. Rode o build portatil
+novamente (packaging\build_portatil.ps1) e confira a entrada
+".streamlit" em packaging\assistente.spec.
+"@
+}
+
+$pastaUiPacote = Join-Path $PastaApp "ui"
+$pastaFinetuningPacote = Join-Path $PastaApp "finetuning"
+
+if (-not (Test-Path -LiteralPath (Join-Path $pastaUiPacote "workstation_layout.py") -PathType Leaf)) {
+    Write-Host "    ui\ ausente no pacote; copiando do projeto..."
+
+    Copy-ModuloPublicavel (Join-Path $Raiz "ui") $pastaUiPacote
+}
+
+foreach ($modelfile in $ModelfilesNexusGeo) {
+    $origemModelfile = Join-Path $Raiz "finetuning\$modelfile"
+    $destinoModelfile = Join-Path $pastaFinetuningPacote $modelfile
+
+    if (-not (Test-Path -LiteralPath $destinoModelfile -PathType Leaf) -and
+        (Test-Path -LiteralPath $origemModelfile -PathType Leaf)) {
+        New-Item -ItemType Directory -Force -Path $pastaFinetuningPacote | Out-Null
+        Copy-Item -LiteralPath $origemModelfile -Destination $destinoModelfile -Force
+    }
+}
+
+# Validacao final: sem esses arquivos o Setup sairia incompleto.
+foreach ($arquivoModulo in @(
+    (Join-Path "ui" "__init__.py"),
+    (Join-Path "ui" "workstation_layout.py"),
+    (Join-Path "finetuning" "Modelfile.nexusgeo-qwen3-4b-v2")
+)) {
+    $caminhoModulo = Join-Path $PastaApp $arquivoModulo
+
+    if (-not (Test-Path -LiteralPath $caminhoModulo -PathType Leaf)) {
+        throw "Modulo da release ausente no pacote --onedir: $caminhoModulo"
+    }
+}
+
+foreach ($modelfile in $ModelfilesNexusGeo) {
+    $origemModelfile = Join-Path $Raiz "finetuning\$modelfile"
+
+    if (-not (Test-Path -LiteralPath $origemModelfile -PathType Leaf)) {
+        continue
+    }
+
+    $caminhoModelfile = Join-Path $pastaFinetuningPacote $modelfile
+
+    if (-not (Test-Path -LiteralPath $caminhoModelfile -PathType Leaf)) {
+        throw "Template do modelo ausente no pacote --onedir: $caminhoModelfile"
+    }
+}
+
+Write-Host "    .streamlit\config.toml, ui\ e finetuning\Modelfile.*: OK"
+
+# ---------------------------------------------------------------------------
 # Instalador
 # ---------------------------------------------------------------------------
 
@@ -441,6 +572,8 @@ if (Test-Path -LiteralPath $ZipPortatil -PathType Leaf) {
     $zipMb = [math]::Round((Get-Item -LiteralPath $ZipPortatil).Length / 1MB, 1)
     Write-Host "  Portatil:   $ZipPortatil ($zipMb MB)"
 }
+
+Write-Host "  Modulos:    .streamlit\, ui\ e finetuning\Modelfile.* conferidos"
 
 Write-Host "  Instalador: $SetupFinal ($setupMb MB)" -ForegroundColor Green
 Write-Host ""

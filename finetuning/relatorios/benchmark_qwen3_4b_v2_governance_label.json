@@ -1,0 +1,1929 @@
+{
+  "gerado_em": "2026-11-24T21:17:26+00:00",
+  "preditor": "ollama",
+  "modelo": "qwen3:4b",
+  "dataset": {
+    "arquivo": "D:\\curso IA\\projetos\\ia-generativa-python-integracoes\\ia-generativa-python-integracoes\\finetuning\\datasets\\nexusgeoia_behavior_v1.jsonl",
+    "total": 212,
+    "avaliados": 58,
+    "sha256": "0ebafa0289b1e8b90f1ed8a4b87fd99c014ae884ca58e870545e5ba61206f252"
+  },
+  "filtros": {
+    "tarefas": [
+      "governance_label"
+    ],
+    "idiomas": [],
+    "limite": null
+  },
+  "duracao_ms": 156239.088,
+  "prazo_registro_s": 180.0,
+  "metricas": {
+    "global": {
+      "total": 58,
+      "corretos": 27,
+      "acuracia": 0.465517,
+      "esquema_ok": 58,
+      "acuracia_esquema": 1.0,
+      "falhas_parsing": 0,
+      "taxa_falha_parsing": 0.0,
+      "erros_execucao": 0,
+      "taxa_erro_execucao": 0.0,
+      "falhas_por_tipo": {
+        "divergencia_semantica": 31
+      },
+      "latencia_ms": {
+        "media": 2693.733,
+        "p50": 2685.061,
+        "p95": 2775.2,
+        "min": 2580.926,
+        "max": 2831.816
+      }
+    },
+    "por_tarefa": {
+      "governance_label": {
+        "total": 58,
+        "corretos": 27,
+        "acuracia": 0.465517,
+        "esquema_ok": 58,
+        "acuracia_esquema": 1.0,
+        "falhas_parsing": 0,
+        "taxa_falha_parsing": 0.0,
+        "erros_execucao": 0,
+        "taxa_erro_execucao": 0.0,
+        "falhas_por_tipo": {
+          "divergencia_semantica": 31
+        },
+        "latencia_ms": {
+          "media": 2693.733,
+          "p50": 2685.061,
+          "p95": 2775.2,
+          "min": 2580.926,
+          "max": 2831.816
+        }
+      }
+    },
+    "por_idioma": {
+      "en": {
+        "total": 29,
+        "corretos": 12,
+        "acuracia": 0.413793,
+        "esquema_ok": 29,
+        "acuracia_esquema": 1.0,
+        "falhas_parsing": 0,
+        "taxa_falha_parsing": 0.0,
+        "erros_execucao": 0,
+        "taxa_erro_execucao": 0.0,
+        "falhas_por_tipo": {
+          "divergencia_semantica": 17
+        },
+        "latencia_ms": {
+          "media": 2718.008,
+          "p50": 2711.164,
+          "p95": 2796.02,
+          "min": 2621.555,
+          "max": 2831.816
+        }
+      },
+      "pt": {
+        "total": 29,
+        "corretos": 15,
+        "acuracia": 0.517241,
+        "esquema_ok": 29,
+        "acuracia_esquema": 1.0,
+        "falhas_parsing": 0,
+        "taxa_falha_parsing": 0.0,
+        "erros_execucao": 0,
+        "taxa_erro_execucao": 0.0,
+        "falhas_por_tipo": {
+          "divergencia_semantica": 14
+        },
+        "latencia_ms": {
+          "media": 2669.458,
+          "p50": 2673.077,
+          "p95": 2724.798,
+          "min": 2580.926,
+          "max": 2754.536
+        }
+      }
+    },
+    "por_familia": {
+      "ambiguo": {
+        "total": 10,
+        "corretos": 2,
+        "acuracia": 0.2,
+        "esquema_ok": 10,
+        "acuracia_esquema": 1.0,
+        "falhas_parsing": 0,
+        "taxa_falha_parsing": 0.0,
+        "erros_execucao": 0,
+        "taxa_erro_execucao": 0.0,
+        "falhas_por_tipo": {
+          "divergencia_semantica": 8
+        },
+        "latencia_ms": {
+          "media": 2698.511,
+          "p50": 2684.77,
+          "p95": 2762.372,
+          "min": 2653.959,
+          "max": 2772.627
+        }
+      },
+      "incompleto": {
+        "total": 12,
+        "corretos": 2,
+        "acuracia": 0.166667,
+        "esquema_ok": 12,
+        "acuracia_esquema": 1.0,
+        "falhas_parsing": 0,
+        "taxa_falha_parsing": 0.0,
+        "erros_execucao": 0,
+        "taxa_erro_execucao": 0.0,
+        "falhas_por_tipo": {
+          "divergencia_semantica": 10
+        },
+        "latencia_ms": {
+          "media": 2668.227,
+          "p50": 2669.312,
+          "p95": 2704.926,
+          "min": 2624.256,
+          "max": 2717.048
+        }
+      },
+      "negativo": {
+        "total": 16,
+        "corretos": 7,
+        "acuracia": 0.4375,
+        "esquema_ok": 16,
+        "acuracia_esquema": 1.0,
+        "falhas_parsing": 0,
+        "taxa_falha_parsing": 0.0,
+        "erros_execucao": 0,
+        "taxa_erro_execucao": 0.0,
+        "falhas_por_tipo": {
+          "divergencia_semantica": 9
+        },
+        "latencia_ms": {
+          "media": 2672.298,
+          "p50": 2677.019,
+          "p95": 2753.994,
+          "min": 2580.926,
+          "max": 2770.766
+        }
+      },
+      "normal": {
+        "total": 20,
+        "corretos": 16,
+        "acuracia": 0.8,
+        "esquema_ok": 20,
+        "acuracia_esquema": 1.0,
+        "falhas_parsing": 0,
+        "taxa_falha_parsing": 0.0,
+        "erros_execucao": 0,
+        "taxa_erro_execucao": 0.0,
+        "falhas_por_tipo": {
+          "divergencia_semantica": 4
+        },
+        "latencia_ms": {
+          "media": 2723.795,
+          "p50": 2724.244,
+          "p95": 2801.762,
+          "min": 2630.385,
+          "max": 2831.816
+        }
+      }
+    },
+    "confusao": {
+      "PASS": {
+        "PASS": 14,
+        "HOLD": 6
+      },
+      "HOLD": {
+        "HOLD": 21,
+        "PASS": 8,
+        "FAIL": 1
+      },
+      "FAIL": {
+        "FAIL": 4,
+        "HOLD": 2,
+        "PASS": 2
+      }
+    },
+    "falhas": [
+      {
+        "id": "gv-pt-008",
+        "tarefa": "governance_label",
+        "idioma": "pt",
+        "erro_execucao": null,
+        "tipo_falha": "divergencia_semantica",
+        "diagnostico": "esquema válido, semântica divergente",
+        "falha_parsing": false,
+        "erro_parsing": null,
+        "erros_esquema": [],
+        "esperado": {
+          "classificacoes": [],
+          "formato": "contrato",
+          "motivo": "contrato_valido",
+          "veredito": "PASS"
+        },
+        "obtido": {
+          "formato": "contrato",
+          "classificacoes": [],
+          "veredito": "HOLD",
+          "motivo": "contrato_invalido"
+        }
+      },
+      {
+        "id": "gv-en-008",
+        "tarefa": "governance_label",
+        "idioma": "en",
+        "erro_execucao": null,
+        "tipo_falha": "divergencia_semantica",
+        "diagnostico": "esquema válido, semântica divergente",
+        "falha_parsing": false,
+        "erro_parsing": null,
+        "erros_esquema": [],
+        "esperado": {
+          "classificacoes": [],
+          "formato": "contrato",
+          "motivo": "contrato_valido",
+          "veredito": "PASS"
+        },
+        "obtido": {
+          "formato": "contrato",
+          "classificacoes": [],
+          "veredito": "HOLD",
+          "motivo": "contrato_invalido"
+        }
+      },
+      {
+        "id": "gv-pt-009",
+        "tarefa": "governance_label",
+        "idioma": "pt",
+        "erro_execucao": null,
+        "tipo_falha": "divergencia_semantica",
+        "diagnostico": "esquema válido, semântica divergente",
+        "falha_parsing": false,
+        "erro_parsing": null,
+        "erros_esquema": [],
+        "esperado": {
+          "classificacoes": [
+            "INFERRED"
+          ],
+          "formato": "contrato",
+          "motivo": "contrato_valido",
+          "veredito": "PASS"
+        },
+        "obtido": {
+          "formato": "contrato",
+          "classificacoes": [],
+          "veredito": "HOLD",
+          "motivo": "fonte_indisponivel"
+        }
+      },
+      {
+        "id": "gv-en-009",
+        "tarefa": "governance_label",
+        "idioma": "en",
+        "erro_execucao": null,
+        "tipo_falha": "divergencia_semantica",
+        "diagnostico": "esquema válido, semântica divergente",
+        "falha_parsing": false,
+        "erro_parsing": null,
+        "erros_esquema": [],
+        "esperado": {
+          "classificacoes": [
+            "INFERRED"
+          ],
+          "formato": "contrato",
+          "motivo": "contrato_valido",
+          "veredito": "PASS"
+        },
+        "obtido": {
+          "formato": "contrato",
+          "classificacoes": [],
+          "veredito": "HOLD",
+          "motivo": "evidencia_desconhecida"
+        }
+      },
+      {
+        "id": "gv-pt-011",
+        "tarefa": "governance_label",
+        "idioma": "pt",
+        "erro_execucao": null,
+        "tipo_falha": "divergencia_semantica",
+        "diagnostico": "esquema válido, semântica divergente",
+        "falha_parsing": false,
+        "erro_parsing": null,
+        "erros_esquema": [],
+        "esperado": {
+          "classificacoes": [
+            "INFERRED"
+          ],
+          "formato": "contrato",
+          "motivo": "observado_sem_evidencia",
+          "veredito": "HOLD"
+        },
+        "obtido": {
+          "formato": "contrato",
+          "classificacoes": [
+            "OBSERVED"
+          ],
+          "veredito": "PASS",
+          "motivo": "contrato_valido"
+        }
+      },
+      {
+        "id": "gv-en-011",
+        "tarefa": "governance_label",
+        "idioma": "en",
+        "erro_execucao": null,
+        "tipo_falha": "divergencia_semantica",
+        "diagnostico": "esquema válido, semântica divergente",
+        "falha_parsing": false,
+        "erro_parsing": null,
+        "erros_esquema": [],
+        "esperado": {
+          "classificacoes": [
+            "INFERRED"
+          ],
+          "formato": "contrato",
+          "motivo": "observado_sem_evidencia",
+          "veredito": "HOLD"
+        },
+        "obtido": {
+          "formato": "contrato",
+          "classificacoes": [],
+          "veredito": "HOLD",
+          "motivo": "fonte_indisponivel"
+        }
+      },
+      {
+        "id": "gv-pt-012",
+        "tarefa": "governance_label",
+        "idioma": "pt",
+        "erro_execucao": null,
+        "tipo_falha": "divergencia_semantica",
+        "diagnostico": "esquema válido, semântica divergente",
+        "falha_parsing": false,
+        "erro_parsing": null,
+        "erros_esquema": [],
+        "esperado": {
+          "classificacoes": [
+            "INFERRED"
+          ],
+          "formato": "contrato",
+          "motivo": "evidencia_desconhecida",
+          "veredito": "HOLD"
+        },
+        "obtido": {
+          "formato": "contrato",
+          "classificacoes": [
+            "OBSERVED"
+          ],
+          "veredito": "PASS",
+          "motivo": "contrato_valido"
+        }
+      },
+      {
+        "id": "gv-en-012",
+        "tarefa": "governance_label",
+        "idioma": "en",
+        "erro_execucao": null,
+        "tipo_falha": "divergencia_semantica",
+        "diagnostico": "esquema válido, semântica divergente",
+        "falha_parsing": false,
+        "erro_parsing": null,
+        "erros_esquema": [],
+        "esperado": {
+          "classificacoes": [
+            "INFERRED"
+          ],
+          "formato": "contrato",
+          "motivo": "evidencia_desconhecida",
+          "veredito": "HOLD"
+        },
+        "obtido": {
+          "formato": "contrato",
+          "classificacoes": [
+            "OBSERVED"
+          ],
+          "veredito": "PASS",
+          "motivo": "contrato_valido"
+        }
+      },
+      {
+        "id": "gv-pt-013",
+        "tarefa": "governance_label",
+        "idioma": "pt",
+        "erro_execucao": null,
+        "tipo_falha": "divergencia_semantica",
+        "diagnostico": "esquema válido, semântica divergente",
+        "falha_parsing": false,
+        "erro_parsing": null,
+        "erros_esquema": [],
+        "esperado": {
+          "classificacoes": [
+            "INFERRED"
+          ],
+          "formato": "contrato",
+          "motivo": "classificacao_desconhecida",
+          "veredito": "HOLD"
+        },
+        "obtido": {
+          "formato": "contrato",
+          "classificacoes": [
+            "OBSERVED"
+          ],
+          "veredito": "PASS",
+          "motivo": "contrato_valido"
+        }
+      },
+      {
+        "id": "gv-en-013",
+        "tarefa": "governance_label",
+        "idioma": "en",
+        "erro_execucao": null,
+        "tipo_falha": "divergencia_semantica",
+        "diagnostico": "esquema válido, semântica divergente",
+        "falha_parsing": false,
+        "erro_parsing": null,
+        "erros_esquema": [],
+        "esperado": {
+          "classificacoes": [
+            "INFERRED"
+          ],
+          "formato": "contrato",
+          "motivo": "classificacao_desconhecida",
+          "veredito": "HOLD"
+        },
+        "obtido": {
+          "formato": "contrato",
+          "classificacoes": [
+            "OBSERVED"
+          ],
+          "veredito": "PASS",
+          "motivo": "contrato_valido"
+        }
+      },
+      {
+        "id": "gv-pt-015",
+        "tarefa": "governance_label",
+        "idioma": "pt",
+        "erro_execucao": null,
+        "tipo_falha": "divergencia_semantica",
+        "diagnostico": "esquema válido, semântica divergente",
+        "falha_parsing": false,
+        "erro_parsing": null,
+        "erros_esquema": [],
+        "esperado": {
+          "classificacoes": [
+            "OBSERVED",
+            "INFERRED"
+          ],
+          "formato": "contrato",
+          "motivo": "evidencia_desconhecida",
+          "veredito": "HOLD"
+        },
+        "obtido": {
+          "formato": "contrato",
+          "classificacoes": [
+            "OBSERVED",
+            "INFERRED"
+          ],
+          "veredito": "PASS",
+          "motivo": "contrato_valido"
+        }
+      },
+      {
+        "id": "gv-en-015",
+        "tarefa": "governance_label",
+        "idioma": "en",
+        "erro_execucao": null,
+        "tipo_falha": "divergencia_semantica",
+        "diagnostico": "esquema válido, semântica divergente",
+        "falha_parsing": false,
+        "erro_parsing": null,
+        "erros_esquema": [],
+        "esperado": {
+          "classificacoes": [
+            "OBSERVED",
+            "INFERRED"
+          ],
+          "formato": "contrato",
+          "motivo": "evidencia_desconhecida",
+          "veredito": "HOLD"
+        },
+        "obtido": {
+          "formato": "contrato",
+          "classificacoes": [
+            "OBSERVED",
+            "INFERRED"
+          ],
+          "veredito": "PASS",
+          "motivo": "contrato_valido"
+        }
+      }
+    ],
+    "total_falhas": 31
+  },
+  "db": {
+    "antes": {
+      "caminho": "D:\\curso IA\\projetos\\ia-generativa-python-integracoes\\ia-generativa-python-integracoes\\data\\nexusgeoia.db",
+      "origem": "config.DATA_DIR",
+      "principal": {
+        "caminho": "D:\\curso IA\\projetos\\ia-generativa-python-integracoes\\ia-generativa-python-integracoes\\data\\nexusgeoia.db",
+        "existe": true,
+        "tamanho": 131072,
+        "sha256": "cf876e9a49e07f8643e705b509dc080e43e42dcffdd41f20e269a08cc8564281"
+      },
+      "sidecars": [
+        {
+          "caminho": "D:\\curso IA\\projetos\\ia-generativa-python-integracoes\\ia-generativa-python-integracoes\\data\\nexusgeoia.db-wal",
+          "existe": true,
+          "tamanho": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "caminho": "D:\\curso IA\\projetos\\ia-generativa-python-integracoes\\ia-generativa-python-integracoes\\data\\nexusgeoia.db-shm",
+          "existe": true,
+          "tamanho": 32768,
+          "sha256": "fd4c9fda9cd3f9ae7c962b0ddf37232294d55580e1aa165aa06129b8549389eb"
+        }
+      ]
+    },
+    "depois": {
+      "caminho": "D:\\curso IA\\projetos\\ia-generativa-python-integracoes\\ia-generativa-python-integracoes\\data\\nexusgeoia.db",
+      "origem": "config.DATA_DIR",
+      "principal": {
+        "caminho": "D:\\curso IA\\projetos\\ia-generativa-python-integracoes\\ia-generativa-python-integracoes\\data\\nexusgeoia.db",
+        "existe": true,
+        "tamanho": 131072,
+        "sha256": "cf876e9a49e07f8643e705b509dc080e43e42dcffdd41f20e269a08cc8564281"
+      },
+      "sidecars": [
+        {
+          "caminho": "D:\\curso IA\\projetos\\ia-generativa-python-integracoes\\ia-generativa-python-integracoes\\data\\nexusgeoia.db-wal",
+          "existe": true,
+          "tamanho": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "caminho": "D:\\curso IA\\projetos\\ia-generativa-python-integracoes\\ia-generativa-python-integracoes\\data\\nexusgeoia.db-shm",
+          "existe": true,
+          "tamanho": 32768,
+          "sha256": "fd4c9fda9cd3f9ae7c962b0ddf37232294d55580e1aa165aa06129b8549389eb"
+        }
+      ]
+    },
+    "intocado": true,
+    "DB_INTOCADO": true,
+    "divergencias": [],
+    "diagnostico": {
+      "veredito": "INTOCADO",
+      "arquivos_comparados": 3,
+      "mensagem": "Banco intocado: tamanho e SHA-256 idênticos antes e depois (D:\\curso IA\\projetos\\ia-generativa-python-integracoes\\ia-generativa-python-integracoes\\data\\nexusgeoia.db; 3 arquivo(s) comparado(s))."
+    }
+  },
+  "db_intocado": true,
+  "resultados": [
+    {
+      "id": "gv-pt-001",
+      "tarefa": "governance_label",
+      "idioma": "pt",
+      "familia": "normal",
+      "latencia_ms": 2708.163,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "PASS",
+      "rotulo_obtido": "PASS"
+    },
+    {
+      "id": "gv-en-001",
+      "tarefa": "governance_label",
+      "idioma": "en",
+      "familia": "normal",
+      "latencia_ms": 2800.18,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "PASS",
+      "rotulo_obtido": "PASS"
+    },
+    {
+      "id": "gv-pt-002",
+      "tarefa": "governance_label",
+      "idioma": "pt",
+      "familia": "normal",
+      "latencia_ms": 2721.473,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "PASS",
+      "rotulo_obtido": "PASS"
+    },
+    {
+      "id": "gv-en-002",
+      "tarefa": "governance_label",
+      "idioma": "en",
+      "familia": "normal",
+      "latencia_ms": 2741.31,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "PASS",
+      "rotulo_obtido": "PASS"
+    },
+    {
+      "id": "gv-pt-003",
+      "tarefa": "governance_label",
+      "idioma": "pt",
+      "familia": "normal",
+      "latencia_ms": 2727.015,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "PASS",
+      "rotulo_obtido": "PASS"
+    },
+    {
+      "id": "gv-en-003",
+      "tarefa": "governance_label",
+      "idioma": "en",
+      "familia": "normal",
+      "latencia_ms": 2831.816,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "PASS",
+      "rotulo_obtido": "PASS"
+    },
+    {
+      "id": "gv-pt-004",
+      "tarefa": "governance_label",
+      "idioma": "pt",
+      "familia": "normal",
+      "latencia_ms": 2754.536,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "PASS",
+      "rotulo_obtido": "PASS"
+    },
+    {
+      "id": "gv-en-004",
+      "tarefa": "governance_label",
+      "idioma": "en",
+      "familia": "normal",
+      "latencia_ms": 2789.781,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "PASS",
+      "rotulo_obtido": "PASS"
+    },
+    {
+      "id": "gv-pt-005",
+      "tarefa": "governance_label",
+      "idioma": "pt",
+      "familia": "normal",
+      "latencia_ms": 2673.077,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "HOLD",
+      "rotulo_obtido": "HOLD"
+    },
+    {
+      "id": "gv-en-005",
+      "tarefa": "governance_label",
+      "idioma": "en",
+      "familia": "normal",
+      "latencia_ms": 2756.867,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "HOLD",
+      "rotulo_obtido": "HOLD"
+    },
+    {
+      "id": "gv-pt-006",
+      "tarefa": "governance_label",
+      "idioma": "pt",
+      "familia": "normal",
+      "latencia_ms": 2710.718,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "FAIL",
+      "rotulo_obtido": "FAIL"
+    },
+    {
+      "id": "gv-en-006",
+      "tarefa": "governance_label",
+      "idioma": "en",
+      "familia": "normal",
+      "latencia_ms": 2731.907,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "FAIL",
+      "rotulo_obtido": "FAIL"
+    },
+    {
+      "id": "gv-pt-007",
+      "tarefa": "governance_label",
+      "idioma": "pt",
+      "familia": "normal",
+      "latencia_ms": 2685.743,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "PASS",
+      "rotulo_obtido": "PASS"
+    },
+    {
+      "id": "gv-en-007",
+      "tarefa": "governance_label",
+      "idioma": "en",
+      "familia": "normal",
+      "latencia_ms": 2739.986,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "PASS",
+      "rotulo_obtido": "PASS"
+    },
+    {
+      "id": "gv-pt-008",
+      "tarefa": "governance_label",
+      "idioma": "pt",
+      "familia": "normal",
+      "latencia_ms": 2638.798,
+      "erro_execucao": null,
+      "tipo_falha": "divergencia_semantica",
+      "diagnostico": "esquema válido, semântica divergente",
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": false,
+      "rotulo_esperado": "PASS",
+      "rotulo_obtido": "HOLD",
+      "erros_esquema": [],
+      "esperado": {
+        "classificacoes": [],
+        "formato": "contrato",
+        "motivo": "contrato_valido",
+        "veredito": "PASS"
+      },
+      "obtido": {
+        "formato": "contrato",
+        "classificacoes": [],
+        "veredito": "HOLD",
+        "motivo": "contrato_invalido"
+      }
+    },
+    {
+      "id": "gv-en-008",
+      "tarefa": "governance_label",
+      "idioma": "en",
+      "familia": "normal",
+      "latencia_ms": 2711.164,
+      "erro_execucao": null,
+      "tipo_falha": "divergencia_semantica",
+      "diagnostico": "esquema válido, semântica divergente",
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": false,
+      "rotulo_esperado": "PASS",
+      "rotulo_obtido": "HOLD",
+      "erros_esquema": [],
+      "esperado": {
+        "classificacoes": [],
+        "formato": "contrato",
+        "motivo": "contrato_valido",
+        "veredito": "PASS"
+      },
+      "obtido": {
+        "formato": "contrato",
+        "classificacoes": [],
+        "veredito": "HOLD",
+        "motivo": "contrato_invalido"
+      }
+    },
+    {
+      "id": "gv-pt-009",
+      "tarefa": "governance_label",
+      "idioma": "pt",
+      "familia": "normal",
+      "latencia_ms": 2630.385,
+      "erro_execucao": null,
+      "tipo_falha": "divergencia_semantica",
+      "diagnostico": "esquema válido, semântica divergente",
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": false,
+      "rotulo_esperado": "PASS",
+      "rotulo_obtido": "HOLD",
+      "erros_esquema": [],
+      "esperado": {
+        "classificacoes": [
+          "INFERRED"
+        ],
+        "formato": "contrato",
+        "motivo": "contrato_valido",
+        "veredito": "PASS"
+      },
+      "obtido": {
+        "formato": "contrato",
+        "classificacoes": [],
+        "veredito": "HOLD",
+        "motivo": "fonte_indisponivel"
+      }
+    },
+    {
+      "id": "gv-en-009",
+      "tarefa": "governance_label",
+      "idioma": "en",
+      "familia": "normal",
+      "latencia_ms": 2672.086,
+      "erro_execucao": null,
+      "tipo_falha": "divergencia_semantica",
+      "diagnostico": "esquema válido, semântica divergente",
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": false,
+      "rotulo_esperado": "PASS",
+      "rotulo_obtido": "HOLD",
+      "erros_esquema": [],
+      "esperado": {
+        "classificacoes": [
+          "INFERRED"
+        ],
+        "formato": "contrato",
+        "motivo": "contrato_valido",
+        "veredito": "PASS"
+      },
+      "obtido": {
+        "formato": "contrato",
+        "classificacoes": [],
+        "veredito": "HOLD",
+        "motivo": "evidencia_desconhecida"
+      }
+    },
+    {
+      "id": "gv-pt-010",
+      "tarefa": "governance_label",
+      "idioma": "pt",
+      "familia": "normal",
+      "latencia_ms": 2704.442,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "PASS",
+      "rotulo_obtido": "PASS"
+    },
+    {
+      "id": "gv-en-010",
+      "tarefa": "governance_label",
+      "idioma": "en",
+      "familia": "normal",
+      "latencia_ms": 2746.454,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "PASS",
+      "rotulo_obtido": "PASS"
+    },
+    {
+      "id": "gv-pt-011",
+      "tarefa": "governance_label",
+      "idioma": "pt",
+      "familia": "ambiguo",
+      "latencia_ms": 2678.167,
+      "erro_execucao": null,
+      "tipo_falha": "divergencia_semantica",
+      "diagnostico": "esquema válido, semântica divergente",
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": false,
+      "rotulo_esperado": "HOLD",
+      "rotulo_obtido": "PASS",
+      "erros_esquema": [],
+      "esperado": {
+        "classificacoes": [
+          "INFERRED"
+        ],
+        "formato": "contrato",
+        "motivo": "observado_sem_evidencia",
+        "veredito": "HOLD"
+      },
+      "obtido": {
+        "formato": "contrato",
+        "classificacoes": [
+          "OBSERVED"
+        ],
+        "veredito": "PASS",
+        "motivo": "contrato_valido"
+      }
+    },
+    {
+      "id": "gv-en-011",
+      "tarefa": "governance_label",
+      "idioma": "en",
+      "familia": "ambiguo",
+      "latencia_ms": 2692.997,
+      "erro_execucao": null,
+      "tipo_falha": "divergencia_semantica",
+      "diagnostico": "esquema válido, semântica divergente",
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": false,
+      "rotulo_esperado": "HOLD",
+      "rotulo_obtido": "HOLD",
+      "erros_esquema": [],
+      "esperado": {
+        "classificacoes": [
+          "INFERRED"
+        ],
+        "formato": "contrato",
+        "motivo": "observado_sem_evidencia",
+        "veredito": "HOLD"
+      },
+      "obtido": {
+        "formato": "contrato",
+        "classificacoes": [],
+        "veredito": "HOLD",
+        "motivo": "fonte_indisponivel"
+      }
+    },
+    {
+      "id": "gv-pt-012",
+      "tarefa": "governance_label",
+      "idioma": "pt",
+      "familia": "ambiguo",
+      "latencia_ms": 2653.959,
+      "erro_execucao": null,
+      "tipo_falha": "divergencia_semantica",
+      "diagnostico": "esquema válido, semântica divergente",
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": false,
+      "rotulo_esperado": "HOLD",
+      "rotulo_obtido": "PASS",
+      "erros_esquema": [],
+      "esperado": {
+        "classificacoes": [
+          "INFERRED"
+        ],
+        "formato": "contrato",
+        "motivo": "evidencia_desconhecida",
+        "veredito": "HOLD"
+      },
+      "obtido": {
+        "formato": "contrato",
+        "classificacoes": [
+          "OBSERVED"
+        ],
+        "veredito": "PASS",
+        "motivo": "contrato_valido"
+      }
+    },
+    {
+      "id": "gv-en-012",
+      "tarefa": "governance_label",
+      "idioma": "en",
+      "familia": "ambiguo",
+      "latencia_ms": 2749.837,
+      "erro_execucao": null,
+      "tipo_falha": "divergencia_semantica",
+      "diagnostico": "esquema válido, semântica divergente",
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": false,
+      "rotulo_esperado": "HOLD",
+      "rotulo_obtido": "PASS",
+      "erros_esquema": [],
+      "esperado": {
+        "classificacoes": [
+          "INFERRED"
+        ],
+        "formato": "contrato",
+        "motivo": "evidencia_desconhecida",
+        "veredito": "HOLD"
+      },
+      "obtido": {
+        "formato": "contrato",
+        "classificacoes": [
+          "OBSERVED"
+        ],
+        "veredito": "PASS",
+        "motivo": "contrato_valido"
+      }
+    },
+    {
+      "id": "gv-pt-013",
+      "tarefa": "governance_label",
+      "idioma": "pt",
+      "familia": "ambiguo",
+      "latencia_ms": 2668.066,
+      "erro_execucao": null,
+      "tipo_falha": "divergencia_semantica",
+      "diagnostico": "esquema válido, semântica divergente",
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": false,
+      "rotulo_esperado": "HOLD",
+      "rotulo_obtido": "PASS",
+      "erros_esquema": [],
+      "esperado": {
+        "classificacoes": [
+          "INFERRED"
+        ],
+        "formato": "contrato",
+        "motivo": "classificacao_desconhecida",
+        "veredito": "HOLD"
+      },
+      "obtido": {
+        "formato": "contrato",
+        "classificacoes": [
+          "OBSERVED"
+        ],
+        "veredito": "PASS",
+        "motivo": "contrato_valido"
+      }
+    },
+    {
+      "id": "gv-en-013",
+      "tarefa": "governance_label",
+      "idioma": "en",
+      "familia": "ambiguo",
+      "latencia_ms": 2732.982,
+      "erro_execucao": null,
+      "tipo_falha": "divergencia_semantica",
+      "diagnostico": "esquema válido, semântica divergente",
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": false,
+      "rotulo_esperado": "HOLD",
+      "rotulo_obtido": "PASS",
+      "erros_esquema": [],
+      "esperado": {
+        "classificacoes": [
+          "INFERRED"
+        ],
+        "formato": "contrato",
+        "motivo": "classificacao_desconhecida",
+        "veredito": "HOLD"
+      },
+      "obtido": {
+        "formato": "contrato",
+        "classificacoes": [
+          "OBSERVED"
+        ],
+        "veredito": "PASS",
+        "motivo": "contrato_valido"
+      }
+    },
+    {
+      "id": "gv-pt-014",
+      "tarefa": "governance_label",
+      "idioma": "pt",
+      "familia": "ambiguo",
+      "latencia_ms": 2666.935,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "PASS",
+      "rotulo_obtido": "PASS"
+    },
+    {
+      "id": "gv-en-014",
+      "tarefa": "governance_label",
+      "idioma": "en",
+      "familia": "ambiguo",
+      "latencia_ms": 2688.768,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "PASS",
+      "rotulo_obtido": "PASS"
+    },
+    {
+      "id": "gv-pt-015",
+      "tarefa": "governance_label",
+      "idioma": "pt",
+      "familia": "ambiguo",
+      "latencia_ms": 2680.771,
+      "erro_execucao": null,
+      "tipo_falha": "divergencia_semantica",
+      "diagnostico": "esquema válido, semântica divergente",
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": false,
+      "rotulo_esperado": "HOLD",
+      "rotulo_obtido": "PASS",
+      "erros_esquema": [],
+      "esperado": {
+        "classificacoes": [
+          "OBSERVED",
+          "INFERRED"
+        ],
+        "formato": "contrato",
+        "motivo": "evidencia_desconhecida",
+        "veredito": "HOLD"
+      },
+      "obtido": {
+        "formato": "contrato",
+        "classificacoes": [
+          "OBSERVED",
+          "INFERRED"
+        ],
+        "veredito": "PASS",
+        "motivo": "contrato_valido"
+      }
+    },
+    {
+      "id": "gv-en-015",
+      "tarefa": "governance_label",
+      "idioma": "en",
+      "familia": "ambiguo",
+      "latencia_ms": 2772.627,
+      "erro_execucao": null,
+      "tipo_falha": "divergencia_semantica",
+      "diagnostico": "esquema válido, semântica divergente",
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": false,
+      "rotulo_esperado": "HOLD",
+      "rotulo_obtido": "PASS",
+      "erros_esquema": [],
+      "esperado": {
+        "classificacoes": [
+          "OBSERVED",
+          "INFERRED"
+        ],
+        "formato": "contrato",
+        "motivo": "evidencia_desconhecida",
+        "veredito": "HOLD"
+      },
+      "obtido": {
+        "formato": "contrato",
+        "classificacoes": [
+          "OBSERVED",
+          "INFERRED"
+        ],
+        "veredito": "PASS",
+        "motivo": "contrato_valido"
+      }
+    },
+    {
+      "id": "gv-pt-016",
+      "tarefa": "governance_label",
+      "idioma": "pt",
+      "familia": "incompleto",
+      "latencia_ms": 2645.215,
+      "erro_execucao": null,
+      "tipo_falha": "divergencia_semantica",
+      "diagnostico": "esquema válido, semântica divergente",
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": false,
+      "rotulo_esperado": "HOLD",
+      "rotulo_obtido": "HOLD",
+      "erros_esquema": [],
+      "esperado": {
+        "classificacoes": [],
+        "formato": "contrato",
+        "motivo": "contrato_invalido",
+        "veredito": "HOLD"
+      },
+      "obtido": {
+        "formato": "contrato",
+        "classificacoes": [],
+        "veredito": "HOLD",
+        "motivo": "fonte_indisponivel"
+      }
+    },
+    {
+      "id": "gv-en-016",
+      "tarefa": "governance_label",
+      "idioma": "en",
+      "familia": "incompleto",
+      "latencia_ms": 2717.048,
+      "erro_execucao": null,
+      "tipo_falha": "divergencia_semantica",
+      "diagnostico": "esquema válido, semântica divergente",
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": false,
+      "rotulo_esperado": "HOLD",
+      "rotulo_obtido": "HOLD",
+      "erros_esquema": [],
+      "esperado": {
+        "classificacoes": [],
+        "formato": "contrato",
+        "motivo": "contrato_invalido",
+        "veredito": "HOLD"
+      },
+      "obtido": {
+        "formato": "contrato",
+        "classificacoes": [],
+        "veredito": "HOLD",
+        "motivo": "fonte_indisponivel"
+      }
+    },
+    {
+      "id": "gv-pt-017",
+      "tarefa": "governance_label",
+      "idioma": "pt",
+      "familia": "incompleto",
+      "latencia_ms": 2684.38,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "HOLD",
+      "rotulo_obtido": "HOLD"
+    },
+    {
+      "id": "gv-en-017",
+      "tarefa": "governance_label",
+      "idioma": "en",
+      "familia": "incompleto",
+      "latencia_ms": 2671.375,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "HOLD",
+      "rotulo_obtido": "HOLD"
+    },
+    {
+      "id": "gv-pt-018",
+      "tarefa": "governance_label",
+      "idioma": "pt",
+      "familia": "incompleto",
+      "latencia_ms": 2624.256,
+      "erro_execucao": null,
+      "tipo_falha": "divergencia_semantica",
+      "diagnostico": "esquema válido, semântica divergente",
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": false,
+      "rotulo_esperado": "HOLD",
+      "rotulo_obtido": "HOLD",
+      "erros_esquema": [],
+      "esperado": {
+        "classificacoes": [],
+        "formato": "contrato",
+        "motivo": "contrato_invalido",
+        "veredito": "HOLD"
+      },
+      "obtido": {
+        "formato": "contrato",
+        "classificacoes": [],
+        "veredito": "HOLD",
+        "motivo": "fonte_indisponivel"
+      }
+    },
+    {
+      "id": "gv-en-018",
+      "tarefa": "governance_label",
+      "idioma": "en",
+      "familia": "incompleto",
+      "latencia_ms": 2681.504,
+      "erro_execucao": null,
+      "tipo_falha": "divergencia_semantica",
+      "diagnostico": "esquema válido, semântica divergente",
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": false,
+      "rotulo_esperado": "HOLD",
+      "rotulo_obtido": "HOLD",
+      "erros_esquema": [],
+      "esperado": {
+        "classificacoes": [],
+        "formato": "contrato",
+        "motivo": "contrato_invalido",
+        "veredito": "HOLD"
+      },
+      "obtido": {
+        "formato": "contrato",
+        "classificacoes": [],
+        "veredito": "HOLD",
+        "motivo": "observado_sem_evidencia"
+      }
+    },
+    {
+      "id": "gv-pt-019",
+      "tarefa": "governance_label",
+      "idioma": "pt",
+      "familia": "incompleto",
+      "latencia_ms": 2657.88,
+      "erro_execucao": null,
+      "tipo_falha": "divergencia_semantica",
+      "diagnostico": "esquema válido, semântica divergente",
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": false,
+      "rotulo_esperado": "FAIL",
+      "rotulo_obtido": "HOLD",
+      "erros_esquema": [],
+      "esperado": {
+        "classificacoes": [],
+        "formato": "contrato",
+        "motivo": "resposta_vazia",
+        "veredito": "FAIL"
+      },
+      "obtido": {
+        "formato": "contrato",
+        "classificacoes": [],
+        "veredito": "HOLD",
+        "motivo": "contrato_invalido"
+      }
+    },
+    {
+      "id": "gv-en-019",
+      "tarefa": "governance_label",
+      "idioma": "en",
+      "familia": "incompleto",
+      "latencia_ms": 2655.027,
+      "erro_execucao": null,
+      "tipo_falha": "divergencia_semantica",
+      "diagnostico": "esquema válido, semântica divergente",
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": false,
+      "rotulo_esperado": "FAIL",
+      "rotulo_obtido": "HOLD",
+      "erros_esquema": [],
+      "esperado": {
+        "classificacoes": [],
+        "formato": "contrato",
+        "motivo": "resposta_vazia",
+        "veredito": "FAIL"
+      },
+      "obtido": {
+        "formato": "contrato",
+        "classificacoes": [],
+        "veredito": "HOLD",
+        "motivo": "contrato_invalido"
+      }
+    },
+    {
+      "id": "gv-pt-020",
+      "tarefa": "governance_label",
+      "idioma": "pt",
+      "familia": "incompleto",
+      "latencia_ms": 2626.873,
+      "erro_execucao": null,
+      "tipo_falha": "divergencia_semantica",
+      "diagnostico": "esquema válido, semântica divergente",
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": false,
+      "rotulo_esperado": "FAIL",
+      "rotulo_obtido": "PASS",
+      "erros_esquema": [],
+      "esperado": {
+        "classificacoes": [],
+        "formato": "contrato",
+        "motivo": "resposta_vazia",
+        "veredito": "FAIL"
+      },
+      "obtido": {
+        "formato": "contrato",
+        "classificacoes": [
+          "OBSERVED"
+        ],
+        "veredito": "PASS",
+        "motivo": "contrato_valido"
+      }
+    },
+    {
+      "id": "gv-en-020",
+      "tarefa": "governance_label",
+      "idioma": "en",
+      "familia": "incompleto",
+      "latencia_ms": 2667.25,
+      "erro_execucao": null,
+      "tipo_falha": "divergencia_semantica",
+      "diagnostico": "esquema válido, semântica divergente",
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": false,
+      "rotulo_esperado": "FAIL",
+      "rotulo_obtido": "PASS",
+      "erros_esquema": [],
+      "esperado": {
+        "classificacoes": [],
+        "formato": "contrato",
+        "motivo": "resposta_vazia",
+        "veredito": "FAIL"
+      },
+      "obtido": {
+        "formato": "contrato",
+        "classificacoes": [
+          "OBSERVED"
+        ],
+        "veredito": "PASS",
+        "motivo": "contrato_valido"
+      }
+    },
+    {
+      "id": "gv-pt-021",
+      "tarefa": "governance_label",
+      "idioma": "pt",
+      "familia": "incompleto",
+      "latencia_ms": 2692.908,
+      "erro_execucao": null,
+      "tipo_falha": "divergencia_semantica",
+      "diagnostico": "esquema válido, semântica divergente",
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": false,
+      "rotulo_esperado": "PASS",
+      "rotulo_obtido": "HOLD",
+      "erros_esquema": [],
+      "esperado": {
+        "classificacoes": [],
+        "formato": "contrato",
+        "motivo": "contrato_valido",
+        "veredito": "PASS"
+      },
+      "obtido": {
+        "formato": "contrato",
+        "classificacoes": [],
+        "veredito": "HOLD",
+        "motivo": "fonte_indisponivel"
+      }
+    },
+    {
+      "id": "gv-en-021",
+      "tarefa": "governance_label",
+      "idioma": "en",
+      "familia": "incompleto",
+      "latencia_ms": 2695.008,
+      "erro_execucao": null,
+      "tipo_falha": "divergencia_semantica",
+      "diagnostico": "esquema válido, semântica divergente",
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": false,
+      "rotulo_esperado": "PASS",
+      "rotulo_obtido": "HOLD",
+      "erros_esquema": [],
+      "esperado": {
+        "classificacoes": [],
+        "formato": "contrato",
+        "motivo": "contrato_valido",
+        "veredito": "PASS"
+      },
+      "obtido": {
+        "formato": "contrato",
+        "classificacoes": [],
+        "veredito": "HOLD",
+        "motivo": "fonte_indisponivel"
+      }
+    },
+    {
+      "id": "gv-pt-022",
+      "tarefa": "governance_label",
+      "idioma": "pt",
+      "familia": "negativo",
+      "latencia_ms": 2689.125,
+      "erro_execucao": null,
+      "tipo_falha": "divergencia_semantica",
+      "diagnostico": "esquema válido, semântica divergente",
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": false,
+      "rotulo_esperado": "HOLD",
+      "rotulo_obtido": "HOLD",
+      "erros_esquema": [],
+      "esperado": {
+        "classificacoes": [
+          "OBSERVED"
+        ],
+        "formato": "contrato",
+        "motivo": "veredito_invalido",
+        "veredito": "HOLD"
+      },
+      "obtido": {
+        "formato": "contrato",
+        "classificacoes": [
+          "OBSERVED"
+        ],
+        "veredito": "HOLD",
+        "motivo": "observado_sem_evidencia"
+      }
+    },
+    {
+      "id": "gv-en-022",
+      "tarefa": "governance_label",
+      "idioma": "en",
+      "familia": "negativo",
+      "latencia_ms": 2770.766,
+      "erro_execucao": null,
+      "tipo_falha": "divergencia_semantica",
+      "diagnostico": "esquema válido, semântica divergente",
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": false,
+      "rotulo_esperado": "HOLD",
+      "rotulo_obtido": "HOLD",
+      "erros_esquema": [],
+      "esperado": {
+        "classificacoes": [
+          "OBSERVED"
+        ],
+        "formato": "contrato",
+        "motivo": "veredito_invalido",
+        "veredito": "HOLD"
+      },
+      "obtido": {
+        "formato": "contrato",
+        "classificacoes": [
+          "OBSERVED"
+        ],
+        "veredito": "HOLD",
+        "motivo": "veredito_declarado_hold"
+      }
+    },
+    {
+      "id": "gv-pt-023",
+      "tarefa": "governance_label",
+      "idioma": "pt",
+      "familia": "negativo",
+      "latencia_ms": 2649.473,
+      "erro_execucao": null,
+      "tipo_falha": "divergencia_semantica",
+      "diagnostico": "esquema válido, semântica divergente",
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": false,
+      "rotulo_esperado": "HOLD",
+      "rotulo_obtido": "FAIL",
+      "erros_esquema": [],
+      "esperado": {
+        "classificacoes": [],
+        "formato": "texto_livre",
+        "motivo": "texto_livre",
+        "veredito": "HOLD"
+      },
+      "obtido": {
+        "formato": "texto_livre",
+        "classificacoes": [],
+        "veredito": "FAIL",
+        "motivo": "resposta_vazia"
+      }
+    },
+    {
+      "id": "gv-en-023",
+      "tarefa": "governance_label",
+      "idioma": "en",
+      "familia": "negativo",
+      "latencia_ms": 2683.293,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "HOLD",
+      "rotulo_obtido": "HOLD"
+    },
+    {
+      "id": "gv-pt-024",
+      "tarefa": "governance_label",
+      "idioma": "pt",
+      "familia": "negativo",
+      "latencia_ms": 2678.544,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "FAIL",
+      "rotulo_obtido": "FAIL"
+    },
+    {
+      "id": "gv-en-024",
+      "tarefa": "governance_label",
+      "idioma": "en",
+      "familia": "negativo",
+      "latencia_ms": 2668.539,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "FAIL",
+      "rotulo_obtido": "FAIL"
+    },
+    {
+      "id": "gv-pt-025",
+      "tarefa": "governance_label",
+      "idioma": "pt",
+      "familia": "negativo",
+      "latencia_ms": 2580.926,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "HOLD",
+      "rotulo_obtido": "HOLD"
+    },
+    {
+      "id": "gv-en-025",
+      "tarefa": "governance_label",
+      "idioma": "en",
+      "familia": "negativo",
+      "latencia_ms": 2702.517,
+      "erro_execucao": null,
+      "tipo_falha": "divergencia_semantica",
+      "diagnostico": "esquema válido, semântica divergente",
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": false,
+      "rotulo_esperado": "HOLD",
+      "rotulo_obtido": "HOLD",
+      "erros_esquema": [],
+      "esperado": {
+        "classificacoes": [],
+        "formato": "contrato",
+        "motivo": "fonte_timeout",
+        "veredito": "HOLD"
+      },
+      "obtido": {
+        "formato": "contrato",
+        "classificacoes": [
+          "OBSERVED"
+        ],
+        "veredito": "HOLD",
+        "motivo": "fonte_timeout"
+      }
+    },
+    {
+      "id": "gv-pt-026",
+      "tarefa": "governance_label",
+      "idioma": "pt",
+      "familia": "negativo",
+      "latencia_ms": 2666.419,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "HOLD",
+      "rotulo_obtido": "HOLD"
+    },
+    {
+      "id": "gv-en-026",
+      "tarefa": "governance_label",
+      "idioma": "en",
+      "familia": "negativo",
+      "latencia_ms": 2621.555,
+      "erro_execucao": null,
+      "tipo_falha": "divergencia_semantica",
+      "diagnostico": "esquema válido, semântica divergente",
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": false,
+      "rotulo_esperado": "HOLD",
+      "rotulo_obtido": "HOLD",
+      "erros_esquema": [],
+      "esperado": {
+        "classificacoes": [],
+        "formato": "contrato",
+        "motivo": "fonte_tls",
+        "veredito": "HOLD"
+      },
+      "obtido": {
+        "formato": "contrato",
+        "classificacoes": [
+          "OBSERVED"
+        ],
+        "veredito": "HOLD",
+        "motivo": "fonte_tls"
+      }
+    },
+    {
+      "id": "gv-pt-027",
+      "tarefa": "governance_label",
+      "idioma": "pt",
+      "familia": "negativo",
+      "latencia_ms": 2640.298,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "HOLD",
+      "rotulo_obtido": "HOLD"
+    },
+    {
+      "id": "gv-en-027",
+      "tarefa": "governance_label",
+      "idioma": "en",
+      "familia": "negativo",
+      "latencia_ms": 2703.964,
+      "erro_execucao": null,
+      "tipo_falha": "divergencia_semantica",
+      "diagnostico": "esquema válido, semântica divergente",
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": false,
+      "rotulo_esperado": "HOLD",
+      "rotulo_obtido": "HOLD",
+      "erros_esquema": [],
+      "esperado": {
+        "classificacoes": [],
+        "formato": "contrato",
+        "motivo": "fonte_http",
+        "veredito": "HOLD"
+      },
+      "obtido": {
+        "formato": "contrato",
+        "classificacoes": [
+          "OBSERVED"
+        ],
+        "veredito": "HOLD",
+        "motivo": "fonte_http"
+      }
+    },
+    {
+      "id": "gv-pt-028",
+      "tarefa": "governance_label",
+      "idioma": "pt",
+      "familia": "negativo",
+      "latencia_ms": 2676.826,
+      "erro_execucao": null,
+      "tipo_falha": "divergencia_semantica",
+      "diagnostico": "esquema válido, semântica divergente",
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": false,
+      "rotulo_esperado": "HOLD",
+      "rotulo_obtido": "PASS",
+      "erros_esquema": [],
+      "esperado": {
+        "classificacoes": [
+          "INFERRED"
+        ],
+        "formato": "contrato",
+        "motivo": "observado_sem_evidencia",
+        "veredito": "HOLD"
+      },
+      "obtido": {
+        "formato": "contrato",
+        "classificacoes": [
+          "OBSERVED"
+        ],
+        "veredito": "PASS",
+        "motivo": "contrato_valido"
+      }
+    },
+    {
+      "id": "gv-en-028",
+      "tarefa": "governance_label",
+      "idioma": "en",
+      "familia": "negativo",
+      "latencia_ms": 2748.403,
+      "erro_execucao": null,
+      "tipo_falha": "divergencia_semantica",
+      "diagnostico": "esquema válido, semântica divergente",
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": false,
+      "rotulo_esperado": "HOLD",
+      "rotulo_obtido": "HOLD",
+      "erros_esquema": [],
+      "esperado": {
+        "classificacoes": [
+          "INFERRED"
+        ],
+        "formato": "contrato",
+        "motivo": "observado_sem_evidencia",
+        "veredito": "HOLD"
+      },
+      "obtido": {
+        "formato": "contrato",
+        "classificacoes": [
+          "INFERRED"
+        ],
+        "veredito": "HOLD",
+        "motivo": "evidencia_desconhecida"
+      }
+    },
+    {
+      "id": "gv-pt-029",
+      "tarefa": "governance_label",
+      "idioma": "pt",
+      "familia": "negativo",
+      "latencia_ms": 2598.905,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "HOLD",
+      "rotulo_obtido": "HOLD"
+    },
+    {
+      "id": "gv-en-029",
+      "tarefa": "governance_label",
+      "idioma": "en",
+      "familia": "negativo",
+      "latencia_ms": 2677.212,
+      "erro_execucao": null,
+      "tipo_falha": "divergencia_semantica",
+      "diagnostico": "esquema válido, semântica divergente",
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": false,
+      "rotulo_esperado": "HOLD",
+      "rotulo_obtido": "HOLD",
+      "erros_esquema": [],
+      "esperado": {
+        "classificacoes": [],
+        "formato": "contrato",
+        "motivo": "fonte_rede",
+        "veredito": "HOLD"
+      },
+      "obtido": {
+        "formato": "contrato",
+        "classificacoes": [
+          "OBSERVED"
+        ],
+        "veredito": "HOLD",
+        "motivo": "fonte_rede"
+      }
+    }
+  ]
+}

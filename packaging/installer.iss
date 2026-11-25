@@ -4,7 +4,7 @@
 ; Compile com packaging\build_installer.ps1 ou diretamente:
 ;     ISCC.exe packaging\installer.iss
 ;
-; Saida: dist\NexusGeoIA_v0.9.0_Setup.exe
+; Saida: dist\NexusGeoIA_v1.0.0_Setup.exe
 ;
 ; O pacote --onedir gerado por packaging\assistente.spec
 ; (dist\NexusGeoIA\NexusGeoIA.exe + dist\NexusGeoIA\_internal\) e
@@ -22,7 +22,7 @@
 ; ---------------------------------------------------------------------------
 
 #define MyAppName "NexusGeo IA"
-#define MyAppVersion "0.9.0"
+#define MyAppVersion "1.0.0"
 #define MyAppPublisher "NexusGeo IA"
 #define MyAppExeName "NexusGeoIA.exe"
 #define MyAppDirName "NexusGeoIA"
@@ -31,8 +31,8 @@
 ; AppId fixo: atualiza a mesma instalacao em versoes futuras.
 AppId={{8F2C1A54-3B7D-4E6A-9C21-5D4B7A1E9F03}
 AppName=NexusGeo IA
-AppVersion=0.9.0
-AppVerName=NexusGeo IA v0.9.0
+AppVersion=1.0.0
+AppVerName=NexusGeo IA v1.0.0
 AppPublisher=NexusGeo IA
 DefaultDirName={autopf}\{#MyAppDirName}
 DefaultGroupName={#MyAppName}
@@ -40,7 +40,7 @@ DisableProgramGroupPage=yes
 UninstallDisplayIcon={app}\{#MyAppExeName}
 UninstallDisplayName={#MyAppName}
 OutputDir=..\dist
-OutputBaseFilename=NexusGeoIA_v0.9.0_Setup
+OutputBaseFilename=NexusGeoIA_v1.0.0_Setup
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
@@ -81,16 +81,16 @@ Source: "instalar_ollama.ps1"; DestDir: "{tmp}"; Flags: dontcopy deleteafterinst
 [Icons]
 ; Menu Iniciar
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Comment: "Abrir o NexusGeo IA"
-Name: "{group}\Gerenciar Modelos LLM"; Filename: "{app}\{#MyAppExeName}"; Parameters: "--setup-modelo"; Comment: "Escolher e baixar modelos do Ollama"
+Name: "{group}\Gerenciar Modelo Local"; Filename: "{app}\{#MyAppExeName}"; Parameters: "--setup-modelo"; Comment: "Configurar o modelo local oficial no Ollama"
 Name: "{group}\Desinstalar {#MyAppName}"; Filename: "{uninstallexe}"
 ; Area de Trabalho
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon; Comment: "Abrir o NexusGeo IA"
-Name: "{autodesktop}\Gerenciar Modelos LLM"; Filename: "{app}\{#MyAppExeName}"; Parameters: "--setup-modelo"; Tasks: desktopicon; Comment: "Escolher e baixar modelos do Ollama"
+Name: "{autodesktop}\Gerenciar Modelo Local"; Filename: "{app}\{#MyAppExeName}"; Parameters: "--setup-modelo"; Tasks: desktopicon; Comment: "Configurar o modelo local oficial no Ollama"
 
 [Run]
-; Executa o assistente de escolha/download ao final da instalacao.
+; Executa o configurador do modelo local ao final da instalacao.
 ; skipifsilent evita abrir janela em instalacoes silenciosas.
-Filename: "{app}\{#MyAppExeName}"; Parameters: "--setup-modelo"; Description: "Abrir o assistente de escolha dos modelos LLM"; Flags: postinstall nowait skipifsilent runascurrentuser
+Filename: "{app}\{#MyAppExeName}"; Parameters: "--setup-modelo"; Description: "Configurar o modelo local oficial (nexusgeo-qwen3-4b-v2-q4)"; Flags: postinstall nowait skipifsilent runascurrentuser
 
 [Code]
 { ---------------------------------------------------------------------------
@@ -183,8 +183,8 @@ begin
       MsgBox(
         'O Ollama nao pode ser instalado automaticamente.' + #13#10 + #13#10 +
         'O NexusGeo IA abrira mesmo assim. Depois, instale o Ollama pelo ' +
-        'site oficial e use o atalho "Gerenciar Modelos LLM" para baixar ' +
-        'os modelos.',
+        'site oficial e use o atalho "Gerenciar Modelo Local" para ' +
+        'configurar o modelo oficial.',
         mbInformation,
         MB_OK
       );

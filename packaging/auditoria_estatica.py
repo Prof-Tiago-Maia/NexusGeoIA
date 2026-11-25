@@ -51,8 +51,9 @@ PASTAS_EXCLUIDAS = {
 
 # Pacotes internos do projeto. Um import que comece por um destes nomes
 # precisa resolver para um modulo realmente existente.
-PACOTES_INTERNOS = {"app", "config", "core", "database", "launcher_desktop",
-                    "services", "setup_llm", "utils"}
+PACOTES_INTERNOS = {"adapters", "app", "config", "core", "database",
+                    "finetuning", "launcher_desktop", "services",
+                    "setup_llm", "ui", "utils"}
 
 
 def _caminho_relativo(raiz: Path, caminho: Path) -> Path:
@@ -379,7 +380,7 @@ def imprimir(relatorio: dict, verboso: bool) -> None:
     print(f"Raiz: {relatorio['raiz']}")
     print(f"Arquivos .py: {relatorio['arquivos']}")
     print(f"Modulos internos: {relatorio['modulos']}")
-    print("")
+    print()
 
     if relatorio["falhas_compilacao"]:
         print(f"[FAIL] compilacao: {len(relatorio['falhas_compilacao'])} falha(s)")
@@ -419,7 +420,7 @@ def imprimir(relatorio: dict, verboso: bool) -> None:
     else:
         print("[PASS] nenhum import de nivel de modulo sem uso aparente")
 
-    print("")
+    print()
     print(f"RESULTADO: {'PASS' if relatorio['ok'] else 'FAIL'}")
 
 

@@ -1,0 +1,288 @@
+{
+  "gerado_em": "2026-11-22T19:57:42+00:00",
+  "preditor": "oraculo",
+  "modelo": null,
+  "dataset": {
+    "arquivo": "D:\\curso IA\\projetos\\ia-generativa-python-integracoes\\ia-generativa-python-integracoes\\finetuning\\datasets\\nexusgeoia_behavior_v1.jsonl",
+    "total": 212,
+    "avaliados": 212,
+    "sha256": "ed4edd9b6fd317cabc10c712edf3709013a1d98479be966e00d4086d2006fe5f"
+  },
+  "filtros": {
+    "tarefas": [],
+    "idiomas": [],
+    "limite": null
+  },
+  "duracao_ms": 30.389,
+  "metricas": {
+    "global": {
+      "total": 212,
+      "corretos": 212,
+      "acuracia": 1.0,
+      "esquema_ok": 212,
+      "acuracia_esquema": 1.0,
+      "falhas_parsing": 0,
+      "taxa_falha_parsing": 0.0,
+      "erros_execucao": 0,
+      "taxa_erro_execucao": 0.0,
+      "latencia_ms": {
+        "media": 0.135,
+        "p50": 0.068,
+        "p95": 0.321,
+        "min": 0.007,
+        "max": 2.947
+      }
+    },
+    "por_tarefa": {
+      "governance_label": {
+        "total": 58,
+        "corretos": 58,
+        "acuracia": 1.0,
+        "esquema_ok": 58,
+        "acuracia_esquema": 1.0,
+        "falhas_parsing": 0,
+        "taxa_falha_parsing": 0.0,
+        "erros_execucao": 0,
+        "taxa_erro_execucao": 0.0,
+        "latencia_ms": {
+          "media": 0.016,
+          "p50": 0.014,
+          "p95": 0.026,
+          "min": 0.007,
+          "max": 0.056
+        }
+      },
+      "sondagem_extract": {
+        "total": 74,
+        "corretos": 74,
+        "acuracia": 1.0,
+        "esquema_ok": 74,
+        "acuracia_esquema": 1.0,
+        "falhas_parsing": 0,
+        "taxa_falha_parsing": 0.0,
+        "erros_execucao": 0,
+        "taxa_erro_execucao": 0.0,
+        "latencia_ms": {
+          "media": 0.068,
+          "p50": 0.063,
+          "p95": 0.11,
+          "min": 0.013,
+          "max": 0.238
+        }
+      },
+      "workflow_intent": {
+        "total": 80,
+        "corretos": 80,
+        "acuracia": 1.0,
+        "esquema_ok": 80,
+        "acuracia_esquema": 1.0,
+        "falhas_parsing": 0,
+        "taxa_falha_parsing": 0.0,
+        "erros_execucao": 0,
+        "taxa_erro_execucao": 0.0,
+        "latencia_ms": {
+          "media": 0.283,
+          "p50": 0.242,
+          "p95": 0.378,
+          "min": 0.086,
+          "max": 2.947
+        }
+      }
+    },
+    "por_idioma": {
+      "en": {
+        "total": 106,
+        "corretos": 106,
+        "acuracia": 1.0,
+        "esquema_ok": 106,
+        "acuracia_esquema": 1.0,
+        "falhas_parsing": 0,
+        "taxa_falha_parsing": 0.0,
+        "erros_execucao": 0,
+        "taxa_erro_execucao": 0.0,
+        "latencia_ms": {
+          "media": 0.124,
+          "p50": 0.065,
+          "p95": 0.322,
+          "min": 0.007,
+          "max": 0.424
+        }
+      },
+      "pt": {
+        "total": 106,
+        "corretos": 106,
+        "acuracia": 1.0,
+        "esquema_ok": 106,
+        "acuracia_esquema": 1.0,
+        "falhas_parsing": 0,
+        "taxa_falha_parsing": 0.0,
+        "erros_execucao": 0,
+        "taxa_erro_execucao": 0.0,
+        "latencia_ms": {
+          "media": 0.146,
+          "p50": 0.069,
+          "p95": 0.32,
+          "min": 0.009,
+          "max": 2.947
+        }
+      }
+    },
+    "por_familia": {
+      "ambiguo": {
+        "total": 30,
+        "corretos": 30,
+        "acuracia": 1.0,
+        "esquema_ok": 30,
+        "acuracia_esquema": 1.0,
+        "falhas_parsing": 0,
+        "taxa_falha_parsing": 0.0,
+        "erros_execucao": 0,
+        "taxa_erro_execucao": 0.0,
+        "latencia_ms": {
+          "media": 0.084,
+          "p50": 0.064,
+          "p95": 0.193,
+          "min": 0.012,
+          "max": 0.212
+        }
+      },
+      "incompleto": {
+        "total": 36,
+        "corretos": 36,
+        "acuracia": 1.0,
+        "esquema_ok": 36,
+        "acuracia_esquema": 1.0,
+        "falhas_parsing": 0,
+        "taxa_falha_parsing": 0.0,
+        "erros_execucao": 0,
+        "taxa_erro_execucao": 0.0,
+        "latencia_ms": {
+          "media": 0.084,
+          "p50": 0.056,
+          "p95": 0.229,
+          "min": 0.009,
+          "max": 0.242
+        }
+      },
+      "negativo": {
+        "total": 46,
+        "corretos": 46,
+        "acuracia": 1.0,
+        "esquema_ok": 46,
+        "acuracia_esquema": 1.0,
+        "falhas_parsing": 0,
+        "taxa_falha_parsing": 0.0,
+        "erros_execucao": 0,
+        "taxa_erro_execucao": 0.0,
+        "latencia_ms": {
+          "media": 0.111,
+          "p50": 0.055,
+          "p95": 0.373,
+          "min": 0.007,
+          "max": 0.424
+        }
+      },
+      "normal": {
+        "total": 100,
+        "corretos": 100,
+        "acuracia": 1.0,
+        "esquema_ok": 100,
+        "acuracia_esquema": 1.0,
+        "falhas_parsing": 0,
+        "taxa_falha_parsing": 0.0,
+        "erros_execucao": 0,
+        "taxa_erro_execucao": 0.0,
+        "latencia_ms": {
+          "media": 0.18,
+          "p50": 0.11,
+          "p95": 0.322,
+          "min": 0.01,
+          "max": 2.947
+        }
+      }
+    },
+    "confusao": {
+      "consulta_direta": {
+        "consulta_direta": 34
+      },
+      "triagem_area": {
+        "triagem_area": 12
+      },
+      "hidrogeologia": {
+        "hidrogeologia": 16
+      },
+      "sondagem": {
+        "sondagem": 18
+      },
+      "valido": {
+        "valido": 44
+      },
+      "invalido": {
+        "invalido": 24
+      },
+      "erro_contrato": {
+        "erro_contrato": 6
+      },
+      "PASS": {
+        "PASS": 20
+      },
+      "HOLD": {
+        "HOLD": 30
+      },
+      "FAIL": {
+        "FAIL": 8
+      }
+    },
+    "falhas": [],
+    "total_falhas": 0
+  },
+  "db": {
+    "antes": {
+      "principal": {
+        "caminho": "D:\\curso IA\\projetos\\ia-generativa-python-integracoes\\ia-generativa-python-integracoes\\data\\nexusgeoia.db",
+        "existe": true,
+        "tamanho": 131072,
+        "sha256": "cf876e9a49e07f8643e705b509dc080e43e42dcffdd41f20e269a08cc8564281"
+      },
+      "sidecars": [
+        {
+          "caminho": "D:\\curso IA\\projetos\\ia-generativa-python-integracoes\\ia-generativa-python-integracoes\\data\\nexusgeoia.db-wal",
+          "existe": true,
+          "tamanho": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "caminho": "D:\\curso IA\\projetos\\ia-generativa-python-integracoes\\ia-generativa-python-integracoes\\data\\nexusgeoia.db-shm",
+          "existe": true,
+          "tamanho": 32768,
+          "sha256": "fd4c9fda9cd3f9ae7c962b0ddf37232294d55580e1aa165aa06129b8549389eb"
+        }
+      ]
+    },
+    "depois": {
+      "principal": {
+        "caminho": "D:\\curso IA\\projetos\\ia-generativa-python-integracoes\\ia-generativa-python-integracoes\\data\\nexusgeoia.db",
+        "existe": true,
+        "tamanho": 131072,
+        "sha256": "cf876e9a49e07f8643e705b509dc080e43e42dcffdd41f20e269a08cc8564281"
+      },
+      "sidecars": [
+        {
+          "caminho": "D:\\curso IA\\projetos\\ia-generativa-python-integracoes\\ia-generativa-python-integracoes\\data\\nexusgeoia.db-wal",
+          "existe": true,
+          "tamanho": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "caminho": "D:\\curso IA\\projetos\\ia-generativa-python-integracoes\\ia-generativa-python-integracoes\\data\\nexusgeoia.db-shm",
+          "existe": true,
+          "tamanho": 32768,
+          "sha256": "fd4c9fda9cd3f9ae7c962b0ddf37232294d55580e1aa165aa06129b8549389eb"
+        }
+      ]
+    },
+    "intocado": true,
+    "DB_INTOCADO": true
+  },
+  "db_intocado": true
+}

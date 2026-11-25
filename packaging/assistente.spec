@@ -35,6 +35,9 @@ staging do ``.zip``.
 """
 
 import importlib.util
+import json
+import os
+import sys
 from importlib.metadata import PackageNotFoundError
 from pathlib import Path
 
@@ -47,6 +50,12 @@ from PyInstaller.utils.hooks import (
 
 # ``SPECPATH`` e definido pelo PyInstaller e aponta para packaging/.
 RAIZ = Path(SPECPATH).resolve().parent
+
+# O .spec roda no interpretador do PyInstaller, cujo sys.path não inclui
+# necessariamente a raiz do projeto. Sem isto collect_submodules("core")
+# e a descoberta do manifesto podem falhar no build.
+if str(RAIZ) not in sys.path:
+    sys.path.insert(0, str(RAIZ))
 
 datas = []
 binaries = []
@@ -328,37 +337,115 @@ for modulo in MODULOS_DOCUMENTO:
         hiddenimports.append(modulo)
 
 # ---------------------------------------------------------------------------
-# Pacotes internos do projeto
+# Pacotes internos do projeto (v1.0.0)
 # ---------------------------------------------------------------------------
+#
+# Todo pacote interno entra com ``collect_submodules`` e
+# ``collect_data_files``, o equivalente no .spec às flags
+# ``--collect-submodules`` e ``--collect-data`` do PyInstaller. A
+# cobertura é redundante de propósito:
+#
+# 1. ``collect_submodules`` descobre o que o modulegraph perderia;
+# 2. ``collect_data_files`` traz arquivos não-Python lidos por caminho;
+# 3. o manifesto gerado por ``packaging/coleta_interna.py`` acrescenta
+#    um hiddenimport explícito para CADA .py real de core, services, ui,
+#    adapters e utils (mais config e setup_llm);
+# 4. a checagem ``_faltantes_do_manifesto`` reprova o build se algum
+#    .py do projeto ficar de fora.
+#
+# O pacote ``ui`` não existia na primeira versão do .spec e por isso o
+# executável quebrava ao importar ``ui.*``; ``adapters`` segue o mesmo
+# caminho (antes só ``core``, ``services``, ``database`` e ``utils``).
+PACOTES_INTERNOS = ("core", "services", "ui", "adapters", "utils")
 
-for pacote in ("core", "services", "database", "utils"):
+# database/ é o serviço legado de atendimentos, fora do fluxo principal,
+# mas continua no bundle por compatibilidade.
+PACOTES_LEGADOS = ("database",)
+
+for pacote in PACOTES_INTERNOS + PACOTES_LEGADOS:
+    if not _modulo_instalado(pacote):
+        continue
+
     hiddenimports += collect_submodules(pacote)
+    datas += collect_data_files(pacote)
 
-# Lista explícita: os pacotes internos são namespace packages (não têm
-# ``__init__.py``) e a listagem explícita garante que todos entrem no
-# bundle, mesmo se um coletor automático mudar de comportamento.
-hiddenimports += [
-    "core.analytical_profiles",
-    "core.assistant",
-    "core.prompt_manager",
-    "core.smart_router",
-    "core.source_router",
-    "services.database_service",
-    "services.document_parser",
-    "services.external_api_service",
-    "services.geocoding_service",
-    "services.glossario_bilingue",
-    "services.history_service",
-    "services.llm_service",
-    "services.rag_service",
-    "services.report_generator",
-    "services.spatial_parser",
-    "services.table_extractor",
-    "services.weather_service",
-    "database.connection",
-    "database.init_db",
-    "utils.i18n",
-]
+# Módulos soltos na raiz que o launcher e o setup importam por nome.
+MODULOS_RAIZ_INTERNOS = ("config", "setup_llm", "launcher_desktop")
+
+for modulo in MODULOS_RAIZ_INTERNOS:
+    if modulo not in hiddenimports:
+        hiddenimports.append(modulo)
+
+
+def _modulos_do_manifesto():
+    """Lê a lista explícita gerada pelo build_portatil.ps1.
+
+    O caminho vem de ``NEXUSGEO_MODULOS_MANIFEST``; sem a variável (por
+    exemplo, ao rodar o PyInstaller à mão), cai para
+    ``build/modulos_internos.json``. Lista vazia significa que o .spec
+    usará apenas ``collect_submodules``, sem falhar.
+    """
+
+    caminho = os.environ.get("NEXUSGEO_MODULOS_MANIFEST", "").strip()
+    candidatos = [Path(caminho)] if caminho else []
+    candidatos.append(RAIZ / "build" / "modulos_internos.json")
+
+    for arquivo in candidatos:
+        try:
+            if not arquivo.is_file():
+                continue
+
+            dados = json.loads(arquivo.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+
+        return [
+            str(modulo)
+            for modulo in dados.get("modulos") or []
+            if str(modulo).strip()
+        ]
+
+    return []
+
+
+for modulo in _modulos_do_manifesto():
+    if modulo not in hiddenimports:
+        hiddenimports.append(modulo)
+
+
+def _faltantes_do_manifesto():
+    """Módulos .py dos pacotes internos que não entraram no bundle."""
+
+    esperados = set()
+
+    for pacote in PACOTES_INTERNOS:
+        pasta = RAIZ / pacote
+
+        if not pasta.is_dir():
+            continue
+
+        for arquivo in pasta.rglob("*.py"):
+            if "__pycache__" in arquivo.parts:
+                continue
+
+            partes = list(arquivo.relative_to(RAIZ).with_suffix("").parts)
+
+            if partes and partes[-1] == "__init__":
+                partes.pop()
+
+            if partes:
+                esperados.add(".".join(partes))
+
+    return sorted(esperados - set(hiddenimports))
+
+
+_faltando_no_bundle = _faltantes_do_manifesto()
+
+if _faltando_no_bundle:
+    raise RuntimeError(
+        "Pacotes internos incompletos no PyInstaller: "
+        + ", ".join(_faltando_no_bundle)
+    )
 
 hiddenimports += [
     "config",
@@ -382,9 +469,28 @@ datas += [
     (str(RAIZ / "app.py"), "."),
     (str(RAIZ / "setup_llm.py"), "."),
     (str(RAIZ / "config.py"), "."),
+    (str(RAIZ / "launcher_desktop.py"), "."),
     (str(RAIZ / "prompts"), "prompts"),
     (str(RAIZ / ".streamlit"), ".streamlit"),
+    # ui/ e os Modelfile também viajam em _internal: o launcher faz
+    # chdir para _MEIPASS e o setup_llm.resolve caminho pelo
+    # config.diretorio_do_projeto(), que no bundle aponta para _internal.
+    (str(RAIZ / "ui"), "ui"),
 ]
+
+# finetuning/ é grande (datasets, adaptadores, relatórios). Só os
+# templates Modelfile.* são recursos de runtime; o restante não entra no
+# bundle nem no pacote portátil.
+for _modelfile in sorted((RAIZ / "finetuning").glob("Modelfile.*")):
+    datas.append((str(_modelfile), "finetuning"))
+
+# O manifesto de módulos gerado pelo build também viaja em _internal:
+# o --self-test do executável o usa para importar TODO módulo do projeto
+# mesmo quando o pacote não tem a árvore .py de core/services/adapters.
+_manifesto_modulos = RAIZ / "build" / "modulos_internos.json"
+
+if _manifesto_modulos.is_file():
+    datas.append((str(_manifesto_modulos), "."))
 
 icone = RAIZ / "packaging" / "icone.ico"
 icone_arg = str(icone) if icone.is_file() else None

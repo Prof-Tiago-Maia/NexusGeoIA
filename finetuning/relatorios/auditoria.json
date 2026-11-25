@@ -1,0 +1,130 @@
+{
+  "ok": true,
+  "arquivos_auditados": 12,
+  "achados_codigo": [],
+  "problemas_dataset": [],
+  "total_registros": 300,
+  "sha256_registros": "74a52f789726190f2a99eb84fa2b5afa089cfd806ab9aff6a1dd169561071ecc",
+  "split": {
+    "total_pares": 150,
+    "total_registros": 300,
+    "por_split": {
+      "treino": {
+        "pares": 103,
+        "registros": 206,
+        "por_tarefa": {
+          "governance_label": 58,
+          "sondagem_extract": 74,
+          "workflow_intent": 74
+        },
+        "por_idioma": {
+          "en": 103,
+          "pt": 103
+        },
+        "por_familia": {
+          "ambiguo": 32,
+          "incompleto": 34,
+          "negativo": 46,
+          "normal": 94
+        }
+      },
+      "validacao": {
+        "pares": 22,
+        "registros": 44,
+        "por_tarefa": {
+          "governance_label": 12,
+          "sondagem_extract": 16,
+          "workflow_intent": 16
+        },
+        "por_idioma": {
+          "en": 22,
+          "pt": 22
+        },
+        "por_familia": {
+          "ambiguo": 8,
+          "incompleto": 8,
+          "negativo": 12,
+          "normal": 16
+        }
+      },
+      "teste": {
+        "pares": 25,
+        "registros": 50,
+        "por_tarefa": {
+          "governance_label": 14,
+          "sondagem_extract": 18,
+          "workflow_intent": 18
+        },
+        "por_idioma": {
+          "en": 25,
+          "pt": 25
+        },
+        "por_familia": {
+          "ambiguo": 8,
+          "incompleto": 6,
+          "negativo": 12,
+          "normal": 24
+        }
+      }
+    }
+  },
+  "db": {
+    "antes": {
+      "caminho": "D:\\curso IA\\projetos\\ia-generativa-python-integracoes\\ia-generativa-python-integracoes\\data\\nexusgeoia.db",
+      "origem": "config.DATA_DIR",
+      "principal": {
+        "caminho": "D:\\curso IA\\projetos\\ia-generativa-python-integracoes\\ia-generativa-python-integracoes\\data\\nexusgeoia.db",
+        "existe": true,
+        "tamanho": 131072,
+        "sha256": "cf876e9a49e07f8643e705b509dc080e43e42dcffdd41f20e269a08cc8564281"
+      },
+      "sidecars": [
+        {
+          "caminho": "D:\\curso IA\\projetos\\ia-generativa-python-integracoes\\ia-generativa-python-integracoes\\data\\nexusgeoia.db-wal",
+          "existe": true,
+          "tamanho": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "caminho": "D:\\curso IA\\projetos\\ia-generativa-python-integracoes\\ia-generativa-python-integracoes\\data\\nexusgeoia.db-shm",
+          "existe": true,
+          "tamanho": 32768,
+          "sha256": "fd4c9fda9cd3f9ae7c962b0ddf37232294d55580e1aa165aa06129b8549389eb"
+        }
+      ]
+    },
+    "depois": {
+      "caminho": "D:\\curso IA\\projetos\\ia-generativa-python-integracoes\\ia-generativa-python-integracoes\\data\\nexusgeoia.db",
+      "origem": "config.DATA_DIR",
+      "principal": {
+        "caminho": "D:\\curso IA\\projetos\\ia-generativa-python-integracoes\\ia-generativa-python-integracoes\\data\\nexusgeoia.db",
+        "existe": true,
+        "tamanho": 131072,
+        "sha256": "cf876e9a49e07f8643e705b509dc080e43e42dcffdd41f20e269a08cc8564281"
+      },
+      "sidecars": [
+        {
+          "caminho": "D:\\curso IA\\projetos\\ia-generativa-python-integracoes\\ia-generativa-python-integracoes\\data\\nexusgeoia.db-wal",
+          "existe": true,
+          "tamanho": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "caminho": "D:\\curso IA\\projetos\\ia-generativa-python-integracoes\\ia-generativa-python-integracoes\\data\\nexusgeoia.db-shm",
+          "existe": true,
+          "tamanho": 32768,
+          "sha256": "fd4c9fda9cd3f9ae7c962b0ddf37232294d55580e1aa165aa06129b8549389eb"
+        }
+      ]
+    },
+    "intocado": true,
+    "DB_INTOCADO": true,
+    "divergencias": [],
+    "diagnostico": {
+      "veredito": "INTOCADO",
+      "arquivos_comparados": 3,
+      "mensagem": "Banco intocado: tamanho e SHA-256 idênticos antes e depois (D:\\curso IA\\projetos\\ia-generativa-python-integracoes\\ia-generativa-python-integracoes\\data\\nexusgeoia.db; 3 arquivo(s) comparado(s))."
+    }
+  },
+  "db_intocado": true
+}

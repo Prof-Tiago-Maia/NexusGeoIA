@@ -59,7 +59,14 @@ from services.glossario_bilingue import (
     rotulo_idioma,
     traduzir_termo,
 )
-
+from services.progress_service import (
+    ETAPA_DOCUMENTOS,
+    ETAPA_DOCUMENTOS_CONSULTAS,
+    ETAPA_DOCUMENTOS_INDICE,
+    CancelamentoSolicitado,
+    relatar,
+    verificar_cancelamento,
+)
 
 # O diretório é o mesmo usado por ``services.document_parser`` e vem de
 # ``config`` (projeto, pasta portátil ou ``%LOCALAPPDATA%``).
@@ -502,7 +509,12 @@ def _sanitizar_nome_documento(nome_arquivo):
     return nome
 
 
-def salvar_documento(nome_arquivo, conteudo, ao_progredir=None):
+def salvar_documento(
+    nome_arquivo,
+    conteudo,
+    ao_progredir=None,
+    cancelamento=None,
+):
     """Grava um documento enviado e o converte em Markdown.
 
     O nome é reduzido ao seu componente final, o que impede caminhos
@@ -518,11 +530,16 @@ def salvar_documento(nome_arquivo, conteudo, ao_progredir=None):
     traz, em ``erro.avaliacao``, a medição que justifica a recusa — é
     ela que a interface transforma no ``st.warning`` da barra lateral.
 
-    ``ao_progredir`` recebe ``(fração, texto)`` a cada página de PDF,
-    permitindo que a barra lateral mostre o andamento da conversão.
+    ao_progredir segue o contrato de services.progress_service:
+    (etapa, fração, detalhe), uma chamada por página de PDF.
+    cancelamento é repassado à conversão; se o usuário cancelar, o
+    arquivo recém-gravado e o cache parcial são removidos antes de a
+    exceção seguir para a interface.
     """
 
     garantir_diretorio()
+
+    verificar_cancelamento(cancelamento, ETAPA_DOCUMENTOS)
 
     nome = _sanitizar_nome_documento(nome_arquivo)
 
@@ -554,13 +571,21 @@ def salvar_documento(nome_arquivo, conteudo, ao_progredir=None):
         )
         contador += 1
 
+    verificar_cancelamento(cancelamento, ETAPA_DOCUMENTOS)
     destino.write_bytes(conteudo)
 
     try:
         resultado = document_parser.converter_arquivo(
             destino,
             progresso=ao_progredir,
+            cancelamento=cancelamento,
         )
+    except CancelamentoSolicitado:
+        # Conversão interrompida: nenhum arquivo nem cache parcial fica
+        # em disco para a próxima indexação.
+        destino.unlink(missing_ok=True)
+        document_parser.remover_cache(destino)
+        raise
     except document_parser.DependenciaAusenteError as erro:
         destino.unlink(missing_ok=True)
         raise DocumentoInvalidoError(str(erro)) from erro
@@ -800,8 +825,10 @@ def _blocos_para_trechos(caminho, blocos):
     return trechos
 
 
-def _trechos_do_arquivo(caminho):
+def _trechos_do_arquivo(caminho, progresso=None, cancelamento=None):
     """Extrai e divide um arquivo, usando cache por data de modificação."""
+
+    verificar_cancelamento(cancelamento, ETAPA_DOCUMENTOS_INDICE)
 
     informacao = caminho.stat()
     chave = (
@@ -814,13 +841,19 @@ def _trechos_do_arquivo(caminho):
         return _CACHE_TRECHOS[chave]
 
     try:
-        resultado = document_parser.converter_arquivo(caminho)
+        resultado = document_parser.converter_arquivo(
+            caminho,
+            progresso=progresso,
+            cancelamento=cancelamento,
+        )
+        verificar_cancelamento(cancelamento, ETAPA_DOCUMENTOS_INDICE)
         blocos = (
             document_parser.extrair_blocos_markdown(resultado.markdown)
             if resultado.valido and resultado.markdown
             else []
         )
-    except document_parser.DependenciaAusenteError:
+    except (document_parser.DependenciaAusenteError,
+            CancelamentoSolicitado):
         raise
     except document_parser.ErroConversao:
         blocos = []
@@ -828,6 +861,7 @@ def _trechos_do_arquivo(caminho):
         # Um PDF corrompido não deve derrubar a consulta inteira.
         blocos = []
 
+    verificar_cancelamento(cancelamento, ETAPA_DOCUMENTOS_INDICE)
     trechos = _blocos_para_trechos(caminho, blocos)
     _CACHE_TRECHOS[chave] = trechos
 
@@ -860,13 +894,28 @@ def _tokens_da_query(texto, idioma):
     return {token for token in tokens if token}
 
 
-def _montar_indice(arquivos):
+def _montar_indice(arquivos, progresso=None, cancelamento=None):
     indice = []
     ordem = 0
     frequencia = Counter()
+    total = max(len(arquivos), 1)
 
-    for caminho in arquivos:
-        for trecho in _trechos_do_arquivo(caminho):
+    for posicao, caminho in enumerate(arquivos):
+        verificar_cancelamento(cancelamento, ETAPA_DOCUMENTOS_INDICE)
+        relatar(
+            progresso,
+            ETAPA_DOCUMENTOS_INDICE,
+            (posicao + 1) / total,
+            f"{posicao + 1}/{total}",
+        )
+        trechos_arquivo = _trechos_do_arquivo(
+            caminho,
+            progresso=progresso,
+            cancelamento=cancelamento,
+        )
+        verificar_cancelamento(cancelamento, ETAPA_DOCUMENTOS_INDICE)
+
+        for trecho in trechos_arquivo:
             item = dict(trecho)
             item["_ordem"] = ordem
             item["_tokens"] = set(_tokenizar(trecho["texto"]))
@@ -924,7 +973,7 @@ def _pontuar_indice(indice, frequencia, tokens_query):
     return pontuacoes
 
 
-def _buscar_bilingue(indice, frequencia, queries):
+def _buscar_bilingue(indice, frequencia, queries, cancelamento=None):
     """Consulta o índice com a query PT e a query EN e une os resultados.
 
     A união é deduplicada pela posição do trecho no índice (portanto,
@@ -936,6 +985,8 @@ def _buscar_bilingue(indice, frequencia, queries):
     combinado = {}
 
     for idioma in (IDIOMA_PT, IDIOMA_EN):
+        verificar_cancelamento(cancelamento, ETAPA_DOCUMENTOS)
+
         texto_query = queries.get(idioma) or ""
         tokens_query = _tokens_da_query(texto_query, idioma)
 
@@ -1358,7 +1409,12 @@ def _extrair_json(texto):
     return None
 
 
-def _queries_do_modelo(pergunta, modelo=None, tempo_limite=None):
+def _queries_do_modelo(
+    pergunta,
+    modelo=None,
+    tempo_limite=None,
+    cancelamento=None,
+):
     """Chamada ultrarrápida ao Ollama para PT e EN.
 
     ``think=False`` desliga o raciocínio dos modelos Qwen3,
@@ -1366,6 +1422,8 @@ def _queries_do_modelo(pergunta, modelo=None, tempo_limite=None):
     limita a geração a um JSON de dois campos. A chamada roda numa
     thread com prazo: um modelo em cold start não pode travar a busca.
     """
+
+    verificar_cancelamento(cancelamento, ETAPA_DOCUMENTOS_CONSULTAS)
 
     try:
         from services.llm_service import cliente
@@ -1438,6 +1496,8 @@ def _queries_do_modelo(pergunta, modelo=None, tempo_limite=None):
     thread = threading.Thread(target=executar, daemon=True)
     thread.start()
     thread.join(prazo)
+
+    verificar_cancelamento(cancelamento, ETAPA_DOCUMENTOS_CONSULTAS)
 
     if thread.is_alive() or "erro" in resultado:
         return None
@@ -1642,7 +1702,13 @@ def _traduzir_de_en_para_pt(texto):
     return _substituir_por_glossario(texto, IDIOMA_PT)
 
 
-def _gerar_queries_bilingues(pergunta, modelo=None, usar_llm=True):
+def _gerar_queries_bilingues(
+    pergunta,
+    modelo=None,
+    usar_llm=True,
+    progresso=None,
+    cancelamento=None,
+):
     """Gera as queries PT e EN da pergunta.
 
     Tenta primeiro a :func:`_queries_do_modelo` (Ollama, ~1 s quando o
@@ -1669,6 +1735,8 @@ def _gerar_queries_bilingues(pergunta, modelo=None, usar_llm=True):
     if not texto:
         raise ValueError("A pergunta não pode estar vazia.")
 
+    verificar_cancelamento(cancelamento, ETAPA_DOCUMENTOS_CONSULTAS)
+
     chave_cache = (texto, modelo or "", bool(usar_llm))
 
     with _LOCK_CACHE_QUERIES:
@@ -1678,11 +1746,19 @@ def _gerar_queries_bilingues(pergunta, modelo=None, usar_llm=True):
     origem = ORIGEM_QUERIES_FALLBACK
     resultado = None
 
+    relatar(progresso, ETAPA_DOCUMENTOS_CONSULTAS, 0.05, "")
+
     if usar_llm:
-        resultado = _queries_do_modelo(texto, modelo=modelo)
+        resultado = _queries_do_modelo(
+            texto,
+            modelo=modelo,
+            cancelamento=cancelamento,
+        )
 
         if resultado:
             origem = ORIGEM_QUERIES_LLM
+
+    verificar_cancelamento(cancelamento, ETAPA_DOCUMENTOS_CONSULTAS)
 
     if not resultado:
         resultado = fallback_queries_bilingues(texto)
@@ -1737,7 +1813,13 @@ def termos_para_equivalencia(pergunta, trechos):
     return sorted(termos)
 
 
-def consultar_documentos(pergunta, modelo=None, usar_llm=True):
+def consultar_documentos(
+    pergunta,
+    modelo=None,
+    usar_llm=True,
+    progresso=None,
+    cancelamento=None,
+):
     """Busca os trechos mais relevantes para a pergunta (PT-BR ou EN).
 
     Fluxo:
@@ -1778,8 +1860,12 @@ def consultar_documentos(pergunta, modelo=None, usar_llm=True):
     if not texto_pergunta:
         raise ValueError("A pergunta não pode estar vazia.")
 
+    verificar_cancelamento(cancelamento, ETAPA_DOCUMENTOS)
+    relatar(progresso, ETAPA_DOCUMENTOS, 0.0, "")
+
     garantir_diretorio()
     arquivos = listar_documentos()
+    verificar_cancelamento(cancelamento, ETAPA_DOCUMENTOS)
 
     if not arquivos:
         return {
@@ -1806,11 +1892,25 @@ def consultar_documentos(pergunta, modelo=None, usar_llm=True):
     queries = _gerar_queries_bilingues(
         texto_pergunta,
         modelo=modelo,
-        usar_llm=usar_llm
+        usar_llm=usar_llm,
+        progresso=progresso,
+        cancelamento=cancelamento,
     )
-    indice, frequencia = _montar_indice(arquivos)
+    verificar_cancelamento(cancelamento, ETAPA_DOCUMENTOS)
 
-    pontuacoes = _buscar_bilingue(indice, frequencia, queries)
+    indice, frequencia = _montar_indice(
+        arquivos,
+        progresso=progresso,
+        cancelamento=cancelamento,
+    )
+    verificar_cancelamento(cancelamento, ETAPA_DOCUMENTOS)
+
+    pontuacoes = _buscar_bilingue(
+        indice,
+        frequencia,
+        queries,
+        cancelamento=cancelamento,
+    )
     pedido_amplo = pergunta_ampla(texto_pergunta)
     fraca = _busca_fraca(pontuacoes)
 
@@ -1842,6 +1942,8 @@ def consultar_documentos(pergunta, modelo=None, usar_llm=True):
     # sem nenhum trecho (documentos muito longos com o teto esgotado),
     # o início dele entra no lugar do trecho de menor pontuação.
     trechos = _garantir_cobertura(indice, trechos, limite)
+    verificar_cancelamento(cancelamento, ETAPA_DOCUMENTOS)
+    relatar(progresso, ETAPA_DOCUMENTOS, 1.0, "")
 
     documento_de = {}
 

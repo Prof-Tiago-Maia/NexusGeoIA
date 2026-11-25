@@ -1,0 +1,644 @@
+{
+  "gerado_em": "2026-11-24T21:55:58+00:00",
+  "preditor": "ollama",
+  "modelo": "qwen3:4b",
+  "dataset": {
+    "arquivo": "finetuning\\datasets\\nexusgeoia_behavior_v2.jsonl",
+    "total": 300,
+    "avaliados": 50,
+    "sha256": "55d3b828c0647905e5b2feaa110fbb9d9c69f32f23a265db61cd7be1cf425554",
+    "split": {
+      "nome": "teste",
+      "manifesto": "D:\\curso IA\\projetos\\ia-generativa-python-integracoes\\ia-generativa-python-integracoes\\finetuning\\datasets\\nexusgeoia_behavior_v2.split.json",
+      "sha256_dataset": "74a52f789726190f2a99eb84fa2b5afa089cfd806ab9aff6a1dd169561071ecc",
+      "total_registros_dataset": 300,
+      "pares": 25,
+      "registros": 50,
+      "por_tarefa": {
+        "governance_label": 14,
+        "sondagem_extract": 18,
+        "workflow_intent": 18
+      },
+      "por_idioma": {
+        "en": 25,
+        "pt": 25
+      }
+    }
+  },
+  "filtros": {
+    "tarefas": [],
+    "idiomas": [],
+    "limite": null,
+    "split": "teste"
+  },
+  "duracao_ms": 181296.436,
+  "prazo_registro_s": 180.0,
+  "metricas": {
+    "global": {
+      "total": 50,
+      "corretos": 29,
+      "acuracia": 0.58,
+      "esquema_ok": 49,
+      "acuracia_esquema": 0.98,
+      "falhas_parsing": 0,
+      "taxa_falha_parsing": 0.0,
+      "erros_execucao": 0,
+      "taxa_erro_execucao": 0.0,
+      "falhas_por_tipo": {
+        "divergencia_semantica": 20,
+        "esquema": 1
+      },
+      "latencia_ms": {
+        "media": 3625.887,
+        "p50": 2701.787,
+        "p95": 3026.472,
+        "min": 2495.51,
+        "max": 46568.37
+      }
+    },
+    "por_tarefa": {
+      "governance_label": {
+        "total": 14,
+        "corretos": 5,
+        "acuracia": 0.357143,
+        "esquema_ok": 14,
+        "acuracia_esquema": 1.0,
+        "falhas_parsing": 0,
+        "taxa_falha_parsing": 0.0,
+        "erros_execucao": 0,
+        "taxa_erro_execucao": 0.0,
+        "falhas_por_tipo": {
+          "divergencia_semantica": 9
+        },
+        "latencia_ms": {
+          "media": 2691.738,
+          "p50": 2673.552,
+          "p95": 2784.409,
+          "min": 2638.76,
+          "max": 2800.728
+        }
+      },
+      "sondagem_extract": {
+        "total": 18,
+        "corretos": 12,
+        "acuracia": 0.666667,
+        "esquema_ok": 17,
+        "acuracia_esquema": 0.944444,
+        "falhas_parsing": 0,
+        "taxa_falha_parsing": 0.0,
+        "erros_execucao": 0,
+        "taxa_erro_execucao": 0.0,
+        "falhas_por_tipo": {
+          "divergencia_semantica": 5,
+          "esquema": 1
+        },
+        "latencia_ms": {
+          "media": 2955.103,
+          "p50": 2949.639,
+          "p95": 3034.253,
+          "min": 2873.102,
+          "max": 3055.371
+        }
+      },
+      "workflow_intent": {
+        "total": 18,
+        "corretos": 12,
+        "acuracia": 0.666667,
+        "esquema_ok": 18,
+        "acuracia_esquema": 1.0,
+        "falhas_parsing": 0,
+        "taxa_falha_parsing": 0.0,
+        "erros_execucao": 0,
+        "taxa_erro_execucao": 0.0,
+        "falhas_por_tipo": {
+          "divergencia_semantica": 6
+        },
+        "latencia_ms": {
+          "media": 5023.231,
+          "p50": 2556.833,
+          "p95": 9515.813,
+          "min": 2495.51,
+          "max": 46568.37
+        }
+      }
+    },
+    "por_idioma": {
+      "en": {
+        "total": 25,
+        "corretos": 14,
+        "acuracia": 0.56,
+        "esquema_ok": 24,
+        "acuracia_esquema": 0.96,
+        "falhas_parsing": 0,
+        "taxa_falha_parsing": 0.0,
+        "erros_execucao": 0,
+        "taxa_erro_execucao": 0.0,
+        "falhas_por_tipo": {
+          "divergencia_semantica": 10,
+          "esquema": 1
+        },
+        "latencia_ms": {
+          "media": 2753.85,
+          "p50": 2710.936,
+          "p95": 3012.751,
+          "min": 2523.458,
+          "max": 3030.526
+        }
+      },
+      "pt": {
+        "total": 25,
+        "corretos": 15,
+        "acuracia": 0.6,
+        "esquema_ok": 25,
+        "acuracia_esquema": 1.0,
+        "falhas_parsing": 0,
+        "taxa_falha_parsing": 0.0,
+        "erros_execucao": 0,
+        "taxa_erro_execucao": 0.0,
+        "falhas_por_tipo": {
+          "divergencia_semantica": 10
+        },
+        "latencia_ms": {
+          "media": 4497.925,
+          "p50": 2696.976,
+          "p95": 3043.7,
+          "min": 2495.51,
+          "max": 46568.37
+        }
+      }
+    },
+    "por_familia": {
+      "ambiguo": {
+        "total": 8,
+        "corretos": 2,
+        "acuracia": 0.25,
+        "esquema_ok": 8,
+        "acuracia_esquema": 1.0,
+        "falhas_parsing": 0,
+        "taxa_falha_parsing": 0.0,
+        "erros_execucao": 0,
+        "taxa_erro_execucao": 0.0,
+        "falhas_por_tipo": {
+          "divergencia_semantica": 6
+        },
+        "latencia_ms": {
+          "media": 2594.675,
+          "p50": 2596.233,
+          "p95": 2646.67,
+          "min": 2535.24,
+          "max": 2649.512
+        }
+      },
+      "incompleto": {
+        "total": 6,
+        "corretos": 1,
+        "acuracia": 0.166667,
+        "esquema_ok": 5,
+        "acuracia_esquema": 0.833333,
+        "falhas_parsing": 0,
+        "taxa_falha_parsing": 0.0,
+        "erros_execucao": 0,
+        "taxa_erro_execucao": 0.0,
+        "falhas_por_tipo": {
+          "divergencia_semantica": 4,
+          "esquema": 1
+        },
+        "latencia_ms": {
+          "media": 2772.605,
+          "p50": 2788.175,
+          "p95": 2874.396,
+          "min": 2645.03,
+          "max": 2874.828
+        }
+      },
+      "negativo": {
+        "total": 12,
+        "corretos": 4,
+        "acuracia": 0.333333,
+        "esquema_ok": 12,
+        "acuracia_esquema": 1.0,
+        "falhas_parsing": 0,
+        "taxa_falha_parsing": 0.0,
+        "erros_execucao": 0,
+        "taxa_erro_execucao": 0.0,
+        "falhas_por_tipo": {
+          "divergencia_semantica": 8
+        },
+        "latencia_ms": {
+          "media": 2795.832,
+          "p50": 2708.767,
+          "p95": 3025.57,
+          "min": 2638.76,
+          "max": 3030.526
+        }
+      },
+      "normal": {
+        "total": 24,
+        "corretos": 22,
+        "acuracia": 0.916667,
+        "esquema_ok": 24,
+        "acuracia_esquema": 1.0,
+        "falhas_parsing": 0,
+        "taxa_falha_parsing": 0.0,
+        "erros_execucao": 0,
+        "taxa_erro_execucao": 0.0,
+        "falhas_por_tipo": {
+          "divergencia_semantica": 2
+        },
+        "latencia_ms": {
+          "media": 4597.973,
+          "p50": 2917.68,
+          "p95": 3043.719,
+          "min": 2495.51,
+          "max": 46568.37
+        }
+      }
+    },
+    "confusao": {
+      "consulta_direta": {
+        "consulta_direta": 4
+      },
+      "triagem_area": {
+        "triagem_area": 4
+      },
+      "sondagem": {
+        "triagem_area": 2,
+        "hidrogeologia": 2,
+        "sondagem": 2
+      },
+      "hidrogeologia": {
+        "hidrogeologia": 4
+      },
+      "valido": {
+        "valido": 12
+      },
+      "erro_contrato": {
+        "erro_contrato": 2
+      },
+      "invalido": {
+        "invalido": 3,
+        "valido": 1
+      },
+      "HOLD": {
+        "HOLD": 10,
+        "PASS": 2
+      },
+      "FAIL": {
+        "HOLD": 1,
+        "FAIL": 1
+      }
+    },
+    "falhas": [
+      {
+        "id": "wf-pt-026",
+        "tarefa": "workflow_intent",
+        "idioma": "pt",
+        "erro_execucao": null,
+        "tipo_falha": "divergencia_semantica",
+        "diagnostico": "esquema válido, semântica divergente",
+        "falha_parsing": false,
+        "erro_parsing": null,
+        "erros_esquema": [],
+        "esperado": {
+          "intencao": "RIGEO_ONLY",
+          "workflow": "sondagem"
+        },
+        "obtido": {
+          "workflow": "triagem_area",
+          "intencao": "RIGEO_ONLY"
+        }
+      },
+      {
+        "id": "wf-en-026",
+        "tarefa": "workflow_intent",
+        "idioma": "en",
+        "erro_execucao": null,
+        "tipo_falha": "divergencia_semantica",
+        "diagnostico": "esquema válido, semântica divergente",
+        "falha_parsing": false,
+        "erro_parsing": null,
+        "erros_esquema": [],
+        "esperado": {
+          "intencao": "RIGEO_ONLY",
+          "workflow": "sondagem"
+        },
+        "obtido": {
+          "workflow": "triagem_area",
+          "intencao": "RIGEO_ONLY"
+        }
+      },
+      {
+        "id": "wf-pt-027",
+        "tarefa": "workflow_intent",
+        "idioma": "pt",
+        "erro_execucao": null,
+        "tipo_falha": "divergencia_semantica",
+        "diagnostico": "esquema válido, semântica divergente",
+        "falha_parsing": false,
+        "erro_parsing": null,
+        "erros_esquema": [],
+        "esperado": {
+          "intencao": "HIBRIDO",
+          "workflow": "sondagem"
+        },
+        "obtido": {
+          "workflow": "hidrogeologia",
+          "intencao": "RIGEO_ONLY"
+        }
+      },
+      {
+        "id": "wf-en-027",
+        "tarefa": "workflow_intent",
+        "idioma": "en",
+        "erro_execucao": null,
+        "tipo_falha": "divergencia_semantica",
+        "diagnostico": "esquema válido, semântica divergente",
+        "falha_parsing": false,
+        "erro_parsing": null,
+        "erros_esquema": [],
+        "esperado": {
+          "intencao": "HIBRIDO",
+          "workflow": "sondagem"
+        },
+        "obtido": {
+          "workflow": "hidrogeologia",
+          "intencao": "HIBRIDO"
+        }
+      },
+      {
+        "id": "wf-pt-048",
+        "tarefa": "workflow_intent",
+        "idioma": "pt",
+        "erro_execucao": null,
+        "tipo_falha": "divergencia_semantica",
+        "diagnostico": "esquema válido, semântica divergente",
+        "falha_parsing": false,
+        "erro_parsing": null,
+        "erros_esquema": [],
+        "esperado": {
+          "intencao": "LOCAL_ONLY",
+          "workflow": "hidrogeologia"
+        },
+        "obtido": {
+          "workflow": "hidrogeologia",
+          "intencao": "RIGEO_ONLY"
+        }
+      },
+      {
+        "id": "wf-en-048",
+        "tarefa": "workflow_intent",
+        "idioma": "en",
+        "erro_execucao": null,
+        "tipo_falha": "divergencia_semantica",
+        "diagnostico": "esquema válido, semântica divergente",
+        "falha_parsing": false,
+        "erro_parsing": null,
+        "erros_esquema": [],
+        "esperado": {
+          "intencao": "LOCAL_ONLY",
+          "workflow": "hidrogeologia"
+        },
+        "obtido": {
+          "workflow": "hidrogeologia",
+          "intencao": "HIBRIDO"
+        }
+      },
+      {
+        "id": "sd-pt-027",
+        "tarefa": "sondagem_extract",
+        "idioma": "pt",
+        "erro_execucao": null,
+        "tipo_falha": "divergencia_semantica",
+        "diagnostico": "esquema válido, semântica divergente",
+        "falha_parsing": false,
+        "erro_parsing": null,
+        "erros_esquema": [],
+        "esperado": {
+          "erro": "sem_linhas",
+          "situacao": "erro_contrato"
+        },
+        "obtido": {
+          "furo": "ESQUEMA",
+          "de_m": null,
+          "ate_m": null,
+          "espessura_m": null,
+          "unidade": "",
+          "litologia": "",
+          "situacao": "erro_contrato",
+          "erro": "cabecalhos_obrigatorios"
+        }
+      },
+      {
+        "id": "sd-en-027",
+        "tarefa": "sondagem_extract",
+        "idioma": "en",
+        "erro_execucao": null,
+        "tipo_falha": "esquema",
+        "diagnostico": "saída fora do esquema",
+        "falha_parsing": false,
+        "erro_parsing": null,
+        "erros_esquema": [
+          "erro:invalido"
+        ],
+        "esperado": {
+          "erro": "sem_linhas",
+          "situacao": "erro_contrato"
+        },
+        "obtido": {
+          "furo": "SCHEMA",
+          "de_m": null,
+          "ate_m": null,
+          "espessura_m": null,
+          "unidade": "",
+          "litologia": "",
+          "situacao": "erro_contrato",
+          "motivo": ""
+        }
+      },
+      {
+        "id": "sd-pt-046",
+        "tarefa": "sondagem_extract",
+        "idioma": "pt",
+        "erro_execucao": null,
+        "tipo_falha": "divergencia_semantica",
+        "diagnostico": "esquema válido, semântica divergente",
+        "falha_parsing": false,
+        "erro_parsing": null,
+        "erros_esquema": [],
+        "esperado": {
+          "ate_m": 2.0,
+          "de_m": null,
+          "espessura_m": null,
+          "furo": "FQ-45",
+          "litologia": "Solo",
+          "motivo": "de_invalido",
+          "situacao": "invalido",
+          "unidade": "m"
+        },
+        "obtido": {
+          "furo": "FQ-45",
+          "de_m": 1234.567,
+          "ate_m": 2,
+          "espessura_m": null,
+          "unidade": "m",
+          "litologia": "Solo",
+          "situacao": "invalido",
+          "motivo": "de_invalido;ate_invalido"
+        }
+      },
+      {
+        "id": "sd-en-046",
+        "tarefa": "sondagem_extract",
+        "idioma": "en",
+        "erro_execucao": null,
+        "tipo_falha": "divergencia_semantica",
+        "diagnostico": "esquema válido, semântica divergente",
+        "falha_parsing": false,
+        "erro_parsing": null,
+        "erros_esquema": [],
+        "esperado": {
+          "ate_m": 2.0,
+          "de_m": null,
+          "espessura_m": null,
+          "furo": "BH-45",
+          "litologia": "Soil",
+          "motivo": "de_invalido",
+          "situacao": "invalido",
+          "unidade": "m"
+        },
+        "obtido": {
+          "furo": "BH-45",
+          "de_m": 1.234567,
+          "ate_m": 2,
+          "espessura_m": 0.765433,
+          "unidade": "m",
+          "litologia": "Soil",
+          "situacao": "valido",
+          "motivo": ""
+        }
+      },
+      {
+        "id": "sd-pt-047",
+        "tarefa": "sondagem_extract",
+        "idioma": "pt",
+        "erro_execucao": null,
+        "tipo_falha": "divergencia_semantica",
+        "diagnostico": "esquema válido, semântica divergente",
+        "falha_parsing": false,
+        "erro_parsing": null,
+        "erros_esquema": [],
+        "esperado": {
+          "ate_m": null,
+          "de_m": null,
+          "espessura_m": null,
+          "furo": "FQ-46",
+          "litologia": "Solo",
+          "motivo": "unidade_invalida",
+          "situacao": "invalido",
+          "unidade": ""
+        },
+        "obtido": {
+          "furo": "FQ-46",
+          "de_m": 0.0,
+          "ate_m": 0.0,
+          "espessura_m": null,
+          "unidade": "jardas",
+          "litologia": "Solo",
+          "situacao": "invalido",
+          "motivo": "de_ausente;ate_ausente"
+        }
+      },
+      {
+        "id": "sd-en-047",
+        "tarefa": "sondagem_extract",
+        "idioma": "en",
+        "erro_execucao": null,
+        "tipo_falha": "divergencia_semantica",
+        "diagnostico": "esquema válido, semântica divergente",
+        "falha_parsing": false,
+        "erro_parsing": null,
+        "erros_esquema": [],
+        "esperado": {
+          "ate_m": null,
+          "de_m": null,
+          "espessura_m": null,
+          "furo": "BH-46",
+          "litologia": "Soil",
+          "motivo": "unidade_invalida",
+          "situacao": "invalido",
+          "unidade": ""
+        },
+        "obtido": {
+          "furo": "BH-46",
+          "de_m": 0.0,
+          "ate_m": 2.0,
+          "espessura_m": 2.0,
+          "unidade": "yards",
+          "litologia": "Soil",
+          "situacao": "invalido",
+          "motivo": "unidade_invalida"
+        }
+      }
+    ],
+    "total_falhas": 21
+  },
+  "db": {
+    "antes": {
+      "caminho": "D:\\curso IA\\projetos\\ia-generativa-python-integracoes\\ia-generativa-python-integracoes\\data\\nexusgeoia.db",
+      "origem": "config.DATA_DIR",
+      "principal": {
+        "caminho": "D:\\curso IA\\projetos\\ia-generativa-python-integracoes\\ia-generativa-python-integracoes\\data\\nexusgeoia.db",
+        "existe": true,
+        "tamanho": 131072,
+        "sha256": "cf876e9a49e07f8643e705b509dc080e43e42dcffdd41f20e269a08cc8564281"
+      },
+      "sidecars": [
+        {
+          "caminho": "D:\\curso IA\\projetos\\ia-generativa-python-integracoes\\ia-generativa-python-integracoes\\data\\nexusgeoia.db-wal",
+          "existe": true,
+          "tamanho": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "caminho": "D:\\curso IA\\projetos\\ia-generativa-python-integracoes\\ia-generativa-python-integracoes\\data\\nexusgeoia.db-shm",
+          "existe": true,
+          "tamanho": 32768,
+          "sha256": "fd4c9fda9cd3f9ae7c962b0ddf37232294d55580e1aa165aa06129b8549389eb"
+        }
+      ]
+    },
+    "depois": {
+      "caminho": "D:\\curso IA\\projetos\\ia-generativa-python-integracoes\\ia-generativa-python-integracoes\\data\\nexusgeoia.db",
+      "origem": "config.DATA_DIR",
+      "principal": {
+        "caminho": "D:\\curso IA\\projetos\\ia-generativa-python-integracoes\\ia-generativa-python-integracoes\\data\\nexusgeoia.db",
+        "existe": true,
+        "tamanho": 131072,
+        "sha256": "cf876e9a49e07f8643e705b509dc080e43e42dcffdd41f20e269a08cc8564281"
+      },
+      "sidecars": [
+        {
+          "caminho": "D:\\curso IA\\projetos\\ia-generativa-python-integracoes\\ia-generativa-python-integracoes\\data\\nexusgeoia.db-wal",
+          "existe": true,
+          "tamanho": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "caminho": "D:\\curso IA\\projetos\\ia-generativa-python-integracoes\\ia-generativa-python-integracoes\\data\\nexusgeoia.db-shm",
+          "existe": true,
+          "tamanho": 32768,
+          "sha256": "fd4c9fda9cd3f9ae7c962b0ddf37232294d55580e1aa165aa06129b8549389eb"
+        }
+      ]
+    },
+    "intocado": true,
+    "DB_INTOCADO": true,
+    "divergencias": [],
+    "diagnostico": {
+      "veredito": "INTOCADO",
+      "arquivos_comparados": 3,
+      "mensagem": "Banco intocado: tamanho e SHA-256 idênticos antes e depois (D:\\curso IA\\projetos\\ia-generativa-python-integracoes\\ia-generativa-python-integracoes\\data\\nexusgeoia.db; 3 arquivo(s) comparado(s))."
+    }
+  },
+  "db_intocado": true
+}

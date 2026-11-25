@@ -37,8 +37,8 @@ class TestIdentidadeOficial(unittest.TestCase):
 
     def test_nome_e_versao(self):
         self.assertEqual(APP_NAME, "NexusGeo IA")
-        self.assertEqual(APP_VERSION, "0.9.0")
-        self.assertEqual(APP_DISPLAY_NAME, "NexusGeo IA v0.9.0")
+        self.assertEqual(APP_VERSION, "1.0.0")
+        self.assertEqual(APP_DISPLAY_NAME, "NexusGeo IA v1.0.0")
 
     def test_diretorio_localappdata_sem_espacos(self):
         self.assertEqual(NOME_APLICATIVO, "NexusGeoIA")

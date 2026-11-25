@@ -42,6 +42,13 @@ from pathlib import Path
 from typing import Callable, Sequence
 
 from config import DATA_DIR
+from services.progress_service import (
+    ETAPA_DOCUMENTO_OCR,
+    ETAPA_DOCUMENTO_PAGINA,
+    CancelamentoSolicitado,
+    relatar,
+    verificar_cancelamento,
+)
 
 # ``utils.i18n`` resolve o streamlit de forma tardia: importar este módulo
 # (e validar limites em CLI/testes) não carrega o runtime da interface nem
@@ -87,9 +94,9 @@ PROPORCAO_LINHAS_REPETIDAS = 0.6
 MINIMO_PAGINAS_REPETICAO = 3
 TAMANHO_MAXIMO_LINHA_REPETIDA = 120
 
-# Assinatura do tipo de callback de progresso: fração de 0.0 a 1.0 e um
-# texto curto para a interface (ex.: "página 4/27 · OCR").
-Progresso = Callable[[float, str], None]
+# Assinatura do tipo de callback de progresso (Fase D3a):
+# (etapa, fração de 0.0 a 1.0 ou None, detalhe técnico curto).
+Progresso = Callable[[str, float | None, str], None]
 
 PADRAO_MARCADOR_PAGINA = re.compile(
     r"<!--\s*P[áa]gina\s+(\d+)\s*(\(OCR\))?\s*-->",
@@ -900,6 +907,7 @@ def _extrair_pagina_pdf(
 def _converter_pdf(
     caminho: Path,
     progresso: Progresso | None,
+    cancelamento=None,
 ) -> tuple[str, int, int, list[str]]:
     """Converte o PDF inteiro; devolve ``(markdown, páginas, OCR, avisos)``."""
 
@@ -933,10 +941,14 @@ def _converter_pdf(
         total_ocr = 0
 
         for indice in range(total):
-            _reportar_progresso(
+            # Contrato D3a: o cancelamento é verificado antes e depois
+            # de cada página, inclusive no caminho de OCR.
+            verificar_cancelamento(cancelamento, ETAPA_DOCUMENTO_PAGINA)
+            relatar(
                 progresso,
+                ETAPA_DOCUMENTO_PAGINA,
                 (indice + 1) / total,
-                f"página {indice + 1}/{total}",
+                f"{indice + 1}/{total}",
             )
 
             texto, usou_ocr, avisos_pagina = _extrair_pagina_pdf(
@@ -945,13 +957,17 @@ def _converter_pdf(
                 indice,
             )
 
+            verificar_cancelamento(cancelamento, ETAPA_DOCUMENTO_PAGINA)
+
             if usou_ocr:
                 total_ocr += 1
-                _reportar_progresso(
+                relatar(
                     progresso,
+                    ETAPA_DOCUMENTO_OCR,
                     (indice + 1) / total,
-                    f"página {indice + 1}/{total} · OCR",
+                    f"{indice + 1}/{total}",
                 )
+                verificar_cancelamento(cancelamento, ETAPA_DOCUMENTO_OCR)
 
             for aviso in avisos_pagina:
                 if aviso not in avisos:
@@ -980,22 +996,6 @@ def _converter_pdf(
     )
 
     return markdown, total, total_ocr, avisos
-
-
-def _reportar_progresso(
-    progresso: Progresso | None,
-    fracao: float,
-    texto: str,
-) -> None:
-    """Chama o callback de progresso sem deixar a UI derrubar a conversão."""
-
-    if progresso is None:
-        return
-
-    try:
-        progresso(max(0.0, min(1.0, fracao)), texto)
-    except Exception:
-        pass
 
 
 # ---------------------------------------------------------------------------
@@ -1044,15 +1044,20 @@ def converter_arquivo(
     *,
     forcar: bool = False,
     progresso: Progresso | None = None,
+    cancelamento=None,
 ) -> ResultadoMarkdown:
     """Converte um documento em Markdown, reaproveitando o cache em disco.
 
-    ``forcar=True`` ignora o cache e reconverte (útil depois de mudar
-    regras de limpeza). ``progresso`` recebe ``(fração, texto)`` — para
-    PDFs, a cada página; para arquivos de texto, uma única chamada.
+    forcar=True ignora o cache e reconverte (útil depois de mudar regras
+    de limpeza). progresso segue o contrato de services.progress_service:
+    (etapa, fração, detalhe), com uma chamada por página de PDF.
+    cancelamento é um threading.Event verificado antes e depois de cada
+    página; ao cancelar, nenhum cache parcial é publicado.
     """
 
     caminho_origem = Path(caminho_origem)
+
+    verificar_cancelamento(cancelamento, ETAPA_DOCUMENTO_PAGINA)
 
     if not caminho_origem.is_file():
         raise ErroConversao(f"O arquivo {caminho_origem.name} não existe.")
@@ -1078,7 +1083,9 @@ def converter_arquivo(
     # Markdown já é o formato final: o próprio original é a fonte, sem
     # cópia de cache (e sem reescrever o arquivo do usuário).
     if sufixo == ".md":
+        verificar_cancelamento(cancelamento, ETAPA_DOCUMENTO_PAGINA)
         markdown, paginas, paginas_ocr, avisos = _converter_texto(caminho_origem)
+        verificar_cancelamento(cancelamento, ETAPA_DOCUMENTO_PAGINA)
         titulo = _titulo_do_arquivo(caminho_origem)
 
         return ResultadoMarkdown(
@@ -1100,41 +1107,54 @@ def converter_arquivo(
         if resultado is not None:
             return resultado
 
-    _reportar_progresso(progresso, 0.0, "preparando")
+    relatar(progresso, ETAPA_DOCUMENTO_PAGINA, 0.0, "")
 
-    if sufixo == ".pdf":
-        markdown, paginas, paginas_ocr, avisos = _converter_pdf(
-            caminho_origem,
-            progresso,
+    try:
+        if sufixo == ".pdf":
+            markdown, paginas, paginas_ocr, avisos = _converter_pdf(
+                caminho_origem,
+                progresso,
+                cancelamento,
+            )
+        else:
+            verificar_cancelamento(cancelamento, ETAPA_DOCUMENTO_PAGINA)
+            markdown, paginas, paginas_ocr, avisos = _converter_texto(
+                caminho_origem
+            )
+            verificar_cancelamento(cancelamento, ETAPA_DOCUMENTO_PAGINA)
+            relatar(progresso, ETAPA_DOCUMENTO_PAGINA, 1.0, "")
+
+        caracteres = _caracteres_do_conteudo(
+            markdown,
+            _titulo_do_arquivo(caminho_origem),
         )
-    else:
-        markdown, paginas, paginas_ocr, avisos = _converter_texto(caminho_origem)
-        _reportar_progresso(progresso, 1.0, "texto convertido")
+        caminho_md = caminho_markdown(caminho_origem)
 
-    caracteres = _caracteres_do_conteudo(
-        markdown,
-        _titulo_do_arquivo(caminho_origem),
-    )
-    caminho_md = caminho_markdown(caminho_origem)
-
-    # O cache é gravado mesmo quando o resultado é inválido: assim a
-    # listagem da barra lateral não repete OCR de um arquivo já avaliado.
-    _gravar_texto_atomico(caminho_md, markdown)
-    _gravar_json_atomico(
-        _caminho_meta(caminho_md),
-        {
-            "versao": VERSAO_PARSER,
-            "origem": str(caminho_origem.resolve()),
-            "sha256": assinatura["sha256"],
-            "mtime_ns": assinatura["mtime_ns"],
-            "tamanho": assinatura["tamanho"],
-            "paginas": paginas,
-            "paginas_ocr": paginas_ocr,
-            "caracteres_uteis": caracteres,
-            "avisos": avisos,
-            "gerado_em": datetime.now(timezone.utc).isoformat(),
-        },
-    )
+        # O cache é gravado mesmo quando o resultado é inválido: assim a
+        # listagem da barra lateral não repete OCR de um arquivo já avaliado.
+        # O cancelamento é reconferido antes e depois da escrita atômica.
+        verificar_cancelamento(cancelamento, ETAPA_DOCUMENTO_PAGINA)
+        _gravar_texto_atomico(caminho_md, markdown)
+        _gravar_json_atomico(
+            _caminho_meta(caminho_md),
+            {
+                "versao": VERSAO_PARSER,
+                "origem": str(caminho_origem.resolve()),
+                "sha256": assinatura["sha256"],
+                "mtime_ns": assinatura["mtime_ns"],
+                "tamanho": assinatura["tamanho"],
+                "paginas": paginas,
+                "paginas_ocr": paginas_ocr,
+                "caracteres_uteis": caracteres,
+                "avisos": avisos,
+                "gerado_em": datetime.now(timezone.utc).isoformat(),
+            },
+        )
+        verificar_cancelamento(cancelamento, ETAPA_DOCUMENTO_PAGINA)
+    except CancelamentoSolicitado:
+        # Nenhum .md/.json parcial deve sobreviver ao cancelamento.
+        remover_cache(caminho_origem)
+        raise
 
     return ResultadoMarkdown(
         origem=caminho_origem,

@@ -29,14 +29,17 @@ brasileiro (IBGE/DSG), conferida com o exemplo clássico
 ``SF-22-Y-D-I-1`` (φ = 23°04' S, λ = 52°24' W):
 
 - ``1:1.000.000`` — hemisfério (``S``/``N``) + banda de 4° em latitude
-  (``A`` = 0°–4°, ``B`` = 4°–8°, …) + coluna de 6° em longitude
-  (``1`` começa em 180° W), por exemplo ``SA.20``;
+  (``A`` = 0°–4°, ``B`` = 4°–8°, … até ``I`` = 32°–36°, que cobre o
+  extremo sul do Brasil) + coluna de 6° em longitude (``1`` começa em
+  180° W), por exemplo ``SA.20`` ou ``SI.22``;
 - ``1:500.000`` — quatro quadrantes ``V`` (NO), ``X`` (NE), ``Y`` (SO)
   e ``Z`` (SE), lidos da esquerda para a direita e de cima para baixo;
 - ``1:250.000`` — quatro quadrantes ``A`` (NO), ``B`` (NE), ``C`` (SO)
   e ``D`` (SE);
 - ``1:100.000`` — seis quadrantes ``I`` a ``VI`` em duas linhas de três;
-- ``1:50.000`` — quatro quadrantes ``1`` a ``4`` em duas linhas de dois.
+- ``1:50.000`` — quatro quadrantes ``1`` a ``4`` em duas linhas de dois;
+- ``1:25.000`` — mais quatro quadrantes ``1`` a ``4``, recortando a
+  folha de 1:50.000 em duas linhas de dois.
 
 Os limites são calculados a partir do código, e o centróide é o centro
 geométrico da folha. O código aceita ponto ou hífen depois da zona
@@ -56,13 +59,13 @@ Limitações assumidas
   citado é tratado como WGS84, como fazem as APIs consultadas.
 """
 
-import csv
-import io
 import math
 import re
 import unicodedata
 
 import pandas as pd
+
+from services.exportacao_segura import gerar_csv_seguro
 
 # ---------------------------------------------------------------------------
 # Camadas e cores
@@ -231,13 +234,14 @@ _ROMANOS = {
 _SEPARADOR = r"\s*[.\-\u2013\u2014]\s*"
 
 _PADRAO_CIM = re.compile(
-    r"\b(?P<hemisferio>[SN])(?P<banda>[A-H])"
+    r"\b(?P<hemisferio>[SN])(?P<banda>[A-I])"
     + _SEPARADOR
     + r"(?P<coluna>\d{1,2})"
     + r"(?:" + _SEPARADOR + r"(?P<q500>[VXYZ]))?"
     + r"(?:" + _SEPARADOR + r"(?P<q250>[A-D]))?"
     + r"(?:" + _SEPARADOR + r"(?P<q100>VI|IV|V|III|II|I))?"
-    + r"(?:" + _SEPARADOR + r"(?P<q50>[1-4]))?",
+    + r"(?:" + _SEPARADOR + r"(?P<q50>[1-4]))?"
+    + r"(?:" + _SEPARADOR + r"(?P<q25>[1-4]))?",
     re.IGNORECASE,
 )
 
@@ -247,6 +251,7 @@ _ESCALAS_CIM = (
     "1:250.000",
     "1:100.000",
     "1:50.000",
+    "1:25.000",
 )
 
 def _subdividir(caixa, linhas, colunas, linha, coluna):
@@ -289,10 +294,11 @@ def _formatar_limites(caixa):
 def decodificar_folha_cim(codigo):
     """Interpreta um código CIM e devolve limite, centro e escala.
 
-    Aceita as leituras de 1:1.000.000 até 1:50.000 (``SA.20``,
-    ``SB.21-X-B``, ``SC.22-Z-D-IV``, ``SD.23-Y-C-IV-3``). Devolve
+    Aceita as leituras de 1:1.000.000 até 1:25.000 (``SA.20``,
+    ``SB.21-X-B``, ``SC.22-Z-D-IV``, ``SD.23-Y-C-IV-3``,
+    ``SD.23-Y-C-IV-3-2`` e ``SI.22``). Devolve
     ``None`` quando o código não é uma folha válida: hemisfério fora de
-    ``S``/``N``, banda fora de ``A``–``H`` ou coluna fora de 1–60.
+    ``S``/``N``, banda fora de ``A``–``I`` ou coluna fora de 1–60.
 
     A chave ``codigo`` sai normalizada (maiúsculas, ponto depois da zona
     e hífen entre as subdivisões), independentemente de como o texto
@@ -338,6 +344,7 @@ def decodificar_folha_cim(codigo):
     q250 = (encontrado.group("q250") or "").upper()
     q100 = (encontrado.group("q100") or "").upper()
     q50 = encontrado.group("q50") or ""
+    q25 = encontrado.group("q25") or ""
 
     if q500:
         if q500 not in _QUADRANTES:
@@ -369,6 +376,15 @@ def decodificar_folha_cim(codigo):
             return None
 
         partes.append(q50)
+        caixa = _subdividir(caixa, 2, 2, (numero - 1) // 2, (numero - 1) % 2)
+
+    if q25:
+        numero = int(q25)
+
+        if numero not in (1, 2, 3, 4):
+            return None
+
+        partes.append(q25)
         caixa = _subdividir(caixa, 2, 2, (numero - 1) // 2, (numero - 1) % 2)
 
     lat, lon = _centro(caixa)
@@ -1323,20 +1339,13 @@ def gerar_csv_pontos(feicoes):
 
     O ponto decimal é mantido nas coordenadas de propósito: é o formato
     que o QGIS interpreta como campo numérico sem depender da
-    configuração regional, e o BOM garante os acentos no Excel.
+    configuração regional, e o BOM garante os acentos no Excel. A
+    neutralização de fórmulas é centralizada em
+    services.exportacao_segura e cobre =, +, -, @, tabulação, CR e LF.
     """
 
-    buffer = io.StringIO()
-    escritor = csv.writer(
-        buffer,
-        delimiter=";",
-        lineterminator="\r\n",
-        quoting=csv.QUOTE_MINIMAL,
-    )
-    escritor.writerow(CABECALHO_CSV)
-
-    for feicao in feicoes or []:
-        escritor.writerow([
+    registros = [
+        [
             feicao.get("nome") or "",
             feicao.get("camada") or "",
             _formatar_valor_coordenada(feicao.get("lat")),
@@ -1347,6 +1356,17 @@ def gerar_csv_pontos(feicoes):
             _formatar_valor_coordenada(feicao.get("lon_min")),
             _formatar_valor_coordenada(feicao.get("lon_max")),
             feicao.get("detalhe") or "",
-        ])
+        ]
+        for feicao in (feicoes or [])
+        if isinstance(feicao, dict)
+    ]
 
-    return ("\ufeff" + buffer.getvalue()).encode("utf-8")
+    tabela = pd.DataFrame(registros, columns=CABECALHO_CSV)
+
+    return gerar_csv_seguro(
+        tabela,
+        separador=";",
+        decimal=".",
+        codificacao="utf-8-sig",
+        terminador="\r\n",
+    )

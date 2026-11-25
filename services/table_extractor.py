@@ -36,6 +36,11 @@ from typing import Any, Iterable, Sequence
 import pandas as pd
 
 from services import document_parser
+from services.exportacao_segura import (
+    forcar_texto_openpyxl,
+    gerar_csv_seguro,
+    neutralizar_formula,
+)
 
 # ---------------------------------------------------------------------------
 # Limites de segurança
@@ -1572,46 +1577,25 @@ def nome_arquivo_tabela(tabela: dict, extensao: str) -> str:
     return "_".join(parte for parte in partes if parte) + f".{extensao}"
 
 
-_CARACTERES_FORMULA = ("=", "+", "-", "@", "\t", "\r")
-
-
 def _neutralizar_formula_csv(valor):
-    """Prefixa apóstrofo para o Excel tratar o valor como texto.
+    """Compatibilidade interna: delega à função central da Fase D2."""
 
-    Dados de APIs públicas, documentos enviados pelo usuário e respostas
-    do LLM são não confiáveis. Uma célula iniciada por ``=``, ``+``,
-    ``-`` ou ``@`` pode virar fórmula ao abrir o CSV no Excel.
-    """
-
-    if isinstance(valor, str) and valor.startswith(_CARACTERES_FORMULA):
-        return "'" + valor
-
-    return valor
+    return neutralizar_formula(valor)
 
 
 def _forcar_texto_no_excel(aba):
-    """Impede que o openpyxl grave células perigosas como fórmula.
+    """Compatibilidade interna: delega à função central da Fase D2."""
 
-    O pandas/openpyxl transforma automaticamente strings iniciadas por
-    ``=`` em células do tipo ``f`` (fórmula). Forçar ``data_type = "s"``
-    mantém o valor exatamente como veio da fonte, sem executar nada ao
-    abrir o arquivo.
-    """
-
-    for linha in aba.iter_rows():
-        for celula in linha:
-            if isinstance(celula.value, str) and celula.value.startswith(
-                _CARACTERES_FORMULA
-            ):
-                celula.data_type = "s"
+    return forcar_texto_openpyxl(aba)
 
 
 def gerar_csv(tabela: dict) -> bytes:
     """CSV UTF-8 (com BOM), separador ``;`` e decimal com vírgula.
 
     É o formato que o Excel em português abre com duplo clique e que o
-    QGIS importa diretamente como camada de texto delimitado. Células que
-    começam com caracteres de fórmula recebem um apóstrofo de proteção.
+    QGIS importa diretamente como camada de texto delimitado. A
+    neutralização de fórmulas vem de services.exportacao_segura e cobre
+    =, +, -, @, tabulação, CR e LF.
     """
 
     df = tabela.get("df_limpo")
@@ -1622,20 +1606,13 @@ def gerar_csv(tabela: dict) -> bytes:
     if df is None:
         return b""
 
-    df = df.copy()
-    df.columns = [
-        _neutralizar_formula_csv(str(coluna)) for coluna in df.columns
-    ]
-
-    df = df.map(_neutralizar_formula_csv)
-
-    return df.to_csv(
-        index=False,
-        sep=";",
+    return gerar_csv_seguro(
+        df,
+        separador=";",
         decimal=",",
-        encoding="utf-8-sig",
-        lineterminator="\r\n",
-    ).encode("utf-8-sig")
+        codificacao="utf-8-sig",
+        terminador="\r\n",
+    )
 
 
 def _formatar_aba_excel(aba, df: pd.DataFrame) -> None:

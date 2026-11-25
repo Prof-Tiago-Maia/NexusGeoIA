@@ -133,3 +133,10 @@ estrutura.txt
 Thumbs.db
 Desktop.ini
 $RECYCLE.BIN/
+
+# Pesos e checkpoints de treino LoRA (>50 MB)
+finetuning/adaptadores/
+*.safetensors
+*.pt
+*.gguf
+

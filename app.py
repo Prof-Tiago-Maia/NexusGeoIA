@@ -53,7 +53,6 @@ fontes, tanto na resposta nova quanto ao renderizar o histórico.
 import json
 import os
 import re
-import threading
 import urllib.parse
 from importlib import import_module
 from pathlib import Path
@@ -94,9 +93,8 @@ if _CAMINHO_CERTIFICADOS and os.path.isfile(_CAMINHO_CERTIFICADOS):
 import pandas as pd
 import requests
 import streamlit as st
-import streamlit.components.v1 as components
 
-from config import APP_NAME, APP_VERSION, OLLAMA_HOST, OLLAMA_MODEL
+from config import APP_NAME, APP_VERSION, OLLAMA_HOST
 from core.analytical_profiles import (
     PERFIL_PADRAO,
     PERFIL_PERSONALIZADO,
@@ -104,15 +102,16 @@ from core.analytical_profiles import (
     dados_do_perfil,
     detectar_perfil,
     montar_prompt_do_perfil,
-    remover_blocos_de_perfil
+    remover_blocos_de_perfil,
 )
 from core.assistant import responder
+from core.governance import avaliar_governanca, resultado_falha_fonte
 from core.prompt_manager import (
     PromptBaseAusenteError,
     carregar_prompt_base,
-    salvar_prompt_base
+    salvar_prompt_base,
 )
-from services import document_parser
+from services import document_parser, progress_service
 from services.external_api_service import (
     COMUNIDADE_TODAS,
     COMUNIDADES_RIGEO,
@@ -124,23 +123,14 @@ from services.external_api_service import (
     montar_tabela_processos_anm,
     montar_tabela_servicos_geologicos,
     montar_tabela_unidades_macrostrat,
-    web_disponivel
+    web_disponivel,
 )
 from services.glossario_bilingue import rotulo_idioma
-from services.history_service import (
-    HistoricoError,
-    agora_iso,
-    carregar_conversa,
-    excluir_conversa,
-    excluir_todas_conversas,
-    gerar_titulo,
-    listar_conversas,
-    novo_session_id,
-    salvar_conversa
-)
+from services.history_service import agora_iso, gerar_titulo, novo_session_id
 from services.llm_service import (
     garantir_ollama_ativo,
-    listar_modelos_locais
+    listar_modelos_locais,
+    modelo_padrao_do_sistema,
 )
 from services.rag_service import (
     DocumentoInvalidoError,
@@ -149,30 +139,31 @@ from services.rag_service import (
     limpar_cache,
     listar_documentos,
     mensagem_arquivo_sem_texto,
-    salvar_documento
+    salvar_documento,
 )
 from services.report_generator import (
     RelatorioError,
     gerar_parecer_docx,
     gerar_parecer_markdown,
-    nome_arquivo_parecer
+    nome_arquivo_parecer,
 )
-from services.spatial_parser import (
-    consolidar_pontos_mapa,
-    gerar_csv_pontos
-)
+from services.spatial_parser import consolidar_pontos_mapa, gerar_csv_pontos
 from services.table_extractor import (
     chave_registro,
     consolidar_dados_sessao,
     extrair_tabelas_documento,
     gerar_csv,
     gerar_excel,
-    nome_arquivo_tabela
+    nome_arquivo_tabela,
 )
+from ui import progresso_consulta as ui_progresso_consulta
+from ui import sidebar as ui_sidebar
+from ui import tab_chat as ui_tab_chat
+from ui import tab_sondagem as ui_tab_sondagem
+from ui import tab_spatial as ui_tab_spatial
+from ui import workstation_layout as ui_workstation
 from utils.i18n import (
     IDIOMA_PADRAO,
-    NOMES_IDIOMA,
-    ROTULOS_IDIOMA,
     descricao_perfil,
     perfil_do_rotulo,
     regiao_do_rotulo,
@@ -181,7 +172,7 @@ from utils.i18n import (
     rotulo_perfil,
     rotulo_regiao,
     t,
-    tf
+    tf,
 )
 
 # Endereço do Ollama sem o esquema, apenas para o badge do cabeçalho.
@@ -331,24 +322,25 @@ CONECTORES_FASE_2 = (
 # cabeçalho.
 GRUPOS_CONECTORES = (
     {
-        "titulo_i18n": "grupo_acervo_web",
-        "chaves": ("rigeo_enabled", "web_search_enabled"),
+        "titulo_i18n": "grupo_geologia_geofisica",
+        "chaves": (
+            "rigeo_enabled",
+            "geossit_enabled",
+            "macrostrat_enabled",
+            "intl_geo_enabled",
+        ),
     },
     {
-        "titulo_i18n": "grupo_hidrologia",
+        "titulo_i18n": "grupo_recursos_minerais_anm",
+        "chaves": ("geosgb_enabled", "anm_enabled"),
+    },
+    {
+        "titulo_i18n": "grupo_hidrogeologia_hidricos",
         "chaves": ("ana_enabled", "siagas_enabled"),
     },
     {
-        "titulo_i18n": "grupo_recursos_minerais",
-        "chaves": ("geosgb_enabled", "anm_enabled", "geossit_enabled"),
-    },
-    {
-        "titulo_i18n": "grupo_bases_cientificas",
-        "chaves": (
-            "macrostrat_enabled",
-            "openalex_enabled",
-            "intl_geo_enabled",
-        ),
+        "titulo_i18n": "grupo_literatura_apoio",
+        "chaves": ("openalex_enabled", "web_search_enabled"),
     },
 )
 
@@ -679,8 +671,8 @@ header[data-testid="stHeader"] {{
 
 /* O ``<hr>`` traz margem vertical de 2em do tema; 0.25rem basta para o
    fio não encostar no texto acima nem no título abaixo. A cor de borda é
-   um cinza-azulado translúcido que fica visível e harmônico tanto sobre o
-   fundo escuro quanto sobre o claro, sem depender do tema ativo. */
+   um cinza-azulado translúcido, harmônico sobre o fundo escuro fixo do
+   Workstation GIS Dark Mode (#0E1117). */
 [data-testid="stSidebar"] hr {{
     margin: 0.25rem 0 !important;
     border-color: rgba(139, 148, 158, 0.30) !important;
@@ -969,12 +961,87 @@ header[data-testid="stHeader"] {{
 .st-key-guia_rapido [data-testid="stCaptionContainer"] {{
     line-height: 1.4;
 }}
+
+/* 7. Semântica epistêmica da Workstation (Fase D4) ------------------- */
+
+/* Cores reservadas para OBSERVED (ancorado em evidence_id/fonte
+   rastreada) e INFERRED (síntese interpretativa do modelo). São as
+   únicas regras que usam o verde e o âmbar epistêmicos: nenhum outro
+   elemento da interface deve reutilizá-los. */
+.nx-epistemic {{
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    margin: 0.35rem 0 0.15rem 0;
+}}
+
+.nx-epistemic-linha {{
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}}
+
+.nx-epistemic-valor {{
+    font-variant-numeric: tabular-nums;
+    font-size: 0.8rem;
+    opacity: 0.8;
+}}
+
+.nx-chip {{
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    padding: 0.12rem 0.55rem;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+}}
+
+.nx-observed {{
+    color: #3FB950;
+    border: 1px solid #2EA043;
+    background-color: rgba(46, 160, 67, 0.14);
+}}
+
+.nx-inferred {{
+    color: #E3B341;
+    border: 1px solid #D29922;
+    background-color: rgba(210, 153, 34, 0.14);
+}}
+
+.nx-bar-track {{
+    width: 100%;
+    height: 0.45rem;
+    border-radius: 999px;
+    overflow: hidden;
+    background-color: #161B22;
+    border: 1px solid rgba(230, 237, 243, 0.14);
+}}
+
+.nx-bar-fill {{
+    height: 100%;
+    border-radius: 999px;
+    transition: width 0.25s ease;
+}}
+
+.nx-bar-observed {{
+    background-color: #2EA043;
+}}
+
+.nx-bar-inferred {{
+    background-color: #D29922;
+}}
+
 </style>
 """
 
 # Script injetado na barra superior para traduzir os rótulos nativos do
-# Streamlit. Roda dentro de um iframe de altura zero e observa apenas a
-# barra superior, o menu principal, o widget de status (barra de execução e
+# Streamlit. Roda dentro de um iframe de 1 px (visualmente invisível) e
+# observa apenas a barra superior, o menu principal, o widget de status
+# (barra de execução e
 # aviso de arquivo alterado) e os popovers desse menu, sem tocar no conteúdo
 # das mensagens do chat nem nas tabelas técnicas.
 SCRIPT_TRADUCAO_INTERFACE = """
@@ -1162,7 +1229,7 @@ SCRIPT_TRADUCAO_INTERFACE = """
 """
 
 # O crédito exibido no menu nativo do Streamlit usa as constantes
-# oficiais de ``config.py`` (valor final: "NexusGeo IA v0.9.0"); o
+# oficiais de ``config.py`` (valor final: "NexusGeo IA v1.0.0"); o
 # placeholder evita quebrar as chaves das expressões JavaScript dentro
 # da string.
 SCRIPT_TRADUCAO_INTERFACE = SCRIPT_TRADUCAO_INTERFACE.replace(
@@ -1174,7 +1241,7 @@ SCRIPT_TRADUCAO_INTERFACE = SCRIPT_TRADUCAO_INTERFACE.replace(
 def _traduzir_interface_streamlit():
     """Traduz a barra superior, o status e o menu do Streamlit.
 
-    Injeta um iframe de altura zero com um ``MutationObserver`` leve que
+    Injeta um iframe de 1 px (invisível) com um ``MutationObserver`` leve que
     atua somente na barra superior (``stHeader``/``stToolbar``/
     ``stMainMenu``/``stMainMenuList``), no widget de status
     (``stStatusWidget``) e nos popovers do menu principal. Os textos
@@ -1191,7 +1258,9 @@ def _traduzir_interface_streamlit():
     seria um efeito colateral indesejado.
     """
 
-    components.html(SCRIPT_TRADUCAO_INTERFACE, height=0)
+    # ``st.iframe`` recusa altura 0; 1 px mantém o iframe invisível e
+    # executa o script no mesmo contexto que o antigo components.html.
+    st.iframe(SCRIPT_TRADUCAO_INTERFACE, height=1, alt=APP_NAME)
 
 
 # Idioma da interface: "pt" (Português do Brasil, padrão) ou "en"
@@ -1507,33 +1576,6 @@ def _chave_resposta_atual():
     )
 
 
-def _salvar_conversa_atual():
-    """Grava a conversa da sessão em ``data/historico``.
-
-    Chamada silenciosa (autosave e "Novo Chat"): a conversa só é gravada
-    quando já existe mensagem, e o resultado não gera aviso de sucesso —
-    só falhas de disco viram aviso, para que a perda não passe
-    despercebida.
-    """
-
-    mensagens = st.session_state.get("mensagens") or []
-
-    if not mensagens:
-        return
-
-    try:
-        salvo = salvar_conversa(
-            st.session_state.session_id,
-            st.session_state.get("titulo_conversa"),
-            mensagens
-        )
-    except HistoricoError as erro:
-        st.session_state["historico_aviso"] = ("erro", str(erro))
-        return
-
-    if salvo:
-        st.session_state["conversa_ativa_salva"] = True
-
 
 def _nova_mensagem(papel, conteudo, **metadados):
     """Monta a mensagem com a chave de widgets e a data de criação.
@@ -1555,233 +1597,6 @@ def _nova_mensagem(papel, conteudo, **metadados):
     return mensagem
 
 
-def _abrir_conversa(session_id):
-    """Carrega uma conversa salva no ``st.session_state``.
-
-    É usada como ``on_click`` do item do histórico: o callback roda antes
-    do redesenho da página, então a conversa já aparece na primeira
-    execução, sem precisar de ``st.rerun``.
-    """
-
-    conversa = carregar_conversa(session_id)
-
-    if conversa is None:
-        st.session_state["historico_aviso"] = (
-            "erro",
-            t("aviso_abrir_erro")
-        )
-        return
-
-    # A chave de widgets de cada mensagem é a posição dela na conversa;
-    # ela é recalculada aqui para que um arquivo de outra versão (ou
-    # editado à mão) não quebre as chaves.
-    mensagens = []
-
-    for indice, mensagem in enumerate(conversa["mensagens"]):
-        mensagem = dict(mensagem)
-        mensagem["chave"] = indice
-        mensagens.append(mensagem)
-
-    st.session_state.mensagens = mensagens
-    st.session_state.session_id = conversa["id"]
-    st.session_state.titulo_conversa = conversa["titulo"]
-    st.session_state.criado_em = conversa["criado_em"]
-    st.session_state.conversa_ativa_salva = True
-    st.session_state.sequencia_resposta = len(mensagens)
-
-
-def _nova_conversa():
-    """Inicia uma conversa em branco, mantendo os documentos indexados.
-
-    A conversa anterior é gravada antes; o ``session_id``, o título e a
-    data de criação passam a ser novos, e a lista de mensagens fica
-    vazia — a tela inicial (Empty State) volta a aparecer, sem tocar em
-    ``data/docs``. As confirmações pendentes (exclusão total do
-    histórico) são desarmadas, para um clique no rodapé não apagar nada
-    por engano depois de trocar de conversa.
-    """
-
-    _salvar_conversa_atual()
-
-    st.session_state.session_id = novo_session_id()
-    st.session_state.criado_em = agora_iso()
-    st.session_state.titulo_conversa = ""
-    st.session_state.mensagens = []
-    st.session_state.conversa_ativa_salva = False
-    st.session_state.sequencia_resposta = 0
-    st.session_state["confirmar_apagar_tudo"] = False
-
-
-def _excluir_conversa(session_id):
-    """Apaga uma conversa do histórico.
-
-    Se ela for a conversa aberta no momento, a tela volta ao Empty State
-    com um novo ``session_id``; caso contrário, a conversa atual
-    permanece intacta.
-    """
-
-    try:
-        excluida = excluir_conversa(session_id)
-    except HistoricoError as erro:
-        st.session_state["historico_aviso"] = ("erro", str(erro))
-        return
-
-    if session_id == st.session_state.session_id:
-        st.session_state.session_id = novo_session_id()
-        st.session_state.criado_em = agora_iso()
-        st.session_state.titulo_conversa = ""
-        st.session_state.mensagens = []
-        st.session_state.conversa_ativa_salva = False
-        st.session_state.sequencia_resposta = 0
-
-    if excluida:
-        st.session_state["historico_aviso"] = (
-            "sucesso",
-            t("aviso_conversa_excluida")
-        )
-
-
-def _apagar_todo_historico():
-    """Apaga todas as conversas salvas e reinicia a conversa da sessão.
-
-    Chamada somente depois da confirmação em duas etapas do rodapé. A
-    exclusão em massa atinge apenas ``data/historico``: os documentos
-    indexados em ``data/docs`` continuam intactos.
-
-    A tela volta ao Empty State com um ``session_id`` novo, porque o
-    anterior era o nome de um arquivo que acabou de ser apagado — sem a
-    troca, o próximo autosave recriaria a conversa recém-excluída.
-    """
-
-    try:
-        apagadas = excluir_todas_conversas()
-    except HistoricoError as erro:
-        st.session_state["historico_aviso"] = ("erro", str(erro))
-        st.session_state["confirmar_apagar_tudo"] = False
-        return
-
-    st.session_state.mensagens = []
-    st.session_state.titulo_conversa = ""
-    st.session_state.conversa_ativa_salva = False
-    st.session_state.sequencia_resposta = 0
-    st.session_state.session_id = novo_session_id()
-    st.session_state.criado_em = agora_iso()
-    st.session_state["confirmar_apagar_tudo"] = False
-
-    if apagadas:
-        st.session_state["historico_aviso"] = (
-            "sucesso",
-            tf("aviso_historico_apagado", n=apagadas)
-        )
-    else:
-        st.session_state["historico_aviso"] = (
-            "sucesso",
-            t("aviso_sem_conversas")
-        )
-
-
-def _cancelar_apagar_tudo():
-    """Desarma a confirmação de exclusão total sem apagar nada."""
-
-    st.session_state["confirmar_apagar_tudo"] = False
-
-
-def _rotulo_conversa(conversa):
-    """Rótulo do item do histórico: ícone (ou data) e título curto."""
-
-    titulo = _texto_curto(conversa.get("titulo")) or t("nova_conversa")
-
-    if st.session_state.session_id == conversa["id"]:
-        return f":material/chat: {titulo}"
-
-    return f":material/forum: {titulo}"
-
-
-def _renderizar_historico():
-    """Lista as conversas salvas na barra lateral, da mais nova à mais antiga.
-
-    Cada linha tem o botão que abre a conversa e um botão discreto de
-    exclusão. A conversa aberta no momento aparece em destaque (botão
-    primário, ícone de bate-papo preenchido e desabilitado para não
-    recarregar a conversa que já está na tela).
-
-    Título e lixeira ficam em ``st.columns`` com 84%/16% da largura e
-    alinhamento vertical central, e o CSS da seção 4 mantém as duas
-    colunas na mesma linha (``flex-wrap: nowrap``) mesmo na barra
-    lateral estreita. Devolve a quantidade de conversas salvas, usada
-    pelo botão "Apagar Todo o Histórico" logo abaixo da lista.
-    """
-
-    conversas = listar_conversas()
-
-    st.subheader(t("secao_historico"))
-
-    if not conversas:
-        st.caption(t("historico_vazio"))
-        return 0
-
-    st.caption(tf("historico_contagem", n=len(conversas)))
-
-    with st.container(key="historico_lista"):
-        for conversa in conversas:
-            session_id = conversa["id"]
-            ativa = st.session_state.session_id == session_id
-
-            # A chave do container gera a classe ``st-key-historico_item_*``
-            # usada pelas regras de CSS da lista.
-            with st.container(key=f"historico_item_{session_id}"):
-                col_titulo, col_del = st.columns(
-                    [0.84, 0.16],
-                    gap="small",
-                    vertical_alignment="center"
-                )
-
-                with col_titulo:
-                    st.button(
-                        _rotulo_conversa(conversa),
-                        key=f"abrir_{session_id}",
-                        width="stretch",
-                        type="primary" if ativa else "secondary",
-                        disabled=ativa,
-                        help=(
-                            t("historico_aberta")
-                            if ativa
-                            else tf(
-                                "historico_abrir",
-                                data=_texto_curto(
-                                    conversa["atualizado_em"]
-                                ),
-                            )
-                        ),
-                        on_click=_abrir_conversa,
-                        args=(session_id,)
-                    )
-
-                with col_del:
-                    st.button(
-                        "",
-                        key=f"historico_excluir_{session_id}",
-                        icon=":material/delete:",
-                        type="tertiary",
-                        help=tf(
-                            "historico_excluir",
-                            titulo=conversa["titulo"],
-                        ),
-                        on_click=_excluir_conversa,
-                        args=(session_id,)
-                    )
-
-        # A conversa aberta pode ainda não ter arquivo (nenhuma resposta
-        # concluída): ela entra na lista em memória para não sumir de
-        # vista enquanto o usuário consulta.
-        if (
-            not st.session_state.conversa_ativa_salva
-            and st.session_state.mensagens
-        ):
-            st.caption(t("historico_nao_salva"))
-
-    return len(conversas)
-
 
 def _gerar_titulo_conversa():
     """Define o título da conversa aberta a partir da primeira pergunta.
@@ -1802,21 +1617,6 @@ def _gerar_titulo_conversa():
             )
             return
 
-
-def _exibir_aviso_historico():
-    """Mostra e descarta o aviso pendente das ações do histórico."""
-
-    aviso = st.session_state.pop("historico_aviso", None)
-
-    if not aviso:
-        return
-
-    tipo_aviso, mensagem_aviso = aviso
-
-    if tipo_aviso == "sucesso":
-        st.success(mensagem_aviso, icon=":material/check_circle:")
-    else:
-        st.error(mensagem_aviso, icon=":material/error:")
 
 
 @st.cache_resource(show_spinner=t("spinner_ollama"))
@@ -3838,7 +3638,21 @@ def _renderizar_mensagem(mensagem, pergunta=""):
         papel,
         avatar=AVATAR_ASSISTENTE if papel == "assistant" else None
     ):
-        st.markdown(mensagem.get("content", ""))
+        conteudo_mensagem = mensagem.get("content", "")
+        governanca_mensagem = mensagem.get("governanca")
+
+        if papel == "assistant" and governanca_mensagem:
+            # Cartão D1: workflow, badges OBSERVED/INFERRED, veredito e
+            # motivo objetivo. Mensagens antigas (sem governança) seguem
+            # com o Markdown simples.
+            ui_tab_chat.renderizar_cartao_resposta(
+                conteudo_mensagem,
+                governanca_mensagem,
+                workflow=mensagem.get("workflow"),
+                chave=_chave_widget(mensagem),
+            )
+        else:
+            st.markdown(conteudo_mensagem)
 
         if papel != "assistant":
             return
@@ -3868,6 +3682,11 @@ def _renderizar_mensagem(mensagem, pergunta=""):
             geossit=mensagem.get("geossit") or {}
         )
 
+        ui_tab_chat.renderizar_gaveta_proveniencia(
+            ui_tab_chat.proveniencia_da_mensagem(mensagem),
+            chave=_chave_widget(mensagem),
+        )
+
         _renderizar_mapa_espacial(
             mensagem.get("feicoes_espaciais") or [],
             _chave_widget(mensagem)
@@ -3878,6 +3697,196 @@ def _renderizar_mensagem(mensagem, pergunta=""):
             pergunta,
             _chave_widget(mensagem)
         )
+
+
+
+# ---------------------------------------------------------------------------
+# Consulta em background: progresso por etapa e cancelamento (Fase D3a)
+# ---------------------------------------------------------------------------
+
+_CHAVE_TRABALHO_CONSULTA = "_consulta_trabalho"
+_CHAVE_CONTEXTO_CONSULTA = "_consulta_contexto"
+_CHAVE_AVISO_CANCELAMENTO = "_consulta_aviso_cancelamento"
+
+# Janela curta para o caminho rápido: respostas imediatas (dublês de
+# teste, cache ou modelo já aquecido) são consolidadas no mesmo run, sem
+# deixar a interface em um estado intermediário desnecessário.
+ESPERA_CAMINHO_RAPIDO_S = 0.15
+
+
+def _contexto_do_trabalho(trabalho):
+    """Metadados do turno guardados fora da thread de trabalho."""
+
+    return st.session_state.get(_CHAVE_CONTEXTO_CONSULTA) or {}
+
+
+def _iniciar_trabalho_consulta(parametros, workflow, perfil, documentos):
+    """Cria o trabalho em background e guarda o contexto do turno."""
+
+    def executar(controle):
+        return responder(
+            **parametros,
+            progresso=controle.relatar,
+            cancelamento=controle.evento,
+            ao_token=controle.anexar_texto,
+        )
+
+    trabalho = progress_service.TrabalhoConsulta(executar)
+    st.session_state[_CHAVE_CONTEXTO_CONSULTA] = {
+        "workflow": workflow,
+        "perfil_analitico": perfil,
+        "documentos": list(documentos or []),
+        "idioma": st.session_state.get("idioma", IDIOMA_PADRAO),
+    }
+    st.session_state[_CHAVE_TRABALHO_CONSULTA] = trabalho
+    trabalho.iniciar()
+
+    return trabalho
+
+
+def _descartar_trabalho_consulta(esperar=False):
+    """Remove o trabalho da sessão e libera o executor."""
+
+    trabalho = st.session_state.pop(_CHAVE_TRABALHO_CONSULTA, None)
+    st.session_state.pop(_CHAVE_CONTEXTO_CONSULTA, None)
+
+    if trabalho is not None:
+        trabalho.descartar(esperar=esperar)
+
+    return trabalho
+
+
+def _cancelar_trabalho_consulta():
+    """Cancela e descarta uma consulta ativa ao trocar de conversa."""
+
+    trabalho = st.session_state.get(_CHAVE_TRABALHO_CONSULTA)
+
+    if trabalho is not None:
+        trabalho.cancelar(tempo_limite=1.0)
+
+    _descartar_trabalho_consulta()
+
+
+def _fontes_da_mensagem(dados):
+    """Extrai os campos de fontes que o histórico guarda por resposta."""
+
+    dados = dados if isinstance(dados, dict) else {}
+
+    return {
+        "artigos_rigeo": (dados.get("sgb") or {}).get("registros") or [],
+        "estacoes_ana": (dados.get("ana") or {}).get("registros") or [],
+        "web": dados.get("web") or {},
+        "openalex": dados.get("openalex") or {},
+        "intl_geo": dados.get("intl_geo") or {},
+        "geosgb": dados.get("geosgb") or {},
+        "anm": dados.get("anm") or {},
+        "macrostrat": dados.get("macrostrat") or {},
+        "siagas": dados.get("siagas") or {},
+        "geossit": dados.get("geossit") or {},
+    }
+
+
+def _aplicar_resultado_consulta(trabalho):
+    """Consolida a resposta concluída no histórico (sem mensagem parcial)."""
+
+    contexto = _contexto_do_trabalho(trabalho)
+    resultado = trabalho.resultado or {}
+    resposta = str(resultado.get("resposta") or t("erro_consulta"))
+    fonte = resultado.get("fonte")
+    roteamento = resultado.get("roteamento") or {}
+    dados = resultado.get("dados") or {}
+    busca_rigeo = resultado.get("busca_rigeo") or {}
+    idioma = contexto.get("idioma", IDIOMA_PADRAO)
+    fontes = _fontes_da_mensagem(dados)
+
+    governanca = avaliar_governanca(resposta, idioma=idioma)
+    proveniencia = ui_tab_chat.montar_proveniencia(
+        dados=dados,
+        roteamento=roteamento,
+        criado_em=agora_iso(),
+    )
+    feicoes_espaciais = _consolidar_feicoes_turno(
+        resposta,
+        dados,
+        contexto.get("documentos") or [],
+    )
+
+    st.session_state.mensagens.append(_nova_mensagem(
+        "assistant",
+        resposta,
+        fonte=fonte,
+        roteamento=roteamento,
+        busca_rigeo=busca_rigeo,
+        feicoes_espaciais=feicoes_espaciais,
+        perfil_analitico=contexto.get("perfil_analitico"),
+        governanca=(
+            governanca.para_dict() if governanca is not None else None
+        ),
+        proveniencia=proveniencia,
+        workflow=contexto.get("workflow"),
+        **fontes,
+    ))
+
+    _descartar_trabalho_consulta()
+
+
+def _aplicar_erro_consulta(trabalho):
+    """Registra a mensagem de erro, como no fluxo síncrono anterior."""
+
+    contexto = _contexto_do_trabalho(trabalho)
+    idioma = contexto.get("idioma", IDIOMA_PADRAO)
+    erro = trabalho.erro
+    resposta = t("erro_consulta")
+
+    print("Erro de integração:", repr(erro))
+
+    governanca = resultado_falha_fonte(erro, idioma=idioma)
+
+    st.session_state.mensagens.append(_nova_mensagem(
+        "assistant",
+        resposta,
+        fonte=None,
+        roteamento={},
+        governanca=(
+            governanca.para_dict() if governanca is not None else None
+        ),
+        proveniencia=[],
+        perfil_analitico=contexto.get("perfil_analitico"),
+        workflow=contexto.get("workflow"),
+    ))
+    _descartar_trabalho_consulta()
+
+
+def _tratar_trabalho_consulta():
+    """Consolida um trabalho terminal; devolve True quando agiu."""
+
+    trabalho = st.session_state.get(_CHAVE_TRABALHO_CONSULTA)
+
+    if trabalho is None:
+        return False
+
+    status = trabalho.status
+
+    if status == progress_service.STATUS_CONCLUIDO:
+        _aplicar_resultado_consulta(trabalho)
+        ui_sidebar.salvar_conversa_atual()
+        st.session_state["aba_forcar_consulta"] = True
+        return True
+
+    if status == progress_service.STATUS_CANCELADO:
+        # Nenhuma mensagem de resposta entra no histórico e o autosave
+        # não é acionado: o cancelamento descarta o turno.
+        _descartar_trabalho_consulta()
+        st.session_state[_CHAVE_AVISO_CANCELAMENTO] = True
+        return True
+
+    if status == progress_service.STATUS_ERRO:
+        _aplicar_erro_consulta(trabalho)
+        ui_sidebar.salvar_conversa_atual()
+        st.session_state["aba_forcar_consulta"] = True
+        return True
+
+    return False
 
 
 # ---------------------------------------------------------------------------
@@ -4523,10 +4532,24 @@ if (
 ):
     del st.session_state["modelo_ollama"]
 
-indice_modelo_padrao = (
-    modelos_disponiveis.index(OLLAMA_MODEL)
-    if OLLAMA_MODEL in modelos_disponiveis
-    else 0
+# O padrão preferencial é o modelo fine-tuned local
+# (nexusgeo-qwen3-4b-v2-q4) quando instalado; sem ele, cai para o
+# modelo configurado (qwen3:4b como fallback silencioso).
+modelo_padrao_interface = modelo_padrao_do_sistema(
+    consultar_ollama=False
+)
+
+# O Ollama grava a tag :latest nos modelos criados sem tag; a
+# comparação pela base garante que o seletor abra no modelo preferido.
+indice_modelo_padrao = next(
+    (
+        indice
+        for indice, nome in enumerate(modelos_disponiveis)
+        if nome == modelo_padrao_interface
+        or nome.split(":", 1)[0]
+        == modelo_padrao_interface.split(":", 1)[0]
+    ),
+    0
 )
 
 
@@ -4534,76 +4557,37 @@ indice_modelo_padrao = (
 # Barra lateral: base documental, histórico, fontes e ajustes
 # ---------------------------------------------------------------------------
 
-def _encerrar_servidor_streamlit():
-    """Encerra o servidor a pedido do usuário (botão da barra lateral).
-
-    Usa ``Runtime.instance().stop()``, seguro a partir da thread do
-    script, para desligar o servidor de forma ordenada: o processo do
-    servidor termina e o launcher (que o espera) encerra em seguida,
-    fechando o Job Object no Windows. Um ``Timer`` de segurança garante
-    a saída do processo caso a API interna do Streamlit mude.
-    """
-
-    parou = False
-
-    try:
-        from streamlit.runtime import Runtime
-
-        Runtime.instance().stop()
-        parou = True
-    except Exception:  # noqa: BLE001 - API interna indisponível
-        parou = False
-
-    def _sair_a_forca():
-        """Sai do processo do servidor depois de desenhar o aviso."""
-
-        os._exit(0)
-
-    if parou:
-        # Rede de segurança: se o runtime não concluir o desligamento, o
-        # processo termina de qualquer forma (sem deixar órfãos). O timer
-        # é daemon para não atrasar o encerramento normal.
-        segundos = 5.0
-    else:
-        segundos = 0.5
-
-    timer = threading.Timer(segundos, _sair_a_forca)
-    timer.daemon = True
-    timer.start()
-
-    return parou
-
 
 with st.sidebar:
-    # -- 0. Seletor de idioma (topo absoluto da barra lateral) -----------
-    # Duas colunas iguais com os botões de bandeira. O botão do idioma
-    # ativo fica primário; o clique troca a chave ``idioma`` e força um
-    # rerun, que redesenha a interface inteira no idioma escolhido.
-    idioma = st.session_state.get("idioma", IDIOMA_PADRAO)
+    # -- 0. Idioma, saúde do serviço, rede e persistência (D1) ---------
+    # O seletor de idioma e os indicadores vivem em ui/sidebar.py. O
+    # app.py só decide a ordem: idioma, estado do serviço/rede/pasta,
+    # depois as seções de acervo, fontes e perfil.
+    ui_sidebar.renderizar_seletor_idioma()
 
-    col_pt, col_en = st.sidebar.columns(2)
+    st.divider()
 
-    with col_pt:
-        if st.button(
-            ROTULOS_IDIOMA["pt"],
-            key="idioma_pt",
-            type="primary" if idioma == "pt" else "secondary",
-            width="stretch",
-            help=NOMES_IDIOMA["pt"],
+    # Roteamento da última resposta: alimenta o indicador SLM/fallback.
+    _roteamento_status = {}
+
+    for _mensagem in reversed(st.session_state.mensagens):
+        if (
+            _mensagem.get("role") == "assistant"
+            and _mensagem.get("roteamento")
         ):
-            st.session_state["idioma"] = "pt"
-            st.rerun()
+            _roteamento_status = _mensagem["roteamento"]
+            break
 
-    with col_en:
-        if st.button(
-            ROTULOS_IDIOMA["en"],
-            key="idioma_en",
-            type="primary" if idioma == "en" else "secondary",
-            width="stretch",
-            help=NOMES_IDIOMA["en"],
-        ):
-            st.session_state["idioma"] = "en"
-            st.rerun()
+    # O estado do Ollama é consultado uma única vez por run: o mesmo
+    # booleano alimenta a barra lateral e o cartão "Governança & Motor"
+    # da coluna de rastreabilidade (Fase D4).
+    _ollama_online = _verificar_conexao_ollama(OLLAMA_HOST)[0]
+
+    ui_sidebar.renderizar_indicadores(
+        modelo=st.session_state.get("modelo_ollama", modelo_padrao_interface),
+        ollama_online=_ollama_online,
+        roteamento=_roteamento_status,
+    )
 
     st.divider()
 
@@ -4826,53 +4810,11 @@ with st.sidebar:
 
     _exibir_aviso_documentos()
 
-    # -- 2. Histórico de conversas + exclusão em lote --------------------
-    # Um único divisor compacto separa a base documental do histórico: o
-    # CSS da barra lateral zera o miolo do contêiner e fixa a margem do
-    # ``<hr>`` em 0.25rem, sem linha em branco extra entre as duas seções.
-    st.divider()
-    total_conversas = _renderizar_historico()
-    _exibir_aviso_historico()
-
-    # A exclusão em lote fica imediatamente abaixo da lista que ela
-    # apaga, e não no rodapé da barra lateral. O primeiro clique só arma
-    # a confirmação (chave no estado da sessão) e a exclusão de fato
-    # acontece no segundo clique; assim um clique acidental não apaga o
-    # histórico. Os documentos de data/docs nunca são tocados.
-    if st.session_state.get("confirmar_apagar_tudo"):
-        st.warning(
-            t("confirmar_apagar_texto"),
-            title=t("confirmar_apagar_titulo")
-        )
-
-        if st.button(
-            t("botao_apagar_confirmado"),
-            key="apagar_todo_historico_confirmado",
-            type="primary",
-            width="stretch",
-            help=t("ajuda_apagar_confirmado"),
-            on_click=_apagar_todo_historico
-        ):
-            st.rerun()
-
-        if st.button(
-            t("botao_cancelar"),
-            key="cancelar_apagar_tudo",
-            width="stretch",
-            help=t("ajuda_cancelar"),
-            on_click=_cancelar_apagar_tudo
-        ):
-            st.rerun()
-    elif st.button(
-        t("botao_apagar_tudo"),
-        key="apagar_todo_historico",
-        type="secondary",
-        width="stretch",
-        disabled=not total_conversas,
-        help=t("ajuda_apagar_tudo")
-    ):
-        st.session_state["confirmar_apagar_tudo"] = True
-        st.rerun()
+    # -- 2. Histórico transacional (SQLite) ------------------------------
+    # A lista, o botão de nova conversa, os marcadores de workflow/folha
+    # CIM e a exclusão em duas etapas ficam em ui/sidebar.py, sobre
+    # services.history_db (chat_sessions/chat_messages).
+    ui_sidebar.renderizar_historico()
 
     st.divider()
 
@@ -5157,17 +5099,10 @@ with st.sidebar:
         )
     )
 
-    # Ação discreta de encerramento: libera a porta e fecha o servidor
-    # (e o launcher, que o espera). O histórico já salvo é preservado.
-    if st.button(
-        t("encerrar_servidor"),
-        key="encerrar_servidor",
-        width="stretch",
-        help=t("ajuda_encerrar_servidor"),
-    ):
-        _encerrar_servidor_streamlit()
-        st.info(t("aviso_encerrando_servidor"))
-        st.stop()
+    # Ação discreta de encerramento: finaliza subprocessos filhos, o
+    # runtime do Streamlit e as threads auxiliares (ui/sidebar.py). O
+    # histórico SQLite já gravado é preservado.
+    ui_sidebar.renderizar_botao_encerramento()
 
 
 # Texto atual da caixa de edição, mesmo que o editor esteja fechado.
@@ -5249,7 +5184,8 @@ with st.container(
 
     # APIs externas ativas: a badge confirma o que a seção "Fontes de
     # Dados Ativas" deixou ligado, sem precisar abrir a barra lateral.
-    # A sequência é a mesma dos GRUPOS_CONECTORES da barra lateral.
+    # A ordem segue os macrodomínios da sidebar (Geologia & Geofísica,
+    # Recursos Minerais & ANM, Hidrogeologia & Hídricos e Literatura).
     if rigeo_enabled:
         st.badge(
             "🏛️ RIGeo",
@@ -5394,34 +5330,172 @@ st.divider()
 
 
 # ---------------------------------------------------------------------------
-# Extração, exploração e exportação de dados tabulares
+# Layout adaptativo da Workstation (Fase D4)
 # ---------------------------------------------------------------------------
+#
+# Estado vazio: documento nenhum, ponto/folha CIM nenhuma, tabela extraída
+# nenhuma e evidência rastreada nenhuma. A área principal fica centralizada
+# e limpa, focada no chat técnico, nas sugestões rápidas e no upload.
+#
+# Estado ativo: grade assimétrica de três colunas — indicadores à esquerda,
+# workspace ao centro e rastreabilidade à direita. Os sinais vêm apenas de
+# estado já carregado (documentos indexados, mensagens da sessão e
+# governança da resposta); nenhuma conversão de PDF ou consulta externa é
+# disparada só para decidir o layout.
 
-_renderizar_painel_dados(documentos)
+_mensagens_workspace = st.session_state.mensagens
+_governancas_workspace = ui_workstation.governancas_das_mensagens(
+    _mensagens_workspace
+)
+_evidencias_workspace = ui_workstation.coletar_evidencias(
+    _governancas_workspace
+)
+_proporcoes_epistemicas = ui_workstation.compute_epistemic_ratios(
+    _governancas_workspace
+)
+_folhas_cim_workspace = ui_workstation.folhas_cim_detectadas(
+    _mensagens_workspace
+)
+_workspace_ativo = ui_workstation.has_active_workspace(
+    documentos=documentos,
+    mensagens=_mensagens_workspace,
+    tabelas=_metadados_tabelas_sessao(_mensagens_workspace),
+    evidencias=_evidencias_workspace,
+)
+_fontes_ativas_workspace = ui_workstation.contar_fontes_ativas(
+    conectores_ativos,
+    local_docs_enabled,
+)
+
+if _workspace_ativo:
+    (
+        _col_indicadores,
+        _col_workspace,
+        _col_rastreabilidade,
+    ) = st.columns([1.4, 4.6, 2.0], gap="medium")
+
+    with _col_indicadores:
+        ui_workstation.renderizar_indicadores(
+            fontes_ativas=_fontes_ativas_workspace,
+            alvos_cim=len(_folhas_cim_workspace),
+            proporcoes=_proporcoes_epistemicas,
+        )
+
+    with _col_rastreabilidade:
+        ui_workstation.renderizar_rastreabilidade(
+            evidencias=_evidencias_workspace,
+            modelo=st.session_state.get(
+                "modelo_ollama",
+                modelo_padrao_interface,
+            ),
+            online=_ollama_online,
+            proporcoes=_proporcoes_epistemicas,
+        )
+else:
+    # Estado vazio: um container de largura total no lugar da grade.
+    _col_workspace = st.container()
 
 
 # ---------------------------------------------------------------------------
-# Conversa
+# Abas da área principal (Fase D2)
 # ---------------------------------------------------------------------------
+#
+# A ordem de execução é deliberada: o rodapé (st.bottom + único
+# st.chat_input) é criado antes das abas, mas permanece preso à base da
+# área principal, fora delas. Assim a pergunta já está disponível quando a
+# Aba 1 renderiza o histórico e a resposta nova, sem duplicar o caminho de
+# renderização de mensagens.
+#
+# A conversa, o histórico e os widgets da barra lateral vivem em
+# st.session_state; alternar de aba só troca o painel visível.
 
-# Empty state: o guia rápido desaparece assim que a primeira pergunta é
-# enviada. O placeholder permite limpar o bloco antes de renderizar a
-# resposta seguinte.
-espaco_guia = st.empty()
+# Se uma pergunta foi enviada a partir de outra aba, o próximo run volta
+# para a Aba 1. O valor é ajustado antes de st.tabs para não modificar o
+# estado de um widget já instanciado.
+_CHAVES_ABAS = (
+    "aba_consulta",
+    "aba_espacial",
+    "aba_dados",
+    "aba_sondagem",
+)
+_CHAVES_ABAS_ATIVAS = ui_workstation.CHAVES_ABAS_ATIVAS
+_CHAVES_TODAS_ABAS = (_CHAVES_ABAS, _CHAVES_ABAS_ATIVAS)
 
-if not st.session_state.mensagens:
-    with espaco_guia.container():
-        _renderizar_guia_rapido()
+_ABAS_PRINCIPAIS = [
+    t("aba_consulta"),
+    t("aba_espacial"),
+    t("aba_dados"),
+    t("aba_sondagem"),
+]
 
-# Histórico da conversa (inclui as fontes de cada resposta). A pergunta
-# anterior acompanha cada resposta para o cabeçalho do Parecer Técnico.
-pergunta_do_turno = ""
+# Rótulos do layout ativo: Síntese Técnica, Mapa Espacial, Dados &
+# Exportação e a grade de sondagem preservada da Fase D3b. As duas listas
+# mantêm a mesma ordem (a quarta aba é sempre a sondagem), o que permite
+# converter a aba selecionada ao trocar de idioma ou de layout.
+_ABAS_WORKSTATION = [
+    t(chave) for chave in _CHAVES_ABAS_ATIVAS
+]
+_ABAS_ATUAIS = (
+    _ABAS_WORKSTATION if _workspace_ativo else _ABAS_PRINCIPAIS
+)
 
-for mensagem in st.session_state.mensagens:
-    if mensagem.get("role") == "user":
-        pergunta_do_turno = mensagem.get("content", "")
 
-    _renderizar_mensagem(mensagem, pergunta=pergunta_do_turno)
+def _sincronizar_aba_com_idioma():
+    """Traduz a aba selecionada quando o idioma muda.
+
+    O estado de ``st.tabs`` guarda o rótulo exibido, não o índice. Ao
+    alternar PT-BR <-> EN, o rótulo antigo deixaria de existir e o
+    Streamlit voltaria para a primeira aba. A conversão preserva a aba
+    em que o usuário estava, inclusive nas recargas seguintes.
+
+    O mesmo mecanismo reconhece os rótulos do layout vazio e do layout
+    ativo: a posição da aba é preservada, sem depender do texto.
+    """
+
+    atual = st.session_state.get("aba_navegacao")
+
+    if not atual:
+        return
+
+    for chaves in _CHAVES_TODAS_ABAS:
+        for idioma in ("pt", "en"):
+            rotulos = [t(chave, idioma) for chave in chaves]
+
+            if atual in rotulos:
+                indice = rotulos.index(atual)
+                novo = _ABAS_ATUAIS[indice]
+
+                if novo != atual:
+                    st.session_state["aba_navegacao"] = novo
+
+                return
+
+    # Rótulo herdado de uma versão anterior: volta para a primeira aba
+    # em vez de deixar um valor inválido no widget.
+    st.session_state["aba_navegacao"] = _ABAS_ATUAIS[0]
+
+
+# A troca entre layout vazio e ativo muda os rótulos das abas. O valor
+# anterior deixaria de existir e o Streamlit voltaria à primeira aba no
+# meio da interação; limpar o estado antes de criar o widget devolve o
+# controle ao "default" do layout novo.
+_ASSINATURA_WORKSPACE = "ativo" if _workspace_ativo else "vazio"
+_ASSINATURA_WORKSPACE_ANTERIOR = st.session_state.get(
+    "_workspace_layout_assinatura"
+)
+
+if (
+    _ASSINATURA_WORKSPACE_ANTERIOR is not None
+    and _ASSINATURA_WORKSPACE_ANTERIOR != _ASSINATURA_WORKSPACE
+):
+    st.session_state.pop("aba_navegacao", None)
+
+st.session_state["_workspace_layout_assinatura"] = _ASSINATURA_WORKSPACE
+
+_sincronizar_aba_com_idioma()
+
+if st.session_state.pop("aba_forcar_consulta", False):
+    st.session_state["aba_navegacao"] = _ABAS_ATUAIS[0]
 
 # Entrada do usuário no rodapé da área principal: o botão "Novo Chat"
 # compacto fica ao lado esquerdo do campo de mensagem, na mesma linha.
@@ -5443,237 +5517,206 @@ with st.bottom, st.container(key="rodape_chat"):
             width="stretch",
             help=t("ajuda_novo_chat")
         ):
-            _nova_conversa()
+            _cancelar_trabalho_consulta()
+            ui_sidebar.nova_conversa()
             st.rerun()
 
     with col_pergunta:
         pergunta = st.chat_input(t("chat_placeholder"))
 
-if pergunta:
-    # O guia rápido some assim que uma pergunta é enviada.
-    espaco_guia.empty()
+st.caption(t("aba_ajuda"))
 
-    # Exibir pergunta.
-    with st.chat_message("user"):
-        st.markdown(pergunta)
+# Um único ponto de abas, dentro da coluna central do layout ativo (ou do
+# container de largura total no estado vazio). Os containers das abas são
+# independentes: os blocos ``with aba_...:`` abaixo continuam válidos
+# mesmo criados aqui.
+with _col_workspace:
+    aba_consulta, aba_espacial, aba_dados, aba_sondagem = st.tabs(
+        _ABAS_ATUAIS,
+        key="aba_navegacao",
+        on_change="rerun",
+        default=_ABAS_ATUAIS[0],
+    )
 
-    # Preparar histórico anterior.
-    historico = [
-        {
-            "role": item["role"],
-            "content": item["content"]
-        }
-        for item in st.session_state.mensagens
-    ]
+with aba_consulta:
+    # ---------------------------------------------------------------------------
+    # Aba 1 — "Consulta & Evidência" no layout vazio e "Síntese Técnica" no
+    # layout ativo: mesmo fluxo de workflow + chat, sem duplicação.
+    # ---------------------------------------------------------------------------
 
-    # Cada mensagem carrega a própria chave de widgets (posição na
-    # conversa); a pergunta e a resposta recebem chaves novas a cada
-    # consulta.
-    mensagem_usuario = _nova_mensagem("user", pergunta)
-    st.session_state.mensagens.append(mensagem_usuario)
+    # O seletor fica no topo da área principal, antes do campo de mensagem,
+    # e devolve a chave canônica do workflow (a mesma gravada no histórico).
+    workflow_consulta = ui_tab_chat.renderizar_seletor_workflow()
 
-    # O título da conversa nasce da primeira pergunta e aparece na barra
-    # lateral nesta mesma execução.
-    _gerar_titulo_conversa()
+    # Se a consulta em background terminou em outro run/fragmento,
+    # consolida agora (ou descarta, no cancelamento) antes de redesenhar
+    # o histórico.
+    if _tratar_trabalho_consulta():
+        st.rerun()
 
-    artigos_rigeo = []
-    busca_rigeo = {}
-    estacoes_ana = []
-    web_dados = {}
-    openalex_dados = {}
-    intl_geo_dados = {}
-    geosgb_dados = {}
-    anm_dados = {}
-    macrostrat_dados = {}
-    siagas_dados = {}
-    geossit_dados = {}
-    erro_consulta = False
+    st.divider()
+    # ---------------------------------------------------------------------------
+    # Conversa
+    # ---------------------------------------------------------------------------
 
-    # Feições espaciais do turno (mapa): preenchidas após a resposta e
-    # guardadas na mensagem para o mapa reaparecer no histórico.
-    feicoes_espaciais = []
+    # Empty state: o guia rápido desaparece assim que a primeira pergunta é
+    # enviada. O placeholder permite limpar o bloco antes de renderizar a
+    # resposta seguinte.
+    espaco_guia = st.empty()
 
-    # Fontes ligadas na barra lateral: entram no rótulo do status para o
-    # usuário saber, antes de a resposta chegar, o que está sendo
-    # consultado. A ordem acompanha os GRUPOS_CONECTORES, com a base
-    # documental local logo no início.
-    fontes_adicionais = [
-        rotulo
-        for ativo, rotulo in (
-            (local_docs_enabled, "Base local"),
-            (rigeo_enabled, "RIGeo"),
-            (web_search_enabled, "Web"),
-            (ana_enabled, "ANA"),
-            (siagas_enabled, "SIAGAS"),
-            (geosgb_enabled, "GeoSGB"),
-            (anm_enabled, "ANM/SIGMINE"),
-            (geossit_enabled, "GEOSSIT"),
-            (macrostrat_enabled, "Macrostrat"),
-            (openalex_enabled, "OpenAlex"),
-            (intl_geo_enabled, "Serviços Geológicos Internacionais"),
-        )
-        if ativo
-    ]
+    if not st.session_state.mensagens:
+        with espaco_guia.container():
+            _renderizar_guia_rapido()
 
-    rotulo_status = t("status_analisando")
+    # Histórico da conversa (inclui as fontes de cada resposta). A pergunta
+    # anterior acompanha cada resposta para o cabeçalho do Parecer Técnico.
+    pergunta_do_turno = ""
 
-    if fontes_adicionais:
-        rotulo_status += tf(
-            "status_fontes",
-            fontes=", ".join(fontes_adicionais),
-        )
+    for mensagem in st.session_state.mensagens:
+        if mensagem.get("role") == "user":
+            pergunta_do_turno = mensagem.get("content", "")
 
-    rotulo_status += "..."
+        _renderizar_mensagem(mensagem, pergunta=pergunta_do_turno)
+    # Aviso efêmero de cancelamento: não vira mensagem do histórico.
+    if st.session_state.pop(_CHAVE_AVISO_CANCELAMENTO, False):
+        with st.chat_message("assistant", avatar=AVATAR_ASSISTENTE):
+            st.warning(t("cancelamento_solicitado"))
 
-    # Consultar fonte e LLM. O status acompanha a execução e, antes da
-    # resposta, mostra a intenção, a justificativa, o termo efetivamente
-    # pesquisado no RIGeo e o que foi recuperado.
-    with st.chat_message("assistant", avatar=AVATAR_ASSISTENTE):
-        with st.status(
-            rotulo_status,
-            expanded=True
-        ) as estado:
-            try:
-                resultado = responder(
-                    pergunta=pergunta,
-                    historico=historico,
-                    limite=limite_rigeo,
-                    comunidade=comunidade_rigeo,
-                    modelo=modelo_ollama,
-                    texto_prompt=prompt_editado,
-                    documentos=documentos,
-                    usar_llm_termos=termos_via_ollama,
-                    usar_ana=ana_enabled,
-                    usar_web=web_search_enabled,
-                    web_apenas_tecnico=web_apenas_tecnico,
-                    usar_sgb=rigeo_enabled,
-                    usar_documentos=local_docs_enabled,
-                    usar_openalex=openalex_enabled,
-                    intl_geo_enabled=intl_geo_enabled,
-                    intl_geo_regioes=intl_geo_regioes,
-                    usar_geosgb=geosgb_enabled,
-                    usar_anm=anm_enabled,
-                    usar_macrostrat=macrostrat_enabled,
-                    usar_siagas=siagas_enabled,
-                    usar_geossit=geossit_enabled,
-                    idioma=st.session_state.get("idioma", IDIOMA_PADRAO)
-                )
+    trabalho = st.session_state.get(_CHAVE_TRABALHO_CONSULTA)
 
-                resposta = resultado["resposta"]
-                fonte = resultado["fonte"]
-                roteamento = resultado.get("roteamento") or {}
-                dados = resultado.get("dados") or {}
-                busca_rigeo = resultado.get("busca_rigeo") or {}
+    if pergunta:
+        if (
+            trabalho is not None
+            and trabalho.status == progress_service.STATUS_EXECUTANDO
+        ):
+            st.warning(t("consulta_em_andamento"))
+        else:
+            # O guia rápido some assim que uma pergunta é enviada.
+            espaco_guia.empty()
 
-                # Os metadados completos do RIGeo são guardados na
-                # mensagem para os cartões de fontes.
-                artigos_rigeo = (
-                    (dados.get("sgb") or {}).get("registros") or []
-                )
-                estacoes_ana = (
-                    (dados.get("ana") or {}).get("registros") or []
-                )
-                web_dados = dados.get("web") or {}
-                openalex_dados = dados.get("openalex") or {}
-                intl_geo_dados = dados.get("intl_geo") or {}
-                geosgb_dados = dados.get("geosgb") or {}
-                anm_dados = dados.get("anm") or {}
-                macrostrat_dados = dados.get("macrostrat") or {}
-                siagas_dados = dados.get("siagas") or {}
-                geossit_dados = dados.get("geossit") or {}
+            with st.chat_message("user"):
+                st.markdown(pergunta)
 
-                _detalhar_consulta(roteamento, artigos_rigeo, dados)
+            # Preparar histórico anterior (sem a pergunta nova).
+            historico = [
+                {
+                    "role": item["role"],
+                    "content": item["content"]
+                }
+                for item in st.session_state.mensagens
+            ]
 
-                estado.update(
-                    label=tf(
-                        "status_concluida",
-                        intencao=(
-                            roteamento.get("intencao") or fonte or "—"
-                        ),
-                    ),
-                    state="complete",
-                    expanded=True
-                )
+            # Cada mensagem carrega a própria chave de widgets (posição na
+            # conversa); a pergunta e a resposta recebem chaves novas a cada
+            # consulta.
+            mensagem_usuario = _nova_mensagem("user", pergunta)
+            st.session_state.mensagens.append(mensagem_usuario)
 
-            except Exception as erro:
-                # Detalhes técnicos não são exibidos na interface
-                # destinada ao usuário.
-                print("Erro de integração:", repr(erro))
+            # O título da conversa nasce da primeira pergunta e aparece na
+            # barra lateral nesta mesma execução.
+            _gerar_titulo_conversa()
 
-                erro_consulta = True
-                resposta = t("erro_consulta")
-                fonte = None
-                roteamento = {}
+            # O workflow escolhido no topo da Aba 1 entra no system prompt do
+            # turno como uma instrução curta e determinística. A governança e
+            # as regras de fonte continuam intocadas.
+            prompt_do_turno = prompt_editado
 
-                estado.update(
-                    label=t("status_erro"),
-                    state="error",
-                    expanded=True
-                )
-                st.error(resposta)
+            if workflow_consulta:
+                prompt_do_turno = (
+                    f"{prompt_editado}\n\n"
+                    f"{ui_tab_chat.instrucao_workflow(workflow_consulta)}"
+                ).strip()
 
-        if not erro_consulta:
-            st.markdown(resposta)
-            st.caption(_legenda_fonte(fonte, roteamento))
-            _renderizar_fontes(
-                roteamento,
-                artigos_rigeo,
+            parametros = {
+                "pergunta": pergunta,
+                "historico": historico,
+                "limite": limite_rigeo,
+                "comunidade": comunidade_rigeo,
+                "modelo": modelo_ollama,
+                "texto_prompt": prompt_do_turno,
+                "documentos": documentos,
+                "usar_llm_termos": termos_via_ollama,
+                "usar_ana": ana_enabled,
+                "usar_web": web_search_enabled,
+                "web_apenas_tecnico": web_apenas_tecnico,
+                "usar_sgb": rigeo_enabled,
+                "usar_documentos": local_docs_enabled,
+                "usar_openalex": openalex_enabled,
+                "intl_geo_enabled": intl_geo_enabled,
+                "intl_geo_regioes": intl_geo_regioes,
+                "usar_geosgb": geosgb_enabled,
+                "usar_anm": anm_enabled,
+                "usar_macrostrat": macrostrat_enabled,
+                "usar_siagas": siagas_enabled,
+                "usar_geossit": geossit_enabled,
+                "idioma": st.session_state.get("idioma", IDIOMA_PADRAO),
+            }
+
+            # A consulta longa roda em background; o script principal
+            # retorna ao Streamlit para o fragmento manter o Cancelar
+            # clicável (cancelamento em <= 3 s).
+            trabalho = _iniciar_trabalho_consulta(
+                parametros,
+                workflow_consulta,
+                perfil_analitico,
+                documentos,
+            )
+
+            if (
+                trabalho.aguardar(ESPERA_CAMINHO_RAPIDO_S)
+                and _tratar_trabalho_consulta()
+            ):
+                st.rerun()
+
+    trabalho = st.session_state.get(_CHAVE_TRABALHO_CONSULTA)
+
+    if trabalho is not None:
+        with st.chat_message("assistant", avatar=AVATAR_ASSISTENTE):
+            ui_progresso_consulta.renderizar_progresso_consulta(
+                trabalho,
                 chave=_chave_resposta_atual(),
-                busca_rigeo=busca_rigeo,
-                estacoes_ana=estacoes_ana,
-                web=web_dados,
-                openalex=openalex_dados,
-                intl_geo=intl_geo_dados,
-                geosgb=geosgb_dados,
-                anm=anm_dados,
-                macrostrat=macrostrat_dados,
-                siagas=siagas_dados,
-                geossit=geossit_dados
             )
 
-            # Mapa espacial logo abaixo das fontes: coordenadas das
-            # APIs, tabelas dos documentos locais e citações no texto.
-            feicoes_espaciais = _consolidar_feicoes_turno(
-                resposta,
-                dados,
-                documentos
+        if (
+            trabalho.aguardar(ESPERA_CAMINHO_RAPIDO_S)
+            and _tratar_trabalho_consulta()
+        ):
+            st.rerun()
+
+with aba_espacial:
+    if _workspace_ativo:
+        # Aba "Mapa Espacial" do layout ativo: visão rápida com st.map
+        # sobre os pontos e folhas CIM já gravados nas mensagens, com
+        # prévia tabular e CSV. As ferramentas CIM completas da Fase D2
+        # (resolução por coordenada/GMS e pacote offline) continuam
+        # disponíveis no expander, sem duplicar o mapa principal.
+        ui_workstation.renderizar_mapa_workspace(
+            mensagens=st.session_state.mensagens
+        )
+
+        with st.expander(
+            t("workstation_cim_ferramentas"),
+            icon=":material/layers:",
+            key="workstation_cim_ferramentas",
+        ):
+            ui_tab_spatial.renderizar_aba_espacial(
+                mensagens=st.session_state.mensagens
             )
-            _renderizar_mapa_espacial(
-                feicoes_espaciais,
-                _chave_resposta_atual()
-            )
+    else:
+        ui_tab_spatial.renderizar_aba_espacial(
+            mensagens=st.session_state.mensagens
+        )
 
-    # Registrar resposta no histórico. ``roteamento``, ``artigos_rigeo``
-    # e ``busca_rigeo`` alimentam o expander de fontes nos próximos
-    # reruns.
-    st.session_state.mensagens.append(_nova_mensagem(
-        "assistant",
-        resposta,
-        fonte=fonte,
-        roteamento=roteamento,
-        artigos_rigeo=artigos_rigeo,
-        busca_rigeo=busca_rigeo,
-        estacoes_ana=estacoes_ana,
-        web=web_dados,
-        openalex=openalex_dados,
-        intl_geo=intl_geo_dados,
-        geosgb=geosgb_dados,
-        anm=anm_dados,
-        macrostrat=macrostrat_dados,
-        siagas=siagas_dados,
-        geossit=geossit_dados,
-        feicoes_espaciais=feicoes_espaciais,
-        perfil_analitico=perfil_analitico
-    ))
+with aba_dados:
+    # ---------------------------------------------------------------------------
+    # Extração, exploração e exportação de dados tabulares
+    # ---------------------------------------------------------------------------
 
-    # Autosave transparente: a conversa é gravada assim que a resposta
-    # fica pronta, então fechar a aba ou reiniciar o aplicativo não
-    # perde a consulta. Uma nova pergunta atualiza o arquivo existente.
-    _salvar_conversa_atual()
+    _renderizar_painel_dados(documentos)
 
-    # A página é redesenhada já com a resposta em ``mensagens``. Assim o
-    # expander de fontes da resposta é recriado uma única vez por
-    # execução (e não duas: na exibição imediata e no redesenho), a
-    # barra lateral já mostra a conversa no histórico com o estado
-    # atualizado, e um F5 não repete a consulta.
-    st.rerun()
+with aba_sondagem:
+    # ---------------------------------------------------------------------------
+    # Grade de sondagem De–Até e validação litológica (Fase D3b)
+    # ---------------------------------------------------------------------------
+
+    ui_tab_sondagem.renderizar_aba_sondagem()

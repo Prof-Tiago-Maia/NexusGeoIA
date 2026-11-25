@@ -12,13 +12,21 @@ from pathlib import Path
 from ollama import Client, ResponseError
 
 from config import (
-    OLLAMA_MODEL,
+    MODELO_FALLBACK,
     OLLAMA_HOST,
+    OLLAMA_KEEP_ALIVE,
+    OLLAMA_MODEL,
     OLLAMA_NUM_CTX,
     OLLAMA_NUM_PREDICT,
-    OLLAMA_KEEP_ALIVE
 )
 from core.prompt_manager import montar_prompt_sistema
+from services.progress_service import (
+    ETAPA_LLM,
+    ETAPA_ROTEAMENTO,
+    CancelamentoSolicitado,
+    relatar,
+    verificar_cancelamento,
+)
 
 
 cliente = Client(
@@ -29,6 +37,21 @@ cliente = Client(
 
 # Único ponto do projeto que limita o histórico enviado ao modelo.
 LIMITE_HISTORICO = 8
+
+# Modelos locais na ordem de preferência do sistema. O primeiro é o
+# modelo fine-tuned nexusgeo-qwen3-4b-v2-q4 (GGUF Q4_K_M validado com
+# 62% de acurácia e 100% de conformidade de esquema); qwen3:4b continua
+# como último recurso e fallback silencioso.
+PREFERRED_LOCAL_MODELS = (
+    "nexusgeo-qwen3-4b-v2-q4",
+    "nexusgeo-qwen3-4b-v2",
+    "qwen3:4b",
+)
+
+# Tempo limite (em segundos) da consulta a /api/tags usada na resolução
+# do modelo padrão. Curto de propósito: a interface não pode travar
+# quando o Ollama está fora do ar.
+TEMPO_LIMITE_TAGS_OLLAMA = 3.0
 
 ABERTURA_DADOS = "<dados_consultados>"
 FECHAMENTO_DADOS = "</dados_consultados>"
@@ -46,6 +69,77 @@ INTERVALO_TENTATIVA_OLLAMA = 0.5
 
 # Tempo máximo de cada tentativa de ``/api/version``.
 TEMPO_LIMITE_TENTATIVA_OLLAMA = 1.0
+
+# Processos que este módulo criou (hoje, apenas o serviço do Ollama). O
+# registro permite que o encerramento limpo da interface finalize o
+# serviço filho sem depender de varredura de PID nem de taskkill /T,
+# que poderia atingir processos alheios no Windows.
+_PROCESSOS_INICIADOS: list[subprocess.Popen] = []
+
+
+def processos_iniciados():
+    """Processos filhos ainda vivos, em ordem de criação."""
+
+    vivos = []
+
+    for processo in _PROCESSOS_INICIADOS:
+        try:
+            if processo.poll() is None:
+                vivos.append(processo)
+        except OSError:
+            continue
+
+    return tuple(vivos)
+
+
+def encerrar_processos_iniciados(tempo_limite=5.0):
+    """Finaliza os processos filhos e devolve quantos foram encerrados.
+
+    Usa terminate() e, se o processo não sair no prazo, kill(). Nunca
+    levanta exceção: um processo que já morreu ou que recusa o
+    encerramento apenas deixa de aparecer como encerrado. É a metade
+    "subprocessos" do encerramento limpo da barra lateral.
+    """
+
+    prazo = time.monotonic() + max(float(tempo_limite), 0.0)
+    encerrados = []
+
+    for processo in processos_iniciados():
+        try:
+            processo.terminate()
+        except (OSError, ProcessLookupError):
+            pass
+
+    restantes = list(processos_iniciados())
+
+    for processo in restantes:
+        try:
+            processo.wait(timeout=max(0.0, prazo - time.monotonic()))
+        except (subprocess.TimeoutExpired, OSError):
+            continue
+        else:
+            encerrados.append(processo)
+
+    for processo in list(processos_iniciados()):
+        try:
+            processo.kill()
+        except (OSError, ProcessLookupError):
+            pass
+        else:
+            encerrados.append(processo)
+
+    _PROCESSOS_INICIADOS.clear()
+
+    return len(encerrados)
+
+
+def _registrar_processo(processo):
+    """Registra um processo criado aqui para o encerramento limpo."""
+
+    if processo is None:
+        return
+
+    _PROCESSOS_INICIADOS.append(processo)
 
 
 def _ollama_respondendo(url_version):
@@ -155,6 +249,8 @@ def _iniciar_servico_ollama():
         processo.stdout.close()
     if processo.stderr is not None:
         processo.stderr.close()
+
+    _registrar_processo(processo)
 
     return processo
 
@@ -408,7 +504,8 @@ def classificar_intencao_fontes(
     pergunta,
     documentos,
     historico=None,
-    modelo=None
+    modelo=None,
+    cancelamento=None
 ):
     """Classifica a intenção de busca com o modelo escolhido no Ollama.
 
@@ -428,7 +525,9 @@ def classificar_intencao_fontes(
     if not texto_pergunta:
         raise ValueError("A pergunta não pode estar vazia.")
 
-    modelo_escolhido = modelo or OLLAMA_MODEL
+    verificar_cancelamento(cancelamento, ETAPA_ROTEAMENTO)
+
+    modelo_escolhido = modelo or modelo_padrao_do_sistema(consultar_ollama=False)
 
     blocos = [
         "<documentos_locais>\n"
@@ -512,15 +611,17 @@ def classificar_intencao_fontes(
             f"{type(erro).__name__}."
         ) from erro
 
-    mensagem = getattr(resposta, "message", None)
-    conteudo = getattr(mensagem, "content", None) or ""
+    verificar_cancelamento(cancelamento, ETAPA_ROTEAMENTO)
+
+    mensagem = _campo(resposta, "message")
+    conteudo = _campo(mensagem, "content") or ""
     dados = _extrair_json(conteudo)
 
     if dados is None:
         # Alguns modelos devolvem o JSON apenas no raciocínio interno,
         # mesmo com ``think=False``. Aproveitá-lo evita uma queda
         # desnecessária para a heurística.
-        pensamento = getattr(mensagem, "thinking", None) or ""
+        pensamento = _campo(mensagem, "thinking") or ""
         dados = _extrair_json(pensamento)
 
     if not isinstance(dados, dict):
@@ -551,10 +652,11 @@ def listar_modelos_locais():
     """Lista os nomes dos modelos já baixados no Ollama local.
 
     A lista alimenta o seletor da barra lateral, que permite alternar
-    entre um modelo rápido (``qwen3:14b``) e os maiores, sem reiniciar a
-    aplicação. Quando o Ollama está offline ou devolve uma lista vazia,
-    a função cai no modelo padrão de ``config.py`` para que a interface
-    continue abrindo normalmente.
+    entre o modelo oficial fine-tuned (``nexusgeo-qwen3-4b-v2-q4``) e
+    qualquer outro modelo já instalado, sem reiniciar a aplicação.
+    Quando o Ollama está offline ou devolve uma lista vazia, a função
+    cai no modelo padrão de ``config.py`` para que a interface continue
+    abrindo normalmente.
     """
 
     try:
@@ -572,6 +674,9 @@ def listar_modelos_locais():
         })
 
         if nomes:
+            # A lista já foi obtida: resolve o padrão sem outra consulta
+            # de rede e deixa o resultado em cache para o serviço/UI.
+            _definir_cache_modelo_padrao(nomes)
             return nomes
 
         print(
@@ -589,6 +694,191 @@ def listar_modelos_locais():
     return [OLLAMA_MODEL]
 
 
+# ---------------------------------------------------------------------------
+# Resolução do modelo padrão (modelo fine-tuned local preferencial)
+# ---------------------------------------------------------------------------
+
+# Cache do modelo padrão resolvido neste processo. A consulta a
+# /api/tags acontece no máximo uma vez, para a interface não repetir
+# a espera de rede a cada pergunta.
+_MODELO_PADRAO_CACHE: str | None = None
+
+
+def _nome_base_modelo(nome):
+    """Devolve o nome do modelo sem a tag (parte antes de ":")."""
+
+    return str(nome or "").split(":", 1)[0].strip()
+
+
+def list_installed_ollama_models(ollama_host: str | None = None) -> list[str]:
+    """Lista os modelos instalados no Ollama por GET /api/tags.
+
+    ollama_host aceita http://host:porta ou apenas host:porta; o
+    padrão é config.OLLAMA_HOST. A consulta usa um tempo limite curto
+    e devolve [] em qualquer falha (serviço fora do ar, tempo
+    esgotado, JSON inválido ou resposta inesperada), para o chamador
+    aplicar o fallback silencioso sem interromper a aplicação.
+    """
+
+    base = str(ollama_host or OLLAMA_HOST or "").strip().rstrip("/")
+
+    if not base:
+        return []
+
+    if not base.lower().startswith(("http://", "https://")):
+        base = f"http://{base}"
+
+    url = f"{base}/api/tags"
+
+    try:
+        with urllib.request.urlopen(
+            url,
+            timeout=TEMPO_LIMITE_TAGS_OLLAMA
+        ) as resposta:
+            dados = json.loads(resposta.read().decode("utf-8"))
+    except Exception as erro:  # noqa: BLE001 - fallback silencioso
+        print(
+            "Aviso: não foi possível consultar /api/tags do Ollama "
+            f"({type(erro).__name__})."
+        )
+        return []
+
+    if not isinstance(dados, dict):
+        return []
+
+    modelos = dados.get("models")
+
+    if not isinstance(modelos, list):
+        return []
+
+    nomes = []
+
+    for item in modelos:
+        if not isinstance(item, dict):
+            continue
+
+        nome = str(item.get("name") or item.get("model") or "").strip()
+
+        if nome:
+            nomes.append(nome)
+
+    return nomes
+
+
+def _escolher_modelo_preferido(instalados, configured_model=None):
+    """Seleciona o primeiro modelo preferido de uma lista já conhecida.
+
+    Compara o nome exato ou a base antes de ":" (assim qwen3:4b casa
+    com qwen3:4b:latest). Sem correspondência, devolve qwen3:4b.
+    """
+
+    configurado = str(configured_model or "").strip()
+
+    if configurado:
+        return configurado
+
+    instalados = list(instalados or [])
+    bases_instaladas = {
+        _nome_base_modelo(nome)
+        for nome in instalados
+        if _nome_base_modelo(nome)
+    }
+
+    for candidato in PREFERRED_LOCAL_MODELS:
+        if candidato in instalados:
+            return candidato
+
+        if _nome_base_modelo(candidato) in bases_instaladas:
+            return candidato
+
+    return "qwen3:4b"
+
+
+def resolve_default_ollama_model(
+    configured_model: str | None = None,
+    ollama_host: str | None = None
+) -> str:
+    """Escolhe o modelo padrão do Ollama na ordem de preferência.
+
+    configured_model explícito tem prioridade absoluta e é devolvido
+    sem consultar o servidor. Sem ele, percorre PREFERRED_LOCAL_MODELS
+    e seleciona o primeiro candidato instalado, comparando o nome
+    exato ou a base antes de ":". Quando nenhum candidato está
+    instalado — ou o Ollama está indisponível — devolve qwen3:4b como
+    fallback final.
+    """
+
+    configurado = str(configured_model or "").strip()
+
+    if configurado:
+        return configurado
+
+    return _escolher_modelo_preferido(
+        list_installed_ollama_models(ollama_host)
+    )
+
+
+def _modelo_configurado_explicitamente():
+    """Modelo escolhido fora do padrão de fábrica, ou None.
+
+    config.OLLAMA_MODEL já aplica a precedência config_local.json >
+    variável OLLAMA_MODEL > fallback. Quando o valor é apenas o
+    fallback de fábrica, nenhuma escolha explícita foi feita e o
+    modelo fine-tuned local pode assumir a preferência; qualquer
+    outro valor é respeitado como escolha do usuário.
+    """
+
+    modelo = str(OLLAMA_MODEL or "").strip()
+
+    if not modelo or modelo == MODELO_FALLBACK:
+        return None
+
+    return modelo
+
+
+def _definir_cache_modelo_padrao(instalados):
+    """Guarda em cache o modelo padrão resolvido a partir da lista."""
+
+    global _MODELO_PADRAO_CACHE
+
+    _MODELO_PADRAO_CACHE = _escolher_modelo_preferido(instalados)
+
+
+def modelo_padrao_do_sistema(consultar_ollama=True) -> str:
+    """Modelo padrão usado pelo serviço e pela interface.
+
+    Respeita uma escolha explícita de config_local.json ou de
+    OLLAMA_MODEL. Com o cache preenchido por listar_modelos_locais ou
+    por uma resolução anterior, devolve o primeiro modelo preferido
+    instalado. consultar_ollama=False evita a consulta a /api/tags no
+    caminho crítico da geração de resposta; sem cache, vale o
+    fallback de fábrica (qwen3:4b).
+    """
+
+    global _MODELO_PADRAO_CACHE
+
+    configurado = _modelo_configurado_explicitamente()
+
+    if configurado:
+        return resolve_default_ollama_model(configurado, OLLAMA_HOST)
+
+    if _MODELO_PADRAO_CACHE is None and consultar_ollama:
+        _MODELO_PADRAO_CACHE = resolve_default_ollama_model(
+            None,
+            OLLAMA_HOST
+        )
+
+    return _MODELO_PADRAO_CACHE or MODELO_FALLBACK
+
+
+def limpar_cache_modelo_padrao():
+    """Descarta o cache do modelo padrão (usado por testes e reruns)."""
+
+    global _MODELO_PADRAO_CACHE
+
+    _MODELO_PADRAO_CACHE = None
+
+
 def _extrair_conteudo(resposta):
     """Extrai o texto final da resposta do Ollama.
 
@@ -599,16 +889,30 @@ def _extrair_conteudo(resposta):
     pensamento é aproveitado e um aviso explícito é incluído no texto.
     """
 
-    mensagem = getattr(resposta, "message", None)
+    return _texto_final(
+        _campo(_campo(resposta, "message"), "content"),
+        _campo(_campo(resposta, "message"), "thinking"),
+    )
 
-    conteudo = getattr(mensagem, "content", None) or ""
-    conteudo = conteudo.strip()
+
+def _campo(objeto, nome):
+    """Lê um campo de um objeto do cliente Ollama ou de um dicionário."""
+
+    if isinstance(objeto, dict):
+        return objeto.get(nome)
+
+    return getattr(objeto, nome, None)
+
+
+def _texto_final(conteudo, pensamento):
+    """Monta o texto final a partir de content/thinking acumulados."""
+
+    conteudo = (conteudo or "").strip()
 
     if conteudo:
         return conteudo
 
-    pensamento = getattr(mensagem, "thinking", None) or ""
-    pensamento = pensamento.strip()
+    pensamento = (pensamento or "").strip()
 
     print(
         "Aviso: o modelo devolveu message.content vazio. "
@@ -634,12 +938,46 @@ def _extrair_conteudo(resposta):
     return AVISO_RESPOSTA_VAZIA
 
 
+def _fechar_fluxo(fluxo):
+    """Fecha o stream do Ollama sem propagar erro de recurso já liberado."""
+
+    if fluxo is None:
+        return
+
+    for nome in ("close", "aclose"):
+        fechamento = getattr(fluxo, nome, None)
+
+        if not callable(fechamento):
+            continue
+
+        try:
+            fechamento()
+        except Exception:  # noqa: BLE001, S110
+            pass
+
+        return
+
+    # Alguns clientes expõem o httpx.Response em "response"; fechá-lo
+    # libera a conexão HTTP mesmo quando o iterador não tem close().
+    resposta = getattr(fluxo, "response", None)
+    fechamento = getattr(resposta, "close", None)
+
+    if callable(fechamento):
+        try:
+            fechamento()
+        except Exception:  # noqa: BLE001, S110
+            pass
+
+
 def gerar_resposta(
     pergunta,
     dados=None,
     historico=None,
     prompt_sistema=None,
-    modelo=None
+    modelo=None,
+    progresso=None,
+    cancelamento=None,
+    ao_token=None
 ):
     """Gera a resposta do modelo local.
 
@@ -653,7 +991,7 @@ def gerar_resposta(
     funcionando sem alteração.
     """
 
-    modelo_escolhido = modelo or OLLAMA_MODEL
+    modelo_escolhido = modelo or modelo_padrao_do_sistema(consultar_ollama=False)
 
     if prompt_sistema is None:
         prompt_sistema = montar_prompt_sistema(dados)
@@ -691,20 +1029,86 @@ def gerar_resposta(
         "content": conteudo
     })
 
+    argumentos = {
+        "model": modelo_escolhido,
+        "messages": mensagens,
+        "options": {
+            "num_ctx": OLLAMA_NUM_CTX,
+            # Orçamento amplo o bastante para o raciocínio interno
+            # do Qwen3 não consumir o espaço da resposta final.
+            "num_predict": OLLAMA_NUM_PREDICT
+        },
+        "keep_alive": OLLAMA_KEEP_ALIVE
+    }
+
+    verificar_cancelamento(cancelamento, ETAPA_LLM)
+    relatar(progresso, ETAPA_LLM, None, "")
+
+    fluxo = None
+    fechamento = None
+    partes_texto = []
+    partes_pensamento = []
+    ultimo_relato = 0.0
+
     try:
-        resposta = cliente.chat(
-            model=modelo_escolhido,
-            messages=mensagens,
-            options={
-                "num_ctx": OLLAMA_NUM_CTX,
-                # Orçamento amplo o bastante para o raciocínio interno
-                # do Qwen3 não consumir o espaço da resposta final.
-                "num_predict": OLLAMA_NUM_PREDICT
-            },
-            keep_alive=OLLAMA_KEEP_ALIVE
+        try:
+            # Streaming habilitado: o primeiro token chega assim que o
+            # Ollama o produz, e o cancelamento pode fechar o stream sem
+            # esperar o fim da geração.
+            fluxo = cliente.chat(stream=True, **argumentos)
+        except TypeError:
+            # Cliente ou dublê antigo sem o parâmetro stream=True.
+            verificar_cancelamento(cancelamento, ETAPA_LLM)
+            resposta = cliente.chat(**argumentos)
+            return _extrair_conteudo(resposta)
+
+        if isinstance(fluxo, dict) or not hasattr(fluxo, "__iter__"):
+            return _extrair_conteudo(fluxo)
+
+        registrar = getattr(cancelamento, "registrar_fechamento", None)
+
+        if callable(registrar):
+            fechamento = registrar(lambda: _fechar_fluxo(fluxo))
+
+        for pedaco in fluxo:
+            verificar_cancelamento(cancelamento, ETAPA_LLM)
+
+            mensagem = _campo(pedaco, "message")
+            texto = _campo(mensagem, "content") or ""
+            raciocinio = _campo(mensagem, "thinking") or ""
+
+            if raciocinio:
+                partes_pensamento.append(str(raciocinio))
+
+            if not texto:
+                continue
+
+            texto = str(texto)
+            partes_texto.append(texto)
+
+            if ao_token is not None:
+                try:
+                    ao_token(texto)
+                except Exception:  # noqa: BLE001, S110
+                    # Um observador de streaming nunca interrompe a
+                    # geração; a resposta final continua íntegra.
+                    pass
+
+            agora = time.monotonic()
+
+            if agora - ultimo_relato >= 0.2:
+                relatar(progresso, ETAPA_LLM, None, "")
+                ultimo_relato = agora
+
+        verificar_cancelamento(cancelamento, ETAPA_LLM)
+
+        return _texto_final(
+            "".join(partes_texto),
+            "".join(partes_pensamento),
         )
 
-        return _extrair_conteudo(resposta)
+    except CancelamentoSolicitado:
+        raise
 
     except ResponseError as erro:
         return (
@@ -723,3 +1127,11 @@ def gerar_resposta(
             "Falha na comunicação com o Ollama: "
             f"{type(erro).__name__}"
         )
+
+    finally:
+        remover = getattr(cancelamento, "remover_fechamento", None)
+
+        if callable(remover):
+            remover(fechamento)
+
+        _fechar_fluxo(fluxo)

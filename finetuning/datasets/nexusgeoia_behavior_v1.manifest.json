@@ -1,0 +1,26 @@
+{
+  "nome": "nexusgeoia_behavior_v1",
+  "versao": "1.0.0",
+  "arquivo": "nexusgeoia_behavior_v1.jsonl",
+  "total": 212,
+  "por_tarefa": {
+    "governance_label": 58,
+    "sondagem_extract": 74,
+    "workflow_intent": 80
+  },
+  "por_idioma": {
+    "en": 106,
+    "pt": 106
+  },
+  "por_familia": {
+    "ambiguo": 30,
+    "incompleto": 36,
+    "negativo": 46,
+    "normal": 100
+  },
+  "sha256_registros": "ed4edd9b6fd317cabc10c712edf3709013a1d98479be966e00d4086d2006fe5f",
+  "sha256_arquivo": "ed4edd9b6fd317cabc10c712edf3709013a1d98479be966e00d4086d2006fe5f",
+  "tamanho_bytes": 151992,
+  "formato": "jsonl",
+  "descricao": "Dataset comportamental bilíngue PT-BR/EN; não memoriza fatos, apenas roteamento, extração e rotulagem."
+}

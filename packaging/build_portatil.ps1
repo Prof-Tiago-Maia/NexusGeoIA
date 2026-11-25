@@ -12,7 +12,7 @@
        (tests/test_packaging_offline.py) antes de compilar: se um teste
        quebrar, nenhum artefato e gerado;
     3. limpa os temporarios de builds anteriores (build\pyinstaller,
-       dist\NexusGeoIA, a montagem dist\NexusGeoIA_v0.9.0_Portatil e o
+       dist\NexusGeoIA, a montagem dist\NexusGeoIA_v1.0.0_Portatil e o
        antigo dist\NexusGeoIA.exe do modo arquivo unico), preservando o
        .zip e o instalador ja gerados - exceto com -Limpar, que força um
        build do zero;
@@ -20,13 +20,23 @@
        .venv\Scripts\pyinstaller.exe --clean --noconfirm packaging\assistente.spec
        e gera dist\NexusGeoIA\NexusGeoIA.exe + dist\NexusGeoIA\_internal\
        (modo --onedir, sem console);
-    5. monta dist\NexusGeoIA_v0.9.0_Portatil com todo o conteudo de
+    5. copia para o pacote --onedir os modulos e configuracoes da
+       release: .streamlit\config.toml (tema escuro), ui\ (todos os
+       modulos de apresentacao, inclusive workstation_layout.py) e
+       finetuning\Modelfile.nexusgeo-qwen3-4b-v2 (e o -q4, quando
+       presente). Com -IncludeCustomGGUF copia tambem o GGUF
+       customizado para models\ dentro do pacote gerado;
+    5.1 executa o self-test OBRIGATORIO do .exe compilado
+       (NexusGeoIA.exe --self-test via packaging\smoke_exe.py) e
+       interrompe o build se qualquer verificacao falhar;
+    6. monta dist\NexusGeoIA_v1.0.0_Portatil com todo o conteudo de
        dist\NexusGeoIA\ (NexusGeoIA.exe e _internal\) ao lado de
-       iniciar.bat, setup_llm.py, prompts\, .streamlit\, README.md,
-       PROTOCOLO_PESQUISA.md e LEIA-ME.txt (bilingue PT-BR/EN), sem
-       .dsh, .venv, .git, .ruff_cache, .pytest_cache, __pycache__,
-       tests, estrutura.txt, .env ou segredos;
-    6. compacta em dist\NexusGeoIA_v0.9.0_Portatil.zip com tar.exe -a -c
+       iniciar.bat, setup_llm.py, prompts\, .streamlit\, ui\,
+       finetuning\, README.md, PROTOCOLO_PESQUISA.md e LEIA-ME.txt
+       (bilingue PT-BR/EN), sem .dsh, .venv, .git, .ruff_cache,
+       .pytest_cache, __pycache__, tests, estrutura.txt, .env ou
+       segredos;
+    7. compacta em dist\NexusGeoIA_v1.0.0_Portatil.zip com tar.exe -a -c
        -f (fallback: Compress-Archive), confere a assinatura PK, a pasta
        raiz e a ausencia de itens proibidos dentro do .zip, e informa o
        tamanho final em MB.
@@ -36,15 +46,25 @@
     %TEMP%), abre mais rapido e reduz falsos positivos de antivirus. No
     PyInstaller 6 o sys._MEIPASS aponta para dist\NexusGeoIA\_internal.
 
-    O executavel NAO e aberto no build padrao: ele e um aplicativo
-    desktop que sobe o Streamlit e nao termina sozinho. O modo
-    --autoteste do launcher (validacao de sys._MEIPASS, imports
-    criticos, Word e Excel) fica disponivel em -SmokeExe.
+    O build termina com o self-test OBRIGATORIO do executavel
+    (NexusGeoIA.exe --self-test via packaging\smoke_exe.py): importa
+    todos os modulos internos, confere .streamlit/prompts/ui/finetuning,
+    inicializa o SQLite WAL em pasta temporaria, resolve o modelo oficial
+    nexusgeo-qwen3-4b-v2-q4 e faz o dry-run de app.py. Se qualquer
+    verificacao falhar, o .zip e o instalador NAO sao gerados.
 
-    app.py, prompts\, .streamlit\ e o assistente de modelos viajam
+    app.py, prompts\, .streamlit\ e o configurador do modelo local viajam
     dentro de _internal\ pelo .spec. As copias em disco na raiz do
     pacote portatil servem de referencia, deixam a montagem auditavel e
-    permitem conferir a configuracao sem abrir o executavel.
+    permitem conferir a configuracao sem abrir o executavel. O mesmo
+    vale para ui\ e finetuning\Modelfile.*: os modulos ja vao
+    compilados em _internal\, e a copia em disco documenta a release e
+    acompanha os templates do modelo proprio.
+
+    O pacote padrao e LEVE: o GGUF de ~2,5 GB
+    (models\nexusgeo-qwen3-4b-v2-Q4_K_M.gguf) fica fora do .zip. Use
+    -IncludeCustomGGUF para embuti-lo, procurando primeiro em
+    models\ do projeto e depois no cache D:\hf_cache.
 
 .PARAMETER PythonExe
     python.exe usado no build. Padrao: .venv\Scripts\python.exe.
@@ -56,12 +76,13 @@
 .PARAMETER SemZip
     Monta a pasta portatil e nao gera o .zip.
 
-.PARAMETER SmokeExe
-    Executa dist\NexusGeoIA.exe --autoteste depois do PyInstaller. Fica
-    desligado por padrao: o executavel e um aplicativo grafico (sobe o
-    Streamlit e nao termina sozinho) e roda-lo no build depende da
-    politica de execucao da maquina. A validacao offline equivalente
-    continua em packaging\smoke_test_artefatos.py.
+.PARAMETER IncludeCustomGGUF
+    Embute o GGUF customizado no pacote portatil. Procura
+    models\nexusgeo-qwen3-4b-v2-Q4_K_M.gguf no projeto e, se nao
+    existir, D:\hf_cache\nexusgeo-qwen3-4b-v2-Q4_K_M.gguf; copia o
+    arquivo para models\ dentro do pacote gerado. Sem o arquivo, o
+    build e interrompido com mensagem clara. Sem esta flag o pacote
+    continua leve, sem os ~2,5 GB do GGUF.
 
 .PARAMETER Limpar
     Remove o executavel, o .zip e o instalador anteriores antes de
@@ -73,6 +94,9 @@
 
 .EXAMPLE
     powershell -ExecutionPolicy Bypass -File packaging\build_portatil.ps1 -Limpar
+
+.EXAMPLE
+    powershell -ExecutionPolicy Bypass -File packaging\build_portatil.ps1 -IncludeCustomGGUF
 #>
 
 [CmdletBinding()]
@@ -83,7 +107,7 @@ param(
 
     [switch]$SemZip,
 
-    [switch]$SmokeExe,
+    [switch]$IncludeCustomGGUF,
 
     [switch]$Limpar
 )
@@ -137,6 +161,23 @@ $StagingInterna = Join-Path $Staging "_internal"
 $ZipFinal = Join-Path $Dist "${NomeApp}_v${VersaoApp}_Portatil.zip"
 $SetupFinal = Join-Path $Dist "${NomeApp}_v${VersaoApp}_Setup.exe"
 $Spec = Join-Path $ScriptDir "assistente.spec"
+$ColetaInterna = Join-Path $ScriptDir "coleta_interna.py"
+$SmokeExePython = Join-Path $ScriptDir "smoke_exe.py"
+$ManifestoModulos = Join-Path $Build "modulos_internos.json"
+
+# Templates do modelo proprio que acompanham a release. O -q4 e opcional:
+# o loop de copia ignora quando o arquivo nao existe.
+$ModelfilePrincipal = "Modelfile.nexusgeo-qwen3-4b-v2"
+$ModelfilesNexusGeo = @(
+    $ModelfilePrincipal,
+    "Modelfile.nexusgeo-qwen3-4b-v2-q4"
+)
+
+# GGUF opcional (-IncludeCustomGGUF). O pacote padrao continua leve: sem
+# a flag nada e procurado nem copiado. A ordem de busca e models\ do
+# projeto e, depois, o cache do Hugging Face em D:\hf_cache.
+$NomeGgufCustom = "nexusgeo-qwen3-4b-v2-Q4_K_M.gguf"
+$CacheGgufCustom = "D:\hf_cache"
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -251,6 +292,107 @@ function Copy-PastaPublicavel {
     }
 }
 
+# Copia os modulos e configuracoes da release para o pacote --onedir.
+#
+# A partir da v1.0.0 a distribuicao leva, alem de app.py e prompts\, os
+# modulos de apresentacao (ui\, incluindo workstation_layout.py) e os
+# templates do modelo proprio (finetuning\Modelfile.*). O pacote
+# --onedir e a fonte unica dessa copia: o staging do portatil herda a
+# pasta publicada e o build_installer.ps1 embute
+# dist\NexusGeoIA\* recursivamente no Setup.
+#
+# De finetuning\ viajam apenas os Modelfile: adaptadores, datasets,
+# relatorios e __pycache__ do pacote de avaliacao ficam fora da
+# distribuicao.
+function Copy-ModulosDeDistribuicao {
+    param([string]$Destino)
+
+    New-Item -ItemType Directory -Force -Path $Destino | Out-Null
+
+    Copy-PastaPublicavel (Join-Path $Raiz "ui") (Join-Path $Destino "ui")
+
+    $pastaFinetuning = Join-Path $Destino "finetuning"
+
+    New-Item -ItemType Directory -Force -Path $pastaFinetuning | Out-Null
+
+    foreach ($modelfile in $ModelfilesNexusGeo) {
+        $origemModelfile = Join-Path $Raiz (Join-Path "finetuning" $modelfile)
+
+        if (Test-Path -LiteralPath $origemModelfile -PathType Leaf) {
+            Copy-Item -LiteralPath $origemModelfile -Destination (Join-Path $pastaFinetuning $modelfile) -Force
+        }
+    }
+}
+
+# Procura o GGUF customizado, nesta ordem, em models\ do projeto e no
+# cache D:\hf_cache. Devolve o caminho encontrado ou $null. Recebe todos
+# os caminhos por parametro para poder ser testada isoladamente por
+# tests/test_packaging_offline.py com um arquivo mock leve.
+function Resolve-GgufCustom {
+    param(
+        [string]$RaizProjeto,
+        [string]$CacheAlternativo,
+        [string]$NomeArquivo
+    )
+
+    $candidatos = @(
+        (Join-Path (Join-Path $RaizProjeto "models") $NomeArquivo),
+        (Join-Path $CacheAlternativo $NomeArquivo)
+    )
+
+    foreach ($candidato in $candidatos) {
+        if (Test-Path -LiteralPath $candidato -PathType Leaf) {
+            return $candidato
+        }
+    }
+
+    return $null
+}
+
+# Copia o GGUF customizado para models\ dentro do pacote portatil.
+# Interrompe o build com mensagem clara quando o arquivo nao existe em
+# nenhuma das origens: um .zip publicado sem o GGUF prometido seria pior
+# que a falha antecipada.
+function Copy-GgufCustomParaPacote {
+    param(
+        [string]$RaizProjeto,
+        [string]$CacheAlternativo,
+        [string]$NomeArquivo,
+        [string]$Pacote
+    )
+
+    $origem = Resolve-GgufCustom -RaizProjeto $RaizProjeto -CacheAlternativo $CacheAlternativo -NomeArquivo $NomeArquivo
+
+    if (-not $origem) {
+        throw @"
+GGUF do modelo customizado nao encontrado para -IncludeCustomGGUF.
+
+Procurei em:
+  $(Join-Path (Join-Path $RaizProjeto "models") $NomeArquivo)
+  $(Join-Path $CacheAlternativo $NomeArquivo)
+
+Baixe o arquivo para models\ na raiz do projeto ou rode o build sem
+-IncludeCustomGGUF (pacote leve, sem os ~2,5 GB do GGUF).
+"@
+    }
+
+    $tamanho = (Get-Item -LiteralPath $origem).Length
+
+    if ($tamanho -le 0) {
+        throw "GGUF vazio ou ilegivel: $origem"
+    }
+
+    $pastaModelos = Join-Path $Pacote "models"
+
+    New-Item -ItemType Directory -Force -Path $pastaModelos | Out-Null
+
+    $destino = Join-Path $pastaModelos $NomeArquivo
+
+    Copy-Item -LiteralPath $origem -Destination $destino -Force
+
+    return $destino
+}
+
 # Compacta uma pasta em .zip preservando a pasta raiz dentro do arquivo.
 #
 # Preferencia pelo tar.exe (bsdtar) que acompanha o Windows 10 1803+ e o
@@ -263,7 +405,7 @@ function Copy-PastaPublicavel {
 #
 # ``tar -a`` infere o formato pela extensao do arquivo (``.zip``) e
 # ``-C`` muda a raiz para os caminhos sairem relativos: o .zip extrai
-# uma pasta ``NexusGeoIA_v0.9.0_Portatil\`` em vez de despejar tudo na
+# uma pasta ``NexusGeoIA_v1.0.0_Portatil\`` em vez de despejar tudo na
 # pasta atual. Devolve o nome do motor usado.
 function Invoke-CompactacaoZip {
     param([string]$Origem, [string]$Destino)
@@ -358,6 +500,15 @@ Assert-Arquivo (Join-Path $Raiz "config.py") "config.py"
 Assert-Arquivo (Join-Path $Raiz "launcher_desktop.py") "launcher_desktop.py"
 Assert-Arquivo (Join-Path $Raiz "setup_llm.py") "setup_llm.py"
 Assert-Arquivo (Join-Path $Raiz "iniciar.bat") "iniciar.bat"
+Assert-Arquivo (Join-Path $Raiz "encerrar.bat") "encerrar.bat"
+
+# Modulos e configuracoes da release: sem estes arquivos a montagem
+# sairia incompleta (tema escuro, layout da workstation e templates do
+# modelo proprio).
+Assert-Arquivo (Join-Path $Raiz ".streamlit\config.toml") ".streamlit\config.toml"
+Assert-Arquivo (Join-Path $Raiz "ui\workstation_layout.py") "ui\workstation_layout.py"
+Assert-Arquivo (Join-Path $Raiz "finetuning\$ModelfilePrincipal") "finetuning\$ModelfilePrincipal"
+
 Assert-Arquivo $Spec "assistente.spec"
 
 $ConteudoSpec = Get-Content -LiteralPath $Spec -Raw
@@ -427,6 +578,18 @@ if ($ConteudoIniciar -notmatch "--server\.headless=false") {
 
 if ($ConteudoIniciar -notmatch "--server\.port=%PORTA%") {
     throw "iniciar.bat usa porta fixa: --server.port=%PORTA% ausente."
+}
+
+# O encerrar.bat chama o modo --encerrar do launcher; sem esse vinculo o
+# usuario nao teria como fechar o servidor residual em um clique.
+$ConteudoEncerrar = Get-Content -LiteralPath (Join-Path $Raiz "encerrar.bat") -Raw
+
+if ($ConteudoEncerrar -notmatch "--encerrar") {
+    throw "encerrar.bat nao chama o modo --encerrar do launcher."
+}
+
+if ($ConteudoEncerrar -notmatch "iniciar\.bat") {
+    throw "encerrar.bat nao delega para iniciar.bat."
 }
 
 New-Item -ItemType Directory -Force -Path $Dist | Out-Null
@@ -655,6 +818,62 @@ else {
 }
 
 # ---------------------------------------------------------------------------
+# Descoberta dos modulos internos (hidden-import explicito por .py)
+# ---------------------------------------------------------------------------
+#
+# O .spec nao aceita --hidden-import/--collect-submodules/--collect-data
+# na linha de comando: o PyInstaller proibe opcoes de makespec quando um
+# .spec e fornecido. O equivalente e feito em duas camadas:
+#
+#  - packaging\coleta_interna.py varre core\, services\, ui\, adapters\
+#    e utils\ e grava build\modulos_internos.json com um hidden-import
+#    explicito para CADA .py, alem de config e setup_llm;
+#  - packaging\assistente.spec le o manifesto e chama collect_submodules/
+#    collect_data_files para os cinco pacotes.
+#
+# Aqui o build confere a coleta real antes de compilar: se um pacote
+# sumir do ambiente (ou do .spec), o build falha agora em vez de gerar um
+# .exe que so quebra no navegador do usuario.
+
+Write-Etapa "Descobrindo os modulos internos para o PyInstaller"
+
+Assert-Arquivo $ColetaInterna "coleta_interna.py"
+
+& $PythonExe $ColetaInterna --raiz $Raiz --saida $ManifestoModulos
+
+if ($LASTEXITCODE -ne 0) {
+    throw "A descoberta de modulos internos falhou (codigo $LASTEXITCODE)."
+}
+
+Assert-Arquivo $ManifestoModulos "manifesto de modulos internos"
+
+$manifestoModulos = Get-Content -LiteralPath $ManifestoModulos -Raw | ConvertFrom-Json
+
+if ($manifestoModulos.modulos.Count -lt 1) {
+    throw "O manifesto de modulos internos esta vazio."
+}
+
+Write-Host "    Modulos com hidden-import explicito: $($manifestoModulos.modulos.Count)"
+
+foreach ($pacoteInterno in @("core", "services", "ui", "adapters", "utils")) {
+    $quantidadeSubmodulos = & $PythonExe -c "from PyInstaller.utils.hooks import collect_submodules; print(len(collect_submodules('$pacoteInterno')))" 2>$null
+
+    if ($LASTEXITCODE -ne 0) {
+        throw "collect_submodules('$pacoteInterno') falhou: o pacote nao esta no bundle."
+    }
+
+    $quantidadeDados = & $PythonExe -c "from PyInstaller.utils.hooks import collect_data_files; print(len(collect_data_files('$pacoteInterno')))" 2>$null
+
+    if ($LASTEXITCODE -ne 0) {
+        throw "collect_data_files('$pacoteInterno') falhou."
+    }
+
+    Write-Host "    --collect-submodules $($pacoteInterno): $quantidadeSubmodulos; --collect-data $($pacoteInterno): $quantidadeDados"
+}
+
+Write-Host "    Pacotes: $($manifestoModulos.pacotes -join ', ')"
+
+# ---------------------------------------------------------------------------
 # Compilacao do executavel
 # ---------------------------------------------------------------------------
 
@@ -670,6 +889,10 @@ $argumentosPyInstaller = @(
     "packaging\assistente.spec"
 )
 
+# O .spec le exatamente esta lista de hidden-imports explicitos.
+$manifestoAnterior = $env:NEXUSGEO_MODULOS_MANIFEST
+$env:NEXUSGEO_MODULOS_MANIFEST = $ManifestoModulos
+
 Push-Location -LiteralPath $Raiz
 
 try {
@@ -678,6 +901,13 @@ try {
 }
 finally {
     Pop-Location
+
+    if ($null -eq $manifestoAnterior) {
+        Remove-Item Env:\NEXUSGEO_MODULOS_MANIFEST -ErrorAction SilentlyContinue
+    }
+    else {
+        $env:NEXUSGEO_MODULOS_MANIFEST = $manifestoAnterior
+    }
 }
 
 if ($codigoPyInstaller -ne 0) {
@@ -701,6 +931,39 @@ foreach ($recursoInterno in @("app.py", "prompts\system_base.txt", ".streamlit\c
     }
 }
 
+# ui\ e finetuning\ tambem precisam existir em _internal: o launcher faz
+# chdir para sys._MEIPASS e o setup resolve o Modelfile por
+# config.diretorio_do_projeto(). O manifesto e lido pelo --self-test.
+foreach ($recursoModuloInterno in @(
+    "ui\workstation_layout.py",
+    "finetuning\Modelfile.nexusgeo-qwen3-4b-v2",
+    "modulos_internos.json"
+)) {
+    $caminhoModuloInterno = Join-Path $PastaInterna $recursoModuloInterno
+
+    if (-not (Test-Path -LiteralPath $caminhoModuloInterno -PathType Leaf)) {
+        throw "Recurso de modulo ausente em _internal: $caminhoModuloInterno"
+    }
+}
+
+# ---------------------------------------------------------------------------
+# Modulos e configuracoes da release no pacote --onedir
+# ---------------------------------------------------------------------------
+#
+# O pacote publica ui\ (workstation_layout.py e demais modulos) e
+# finetuning\Modelfile.* ao lado do executavel. O staging do portatil
+# copia esta pasta inteira e o build_installer.ps1 embute
+# dist\NexusGeoIA\* recursivamente, entao a mesma copia serve aos dois
+# artefatos da release. O .streamlit\config.toml ja vem do .spec em
+# _internal\.streamlit\config.toml e e conferido abaixo, no staging.
+
+Write-Etapa "Copiando modulos e configuracoes da release para o pacote"
+
+Copy-ModulosDeDistribuicao $PastaApp
+
+Write-Host "    ui\ (incluindo workstation_layout.py): OK"
+Write-Host "    finetuning\Modelfile.*: OK"
+
 # Assinatura MZ: confirma que o PyInstaller gerou um PE valido e nao um
 # arquivo truncado (o que passaria apenas pelo teste de existencia).
 $assinatura = Get-Content -LiteralPath $ExeApp -Encoding Byte -TotalCount 2
@@ -720,143 +983,75 @@ Write-Host "    Executavel: $ExeApp ($exeMb MB)"
 Write-Host "    Pacote onedir: $PastaApp ($tamanhoPastaAppMb MB com _internal)"
 
 # ---------------------------------------------------------------------------
-# Smoke test do executavel (opcional, -SmokeExe)
+# Self-test obrigatorio do executavel (--self-test)
 # ---------------------------------------------------------------------------
 #
-# O executavel e um aplicativo desktop (subsistema grafico, console=False)
-# que, no uso normal, sobe o Streamlit e nao termina sozinho. O modo
-# ``--autoteste`` existe para validar o bundle e sair, mas executar um
-# binario durante o build depende da politica de execucao da maquina
-# (antivirus, permissao, GPO). Por isso essa etapa e OPT-IN: o build
-# padrao nunca abre o .exe.
+# O build so conclui quando o binario compilado passa 100% no
+# autodiagnostico: import de TODOS os modulos internos (config,
+# setup_llm, core.*, services.*, ui.*, adapters.*, utils.*), recursos de
+# runtime (.streamlit, prompts, ui e finetuning), SQLite WAL em pasta
+# temporaria, resolucao do modelo oficial nexusgeo-qwen3-4b-v2-q4 e
+# dry-run de app.py.
 #
-# A validacao offline equivalente (assinaturas, conteudo do .zip e imports
-# criticos a partir do codigo-fonte) roda em
-# packaging\smoke_test_artefatos.py e em tests/test_packaging_offline.py.
+# Sem esta etapa um ModuleNotFoundError como core.governance so
+# apareceria no navegador do usuario final, depois do .zip publicado.
 #
-# Quando usado, o autoteste valida os recursos em sys._MEIPASS (que no
-# --onedir aponta para _internal), os imports criticos e gera um .docx e
-# um .xlsx de verdade - exatamente os caminhos que quebram sem aviso no
-# build.
-#
-# No modo --onedir nao ha extracao de _MEI... a cada execucao; o limite
-# abaixo cobre com folga a inicializacao do pacote em disco lento.
+# O executavel e console=False; packaging\smoke_exe.py executa o .exe
+# com --self-test, le o relatorio JSON (ASSISTENTE_SELFTEST_REPORT) e
+# devolve codigo != 0 quando qualquer verificacao falha. Nao abre
+# navegador, servidor nem janela.
 
-$relatorioSmoke = Join-Path $Build "smoke_autoteste.json"
+$RelatorioSelfTest = Join-Path $Build "self_test.json"
+$PastaDadosSelfTest = Join-Path $Build "self_test_dados"
+$TEMPO_LIMITE_SELFTEST = 1800
 
-if (-not $SmokeExe) {
-    Write-Etapa "Smoke test do executavel: ignorado (use -SmokeExe)"
+Write-Etapa "Self-test obrigatorio do executavel (--self-test)"
 
-    Write-Host "    O .exe nao e executado no build padrao (aplicativo grafico)."
-    Write-Host "    Validacao offline: packaging\smoke_test_artefatos.py."
+Assert-Arquivo $SmokeExePython "smoke_exe.py"
+
+if (Test-Path -LiteralPath $PastaDadosSelfTest) {
+    Remove-PastaSegura $PastaDadosSelfTest
 }
-else {
-    Write-Etapa "Smoke test do executavel (--autoteste)"
 
-    # Tempo maximo do autoteste. No --onedir o bootloader nao extrai o
-    # bundle; o limite existe para nao deixar o build travado se um
-    # import de DLL ou o antivirus segurar o processo.
-    $TIMEOUT_SMOKE = 1800
+& $PythonExe $SmokeExePython --exe $ExeApp --relatorio $RelatorioSelfTest --timeout $TEMPO_LIMITE_SELFTEST --dados $PastaDadosSelfTest
 
-    if (Test-Path -LiteralPath $relatorioSmoke) {
-        Remove-Item -LiteralPath $relatorioSmoke -Force
+$codigoSelfTest = $LASTEXITCODE
+
+if ($codigoSelfTest -ne 0) {
+    $detalheSelfTest = ""
+
+    if (Test-Path -LiteralPath $RelatorioSelfTest -PathType Leaf) {
+        $detalheSelfTest = (Get-Content -LiteralPath $RelatorioSelfTest -Raw).Trim()
     }
 
-    $smokeReportAnterior = $env:ASSISTENTE_SMOKE_REPORT
-    $smokeDadosAnterior = $env:ASSISTENTE_DATA_DIR
-
-    $env:ASSISTENTE_SMOKE_REPORT = $relatorioSmoke
-    # Pasta de dados isolada: o autoteste nao toca no perfil do usuario.
-    $env:ASSISTENTE_DATA_DIR = Join-Path $Build "smoke_dados"
-
-    try {
-        # Sem -Wait: o autoteste valida _internal, imports e geracao de
-        # Word/Excel. Wait-Process com timeout garante que um travamento
-        # nao deixe o build parado para sempre.
-        $processoSmoke = Start-Process `
-            -FilePath $ExeApp `
-            -ArgumentList "--autoteste" `
-            -PassThru `
-            -WindowStyle Hidden
-
-        $cronometroSmoke = [System.Diagnostics.Stopwatch]::StartNew()
-
-        try {
-            $processoSmoke | Wait-Process -Timeout $TIMEOUT_SMOKE -ErrorAction Stop
-            $codigoSmoke = $processoSmoke.ExitCode
-        }
-        catch {
-            Write-Warning "O autoteste excedeu $TIMEOUT_SMOKE s; encerrando o processo."
-
-            try {
-                Stop-Process -Id $processoSmoke.Id -Force -ErrorAction Stop
-            }
-            catch {
-                Write-Verbose "O processo do autoteste ja havia terminado."
-            }
-
-            $codigoSmoke = -2
-        }
-
-        $cronometroSmoke.Stop()
-
-        Write-Host "    Tempo do autoteste: $([math]::Round($cronometroSmoke.Elapsed.TotalSeconds, 1)) s"
-    }
-    finally {
-        $env:ASSISTENTE_SMOKE_REPORT = $smokeReportAnterior
-        $env:ASSISTENTE_DATA_DIR = $smokeDadosAnterior
-    }
-
-    if ($codigoSmoke -eq -2) {
-        $parcialSmoke = ""
-
-        if (Test-Path -LiteralPath $relatorioSmoke -PathType Leaf) {
-            $parcialSmoke = (Get-Content -LiteralPath $relatorioSmoke -Raw).Trim()
-        }
-
-        throw @"
-O autoteste do executavel excedeu $TIMEOUT_SMOKE s e foi encerrado.
+    throw @"
+O self-test do executavel falhou (codigo $codigoSelfTest).
 
 O pacote portatil NAO foi montado e o .zip NAO foi gerado.
 
-Ultimo relatorio parcial gravado (mostra onde o teste parou):
-$parcialSmoke
+Relatorio do self-test:
+$detalheSelfTest
 "@
-    }
+}
 
-    if ($codigoSmoke -ne 0) {
-        $detalheSmoke = ""
+Assert-Arquivo $RelatorioSelfTest "Relatorio do self-test"
 
-        if (Test-Path -LiteralPath $relatorioSmoke -PathType Leaf) {
-            $detalheSmoke = (Get-Content -LiteralPath $relatorioSmoke -Raw).Trim()
-        }
+$relatorioSelfTestJson = Get-Content -LiteralPath $RelatorioSelfTest -Raw | ConvertFrom-Json
 
-        throw @"
-O autoteste do executavel falhou (codigo $codigoSmoke).
+if (-not $relatorioSelfTestJson.ok) {
+    $falhasSelfTest = ($relatorioSelfTestJson.falhas -join "; ")
 
-O .exe foi compilado, mas nao passou na validacao de recursos/imports.
-O pacote portatil NAO foi montado e o .zip NAO foi gerado.
+    throw "O self-test do executavel reprovou: $falhasSelfTest"
+}
 
-Relatorio do autoteste:
-$detalheSmoke
-"@
-    }
+foreach ($verificacao in $relatorioSelfTestJson.verificacoes) {
+    Write-Host "    OK: $($verificacao.nome)"
+}
 
-    Assert-Arquivo $relatorioSmoke "Relatorio do autoteste"
+Write-Host "    Bundle: $($relatorioSelfTestJson.base_recursos)"
 
-    $relatorioSmokeJson = Get-Content -LiteralPath $relatorioSmoke -Raw | ConvertFrom-Json
-
-    if (-not $relatorioSmokeJson.ok) {
-        $falhasSmoke = ($relatorioSmokeJson.falhas -join "; ")
-
-        throw "O autoteste do executavel reprovou: $falhasSmoke"
-    }
-
-    foreach ($verificacao in $relatorioSmokeJson.verificacoes) {
-        Write-Host "    OK: $($verificacao.nome)"
-    }
-
-    Write-Host "    Bundle: $($relatorioSmokeJson.base_recursos)"
+if (Test-Path -LiteralPath $PastaDadosSelfTest) {
+    Remove-PastaSegura $PastaDadosSelfTest
 }
 
 # ---------------------------------------------------------------------------
@@ -874,6 +1069,7 @@ New-Item -ItemType Directory -Force -Path $Staging | Out-Null
 # o cacert.pem do certifi, que e dado publico do bundle e nao segredo.
 Copy-PastaPublicavel $PastaApp $Staging -ManterCertificados
 Copy-Item -LiteralPath (Join-Path $Raiz "iniciar.bat") -Destination (Join-Path $Staging "iniciar.bat") -Force
+Copy-Item -LiteralPath (Join-Path $Raiz "encerrar.bat") -Destination (Join-Path $Staging "encerrar.bat") -Force
 Copy-Item -LiteralPath (Join-Path $Raiz "setup_llm.py") -Destination (Join-Path $Staging "setup_llm.py") -Force
 
 # Documentacao de metodo e visao geral que acompanham o binario. A lista
@@ -926,19 +1122,26 @@ Conteudo do pacote:
   _internal\      bibliotecas, app.py, prompts\ e .streamlit\ de runtime;
                   mantenha esta pasta sempre ao lado de NexusGeoIA.exe.
   iniciar.bat     abre o executavel e fixa a pasta de dados.
-  setup_llm.py    copia de referencia do assistente de modelos; para usa-lo
-                  no dia a dia prefira: NexusGeoIA.exe --setup-modelo
+  encerrar.bat    encerra imediatamente o servidor e os processos filhos.
+  setup_llm.py    copia de referencia do configurador do modelo oficial;
+                  para usa-lo no dia a dia prefira: NexusGeoIA.exe --setup-modelo
   PROTOCOLO_PESQUISA.md  protocolo de validacao cientifica e mitigacao de
                   vies entre familias de LLMs (auditoria cruzada, fontes,
                   citacao e parecer tecnico).
   README.md       visao geral, instalacao e uso do aplicativo.
   prompts\        copia de referencia do system prompt padrao.
   .streamlit\     copia de referencia da configuracao do Streamlit.
+  ui\             modulos de apresentacao (workstation_layout.py e demais).
+  finetuning\     templates Modelfile do modelo NexusGeo Qwen3 4B v2.
 
-Para trocar ou adicionar modelos depois:
+O GGUF do modelo proprio (~2,5 GB) so acompanha o pacote quando o build
+roda com -IncludeCustomGGUF; nesse caso ele fica em models\.
+
+Para reconfigurar o modelo oficial depois:
     NexusGeoIA.exe --setup-modelo
 
 Para conferir a integridade do pacote (sem abrir janela nem navegador):
+    NexusGeoIA.exe --self-test
     NexusGeoIA.exe --autoteste
 
 ---------------------------------------------------------------------------
@@ -961,7 +1164,8 @@ Conteudo do pacote (English):
   _internal\      runtime libraries, app.py, prompts\ and .streamlit\;
                   always keep this folder next to NexusGeoIA.exe.
   iniciar.bat     starts the executable and pins the data folder.
-  setup_llm.py    reference copy of the model assistant; day to day prefer:
+  encerrar.bat    shuts down the server and its child processes immediately.
+  setup_llm.py    reference copy of the local model configurator; prefer:
                   NexusGeoIA.exe --setup-modelo
   PROTOCOLO_PESQUISA.md  scientific validation and LLM-family bias
                   mitigation protocol (cross-audit, sources, citation and
@@ -969,15 +1173,60 @@ Conteudo do pacote (English):
   README.md       overview, installation and usage of the application.
   prompts\        reference copy of the default system prompt.
   .streamlit\     reference copy of the Streamlit configuration.
+  ui\             presentation modules (workstation_layout.py and others).
+  finetuning\     Modelfile templates for the NexusGeo Qwen3 4B v2 model.
 
-To change or add models later:
+The custom model GGUF (~2.5 GB) only ships when the build runs with
+-IncludeCustomGGUF; in that case it is stored under models\.
+
+To reconfigure the official model later:
     NexusGeoIA.exe --setup-modelo
 
 To check package integrity (no window and no browser):
+    NexusGeoIA.exe --self-test
     NexusGeoIA.exe --autoteste
 "@
 
 Set-Content -LiteralPath (Join-Path $Staging "LEIA-ME.txt") -Value $leiaMe -Encoding ASCII
+
+# ---------------------------------------------------------------------------
+# GGUF customizado (opcional, -IncludeCustomGGUF)
+# ---------------------------------------------------------------------------
+#
+# O pacote padrao e leve: o GGUF de ~2,5 GB do modelo proprio fica fora
+# do .zip para manter a distribuicao baixavel e o build rapido. Com
+# -IncludeCustomGGUF o build procura models\nexusgeo-qwen3-4b-v2-Q4_K_M.gguf
+# no projeto e, se nao existir, D:\hf_cache\nexusgeo-qwen3-4b-v2-Q4_K_M.gguf;
+# o arquivo e copiado para models\ dentro do pacote gerado. Sem o
+# arquivo, o build para com mensagem clara (nunca publica um pacote
+# "com GGUF" vazio).
+
+$ggufDestino = $null
+
+if ($IncludeCustomGGUF) {
+    Write-Etapa "Embutindo o GGUF customizado (-IncludeCustomGGUF)"
+
+    # Splat de hashtable: no Windows PowerShell 5.1 o splat de array
+    # entregaria os elementos como argumentos posicionais.
+    $parametrosGguf = @{
+        RaizProjeto = $Raiz
+        CacheAlternativo = $CacheGgufCustom
+        NomeArquivo = $NomeGgufCustom
+        Pacote = $Staging
+    }
+
+    $ggufDestino = Copy-GgufCustomParaPacote @parametrosGguf
+
+    $ggufMb = [math]::Round((Get-Item -LiteralPath $ggufDestino).Length / 1MB, 1)
+
+    Write-Host "    GGUF: $ggufDestino ($ggufMb MB)"
+}
+else {
+    Write-Etapa "GGUF do modelo customizado: nao embutido (pacote leve)"
+
+    Write-Host "    O .zip padrao nao carrega os ~2,5 GB do GGUF."
+    Write-Host "    Para embutir models\$NomeGgufCustom, use -IncludeCustomGGUF."
+}
 
 # ---------------------------------------------------------------------------
 # Validacoes da montagem
@@ -989,13 +1238,20 @@ $conteudoEsperado = @(
     "$NomeApp.exe",
     "_internal",
     "iniciar.bat",
+    "encerrar.bat",
     "setup_llm.py",
     "LEIA-ME.txt",
     "README.md",
     "PROTOCOLO_PESQUISA.md",
     "prompts",
-    ".streamlit"
+    ".streamlit",
+    "ui",
+    "finetuning"
 )
+
+if ($IncludeCustomGGUF) {
+    $conteudoEsperado += "models"
+}
 
 foreach ($item in $conteudoEsperado) {
     $caminhoItem = Join-Path $Staging $item
@@ -1013,6 +1269,36 @@ foreach ($recursoPortatil in @("app.py", "prompts\system_base.txt", ".streamlit\
 
     if (-not (Test-Path -LiteralPath $caminhoRecursoPortatil -PathType Leaf)) {
         throw "Recurso ausente no pacote portatil: $caminhoRecursoPortatil"
+    }
+}
+
+# Modulos e configuracoes da release: o tema escuro (.streamlit), os
+# modulos de apresentacao (ui\) e os templates do modelo proprio
+# (finetuning\Modelfile.*) precisam estar na raiz do pacote. O Modelfile
+# -q4 e opcional: so e exigido quando existe no projeto.
+foreach ($recursoGate3 in @(
+    (Join-Path ".streamlit" "config.toml"),
+    (Join-Path "ui" "__init__.py"),
+    (Join-Path "ui" "workstation_layout.py")
+)) {
+    $caminhoGate3 = Join-Path $Staging $recursoGate3
+
+    if (-not (Test-Path -LiteralPath $caminhoGate3 -PathType Leaf)) {
+        throw "Recurso da release ausente no pacote portatil: $caminhoGate3"
+    }
+}
+
+foreach ($modelfile in $ModelfilesNexusGeo) {
+    $origemModelfile = Join-Path $Raiz (Join-Path "finetuning" $modelfile)
+
+    if (-not (Test-Path -LiteralPath $origemModelfile -PathType Leaf)) {
+        continue
+    }
+
+    $caminhoModelfile = Join-Path $Staging (Join-Path "finetuning" $modelfile)
+
+    if (-not (Test-Path -LiteralPath $caminhoModelfile -PathType Leaf)) {
+        throw "Template do modelo ausente no pacote portatil: $caminhoModelfile"
     }
 }
 
@@ -1154,6 +1440,13 @@ Write-Host "  Versao: $VersaoApp"
 Write-Host "  Executavel: $ExeApp ($exeMb MB)"
 Write-Host "  Pacote onedir: $PastaApp ($tamanhoPastaAppMb MB)"
 Write-Host "  Pasta: $Staging ($tamanhoStagingMb MB)"
+
+if ($ggufDestino) {
+    Write-Host "  GGUF: $ggufDestino ($ggufMb MB)" -ForegroundColor Green
+}
+else {
+    Write-Host "  GGUF: nao embutido (pacote leve; use -IncludeCustomGGUF)"
+}
 
 if ($zipMb) {
     Write-Host "  Zip: $ZipFinal ($zipMb MB) [$motorZip]" -ForegroundColor Green

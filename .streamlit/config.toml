@@ -1,3 +1,15 @@
+# Identidade visual da Workstation GIS Dark Mode (Fase D4). O tema é
+# travado no modo escuro: sem seções [theme.light]/[theme.dark] o
+# Streamlit não oferece o alternador de aparência nas configurações.
+# A semântica epistêmica (OBSERVED x INFERRED) é aplicada apenas pelo
+# CSS de ``app.py`` (``CSS_INTERFACE``), com as cores reservadas lá.
+[theme]
+base = "dark"
+primaryColor = "#00B4D8"
+backgroundColor = "#0E1117"
+secondaryBackgroundColor = "#161B22"
+textColor = "#E6EDF3"
+
 # ``auto`` mantém a barra superior (menu ``⋮`` e botão ``Parar``) visível em
 # execução local. O modo ``minimal`` faz o Streamlit não renderizar o menu
 # principal nem o botão de interromper a execução; o botão ``Deploy``

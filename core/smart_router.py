@@ -23,14 +23,16 @@ porque o classificador não respondeu.
 
 from pathlib import Path
 
-from config import OLLAMA_MODEL
-from core.source_router import (
-    consulta_ana_exclusiva,
-    fontes_relevantes
-)
+from core.source_router import consulta_ana_exclusiva, fontes_relevantes
 from services.llm_service import (
     ClassificacaoIntencaoError,
-    classificar_intencao_fontes
+    classificar_intencao_fontes,
+    modelo_padrao_do_sistema,
+)
+from services.progress_service import (
+    ETAPA_ROTEAMENTO,
+    relatar,
+    verificar_cancelamento,
 )
 from services.rag_service import listar_documentos
 
@@ -137,7 +139,9 @@ def decidir_roteamento(
     pergunta,
     documentos=None,
     modelo=None,
-    historico=None
+    historico=None,
+    progresso=None,
+    cancelamento=None,
 ):
     """Decide quais fontes a pergunta "Automático" deve consultar.
 
@@ -148,12 +152,16 @@ def decidir_roteamento(
     ``heuristica``), a justificativa e os nomes dos documentos locais.
     """
 
+    verificar_cancelamento(cancelamento, ETAPA_ROTEAMENTO)
+    relatar(progresso, ETAPA_ROTEAMENTO, None, "")
+
     lista_documentos = (
         listar_documentos()
         if documentos is None
         else documentos
     )
     nomes = nomes_documentos(lista_documentos)
+    verificar_cancelamento(cancelamento, ETAPA_ROTEAMENTO)
 
     if not nomes:
         # Antes da regra geral (RIGeo), reconhece a consulta exclusiva de
@@ -185,15 +193,17 @@ def decidir_roteamento(
             modelo=None,
         )
 
-    modelo_escolhido = modelo or OLLAMA_MODEL
+    modelo_escolhido = modelo or modelo_padrao_do_sistema()
 
     try:
         classificacao = classificar_intencao_fontes(
             pergunta,
             nomes,
             historico=historico,
-            modelo=modelo_escolhido
+            modelo=modelo_escolhido,
+            cancelamento=cancelamento,
         )
+        verificar_cancelamento(cancelamento, ETAPA_ROTEAMENTO)
     except ClassificacaoIntencaoError as erro:
         intencao = _intencao_por_heuristica(pergunta)
 

@@ -278,10 +278,10 @@ TEXTOS_I18N = {
             "para Markdown. Desligado, a resposta usa apenas as demais "
             "fontes ligadas."
         ),
-        "grupo_acervo_web": "Acervo Geral & Web",
-        "grupo_hidrologia": "Hidrologia & Hidrogeologia",
-        "grupo_recursos_minerais": "Recursos Minerais & Geologia",
-        "grupo_bases_cientificas": "Bases Científicas Internacionais",
+        "grupo_geologia_geofisica": "Geologia & Geofísica",
+        "grupo_recursos_minerais_anm": "Recursos Minerais & ANM",
+        "grupo_hidrogeologia_hidricos": "Hidrogeologia & Hídricos",
+        "grupo_literatura_apoio": "Literatura & Apoio",
         "web_tecnicos": (
             "Priorizar domínios técnicos (.gov / SciELO / USGS)"
         ),
@@ -513,6 +513,53 @@ TEXTOS_I18N = {
         ),
         "fonte_legenda": "Fonte: {fonte}",
         "roteamento_legenda": " · Roteamento: {intencao}",
+        # -- Progresso por etapa e cancelamento (Fase D3a) ----------
+        "progresso_titulo": "Progresso da consulta",
+        "progresso_etapa_atual": "Etapa atual: {etapa}",
+        "progresso_texto_parcial": "Prévia da resposta em streaming",
+        "progresso_aguardando": "Aguardando o início da consulta...",
+        "botao_cancelar_consulta": "Cancelar consulta",
+        "ajuda_cancelar_consulta": (
+            "Interrompe a consulta em andamento. A resposta parcial e os "
+            "arquivos temporários são descartados e nenhuma mensagem é "
+            "salva no histórico."
+        ),
+        "consulta_em_andamento": (
+            "Já existe uma consulta em andamento. Cancele-a ou aguarde a "
+            "conclusão antes de enviar outra pergunta."
+        ),
+        "cancelamento_solicitado": (
+            "Consulta cancelada. Nenhuma resposta foi salva no histórico "
+            "e os arquivos temporários da conversão foram removidos."
+        ),
+        "status_cancelado": "Consulta cancelada.",
+        "progresso_etapa_preparando": "Preparando a consulta",
+        "progresso_etapa_roteamento": "Classificando a intenção da pergunta",
+        "progresso_etapa_sgb": "Consultando o RIGeo / SGB",
+        "progresso_etapa_documentos": "Buscando na base documental local",
+        "progresso_etapa_documentos_consultas": (
+            "Gerando as consultas bilíngues dos documentos"
+        ),
+        "progresso_etapa_documentos_indice": "Indexando os documentos locais",
+        "progresso_etapa_documento_pagina": "Convertendo as páginas do documento",
+        "progresso_etapa_documento_ocr": "Aplicando OCR nas páginas digitalizadas",
+        "progresso_etapa_ana": "Consultando a ANA / HidroWeb",
+        "progresso_etapa_web": "Pesquisando na Web aberta",
+        "progresso_etapa_openalex": "Consultando o OpenAlex",
+        "progresso_etapa_usgs": "Consultando o USGS ScienceBase",
+        "progresso_etapa_intl_geo": (
+            "Consultando os serviços geológicos internacionais"
+        ),
+        "progresso_etapa_geosgb": "Consultando o GeoSGB / SGB",
+        "progresso_etapa_anm": "Consultando a ANM / SIGMINE",
+        "progresso_etapa_macrostrat": "Consultando a Macrostrat",
+        "progresso_etapa_siagas": "Consultando o SIAGAS / RIMAS",
+        "progresso_etapa_geossit": "Consultando o INDE / GEOSSIT",
+        "progresso_etapa_llm": "Gerando a resposta com o Ollama",
+        "progresso_etapa_concluida": "Consulta concluída",
+        "progresso_etapa_cancelando": "Cancelando a consulta...",
+        "progresso_etapa_cancelada": "Consulta cancelada",
+        "progresso_etapa_erro": "Falha ao concluir a consulta",
         # -- Detalhes do status da consulta -------------------------
         "status_intencao": "Intenção: {intencao}",
         "status_intencao_padrao": "definida na barra lateral",
@@ -895,6 +942,552 @@ TEXTOS_I18N = {
             "{linhas} linha(s) na tabela original · {colunas} coluna(s) "
             "na tabela tipada."
         ),
+        # -- Governança do contrato de saída (Fase D1) ----------------
+        "governanca_motivo_texto_livre": (
+            "Formato livre detectado: a resposta foi preservada, mas "
+            "exige revisão humana."
+        ),
+        "governanca_motivo_resposta_vazia": (
+            "O modelo devolveu uma resposta vazia."
+        ),
+        "governanca_motivo_contrato_invalido": (
+            "O contrato de saída está incompleto ou malformado."
+        ),
+        "governanca_motivo_observado_sem_evidencia": (
+            "Afirmação OBSERVED sem evidence_id foi rebaixada para "
+            "INFERRED."
+        ),
+        "governanca_motivo_evidencia_desconhecida": (
+            "A evidência citada não está no catálogo e o vínculo foi "
+            "removido."
+        ),
+        "governanca_motivo_classificacao_desconhecida": (
+            "Classificação de afirmação não reconhecida; tratada como "
+            "INFERRED."
+        ),
+        "governanca_motivo_veredito_invalido": (
+            "O veredito declarado pelo modelo é inválido."
+        ),
+        "governanca_motivo_falha_declarada": (
+            "O modelo declarou veredito FAIL."
+        ),
+        "governanca_motivo_veredito_hold": (
+            "O modelo declarou veredito HOLD."
+        ),
+        "governanca_motivo_fonte_timeout": (
+            "Tempo esgotado ao consultar a fonte."
+        ),
+        "governanca_motivo_fonte_tls": (
+            "Falha de TLS/certificado ao consultar a fonte."
+        ),
+        "governanca_motivo_fonte_rede": (
+            "Falha de rede ao consultar a fonte."
+        ),
+        "governanca_motivo_fonte_http": (
+            "A fonte respondeu com erro HTTP {status}."
+        ),
+        "governanca_motivo_fonte_indisponivel": (
+            "A fonte está indisponível; o resultado exige nova tentativa."
+        ),
+        "governanca_motivo_contrato_valido": (
+            "Contrato válido: todas as afirmações OBSERVED têm evidência."
+        ),
+        # -- Workstation D4: layout adaptativo e semântica epistêmica ---
+        "aba_sintese": "🧠 Síntese Técnica",
+        "aba_mapa_workstation": "🗺️ Mapa Espacial",
+        "aba_dados_exportacao": "📊 Dados & Exportação",
+        "workstation_indicadores": "Indicadores",
+        "workstation_fontes_ativas": "Fontes ativas",
+        "workstation_alvos_cim": "Alvos / Folhas CIM",
+        "workstation_governanca_titulo": "Governança epistêmica",
+        "workstation_sem_afirmacoes": (
+            "Nenhuma afirmação auditada ainda. A proporção OBSERVED x "
+            "INFERRED aparece na primeira resposta."
+        ),
+        "workstation_rastreabilidade_titulo": (
+            "Rastreabilidade & Governança"
+        ),
+        "workstation_evidencias_alt": (
+            "Tabela ranqueada dos evidence_id citados"
+        ),
+        "workstation_coluna_evidencia": "evidence_id",
+        "workstation_coluna_citacoes": "Citações",
+        "workstation_coluna_aderencia": "Aderência",
+        "workstation_ajuda_aderencia": (
+            "Proporção de citações OBSERVED deste evidence_id."
+        ),
+        "workstation_sem_evidencias": (
+            "Nenhum evidence_id citado nas respostas desta conversa."
+        ),
+        "workstation_motor_titulo": "Governança & Motor",
+        "workstation_modo_online": "Modo Online",
+        "workstation_modo_offline": "Modo Offline",
+        "workstation_modelo_ativo": "Modelo ativo: {modelo}",
+        "workstation_modelo_fallback": "fallback local",
+        "workstation_criterios": "Critérios de classificação",
+        "workstation_criterio_observed": (
+            "OBSERVED: ancorado em evidence_id/fonte rastreada."
+        ),
+        "workstation_criterio_inferred": (
+            "INFERRED: síntese interpretativa do modelo."
+        ),
+        "workstation_resumo_proporcao": (
+            "OBSERVED {observed:.1f}% · INFERRED {inferred:.1f}%"
+        ),
+        "workstation_mapa_vazio": (
+            "Nenhum ponto ou folha CIM detectado nesta conversa."
+        ),
+        "workstation_mapa_contagem": (
+            "{n} ponto(s) e folha(s) no mapa."
+        ),
+        "workstation_mapa_alt": (
+            "Mapa espacial com {n} feição(ões) detectada(s)"
+        ),
+        "workstation_mapa_tabela_alt": (
+            "Prévia tabular das feições do mapa"
+        ),
+        "workstation_coluna_nome": "Nome",
+        "workstation_coluna_camada": "Camada",
+        "workstation_coluna_folha": "Folha CIM",
+        "workstation_baixar_csv": "Baixar CSV do mapa",
+        "workstation_cim_ferramentas": (
+            "Ferramentas CIM e pacote offline"
+        ),
+        # -- Barra lateral D1: serviço, rede, persistência e histórico ---
+        "secao_servico": "⚙️ Serviço local",
+        "servico_ollama_online": "Ollama online · {modelo}",
+        "servico_ollama_offline": "Ollama offline · {modelo}",
+        "servico_modelo_ativo": "Modelo ativo: {modelo}",
+        "servico_roteador": "Roteador: SLM local (Ollama)",
+        "servico_roteador_regra": "Roteador: regra local determinística",
+        "servico_roteador_fallback": "Roteador: fallback determinístico",
+        "servico_roteador_pendente": "Roteador: aguardando a primeira consulta",
+        "ajuda_servico_roteador": (
+            "Origem da última decisão de roteamento. O roteador usa o "
+            "SLM local quando ele responde e cai em regra/heurística "
+            "determinística quando o Ollama não está disponível."
+        ),
+        "ajuda_servico_ollama": (
+            "Estado do serviço Ollama consultado em /api/version."
+        ),
+        "rede_online": "🌐 Online",
+        "rede_cache_folha_cim": "🗂️ Cache Offline por Folha CIM",
+        "rede_offline_sem_cache": "⚠️ Offline sem cache CIM",
+        "rede_cache_folhas": "{n} folha(s) CIM em cache local",
+        "ajuda_rede_online": (
+            "Há conexão com o serviço local; as fontes externas podem "
+            "ser consultadas."
+        ),
+        "ajuda_rede_cache": (
+            "Sem conexão no momento: as respostas usam o cache espacial "
+            "por folha CIM e os caches locais dos conectores."
+        ),
+        "dados_diretorio": "Persistência: {caminho}",
+        "dados_origem_env": "origem: ASSISTENTE_DATA_DIR",
+        "dados_origem_localappdata": "origem: %LOCALAPPDATA%\\NexusGeoIA",
+        "dados_origem_projeto": "origem: pasta do aplicativo",
+        "ajuda_dados_diretorio": (
+            "Diretório gravável reservado ao banco SQLite, documentos e "
+            "caches. Defina ASSISTENTE_DATA_DIR para trocar de pasta."
+        ),
+        "sidebar_nova_conversa": "➕ Nova Conversa",
+        "ajuda_sidebar_nova_conversa": (
+            "Grava a conversa atual no SQLite e abre uma conversa em "
+            "branco, sem apagar documentos nem histórico."
+        ),
+        "historico_workflow_marcador": "Fluxo: {workflow}",
+        "historico_folha_marcador": "Folha CIM: {folha}",
+        "historico_sqlite_erro": (
+            "Não foi possível acessar o histórico SQLite; a lista pode "
+            "estar incompleta."
+        ),
+        "aviso_historico_salvar_erro": (
+            "Não foi possível gravar a conversa no banco local."
+        ),
+        "aviso_historico_excluir_erro": (
+            "Não foi possível excluir a conversa do banco local."
+        ),
+        # -- Aba 1 (Consulta & Evidência) -----------------------------
+        "workflow_titulo": "🧭 Fluxo de trabalho",
+        "workflow_ajuda": (
+            "Escolha explícita do fluxo antes de enviar a pergunta. O "
+            "fluxo é gravado em cada resposta e no histórico."
+        ),
+        "workflow_consulta_direta": "Consulta Direta",
+        "workflow_triagem_area": "Triagem de Área / Viabilidade Mineral",
+        "workflow_hidrogeologia": "Hidrogeologia",
+        "workflow_sondagem": "Sondagem & Litologia",
+        "workflow_caption": (
+            "Fluxo ativo: {workflow}. A decisão fica registrada na "
+            "resposta e no histórico."
+        ),
+        "workflow_instrucao_consulta_direta": (
+            "Fluxo de trabalho: Consulta Direta. Responda objetivamente, "
+            "sem etapas adicionais de triagem."
+        ),
+        "workflow_instrucao_triagem_area": (
+            "Fluxo de trabalho: Triagem de Área / Viabilidade Mineral. "
+            "Estruture a resposta em contexto geológico, evidências, "
+            "viabilidade mineral e lacunas de dados."
+        ),
+        "workflow_instrucao_hidrogeologia": (
+            "Fluxo de trabalho: Hidrogeologia. Priorize aquíferos, poços, "
+            "vazões e o cruzamento entre águas superficiais e subterrâneas."
+        ),
+        "workflow_instrucao_sondagem": (
+            "Fluxo de trabalho: Sondagem & Litologia. Priorize litologia, "
+            "profundidade, testemunhos e correlação entre seções."
+        ),
+        "workflow_badge": "🧭 {workflow}",
+        "governanca_veredito_pass": "PASS · contrato válido",
+        "governanca_veredito_hold": "HOLD · revisão necessária",
+        "governanca_veredito_fail": "FAIL · não conforme",
+        "governanca_badge_observed": "OBSERVED · {n}",
+        "governanca_badge_inferred": "INFERRED · {n}",
+        "governanca_motivo": "Motivo objetivo: {motivo}",
+        "governanca_sem_afirmacoes": (
+            "A resposta não trouxe afirmações estruturadas; o veredito "
+            "segue a regra do contrato."
+        ),
+        "governanca_afirmacoes": "Afirmações auditáveis ({n})",
+        "governanca_evidencia": "Evidência",
+        "governanca_ajuda": (
+            "Veredito calculado por core/governance.py a partir do "
+            "contrato de saída; nunca exibe traceback na interface."
+        ),
+        "governanca_coluna_afirmacao": "Afirmação",
+        "governanca_coluna_classificacao": "Classificação",
+        "governanca_coluna_evidencia": "evidence_id",
+        "proveniencia_expander": "🧾 Proveniência da resposta",
+        "proveniencia_contagem": "{n} evidência(s) rastreada(s)",
+        "proveniencia_vazia": (
+            "Nenhuma fonte rastreável registrada para esta resposta."
+        ),
+        "proveniencia_ajuda": (
+            "Tabela estruturada de linhagem: tipo da fonte, localizador, "
+            "data de coleta e se o dado veio ao vivo ou do cache offline."
+        ),
+        "proveniencia_origem_live": "Live",
+        "proveniencia_origem_cache": "Cache Offline",
+        "proveniencia_origem_local": "Local",
+        "proveniencia_truncada": (
+            "Exibindo {n} de {total} evidências rastreadas."
+        ),
+        # -- Abas da área principal (Fase D2) -----------------------
+        "aba_consulta": "💬 Consulta & Evidência",
+        "aba_espacial": "🧭 Resolução Espacial",
+        "aba_dados": "📊 Dados & Exportação",
+        "aba_sondagem": "🧪 Sondagem & Litologia",
+        # -- Aba 4: grade de sondagem De-Ate (Fase D3b) -------------
+        "sondagem_titulo": "Grade de sondagem De–Até",
+        "sondagem_caption": (
+            "Cole uma tabela de furos e intervalos com cabeçalhos em "
+            "português ou inglês. O parser reconhece De/Até, Prof. de/até, "
+            "Intervalo, From/To, Furo/Hole e Litologia/Lithology, "
+            "normaliza vírgula e ponto decimal, converte m/cm e mantém as "
+            "linhas inválidas no relatório sem descartar os intervalos "
+            "válidos."
+        ),
+        "sondagem_texto_rotulo": "Tabela de sondagem (CSV/TSV colado)",
+        "sondagem_texto_ajuda": (
+            "Separador ';', tabulação, vírgula ou '|'. Use vírgula decimal "
+            "com separador ';' para evitar ambiguidade. A coluna Unidade "
+            "aceita m ou cm e o cabeçalho também pode declará-la, como em "
+            "'Prof. de (cm)' ou 'Intervalo (m)'. A unidade escrita na "
+            "célula tem precedência; 'Intervalo' aceita '0 - 1,5 m', "
+            "'0 a 1,5' e '0 até 1,5 m'."
+        ),
+        "sondagem_exemplo": (
+            "Furo;Prof. de;Prof. até;Unidade;Litologia;Amostra;Observação\n"
+            "FQ-01;0,00;2,50;;Solo residual;A-01;Topo\n"
+            "FQ-01;2,50;5,00;;Saprolito;A-02;\n"
+            "FQ-01;5,00;8,00;;Rocha alterada;A-03;\n"
+            "FQ-02;0;150;cm;Solo coluvial;A-04;\n"
+            "FQ-02;150;300;cm;Granito fresco;A-05;\n"
+        ),
+        "sondagem_analisar": "Analisar grade",
+        "sondagem_limpar": "Limpar resultado",
+        "sondagem_erro_cabecalhos": (
+            "Cabeçalhos obrigatórios não reconhecidos: {campos}. Use "
+            "Furo/Hole e De/Até (ou Intervalo/From/To). A unidade pode "
+            "vir entre parênteses, como em 'Prof. de (cm)'."
+        ),
+        "sondagem_erro_tabela_vazia": (
+            "A tabela está vazia. Cole os furos e os intervalos De–Até."
+        ),
+        "sondagem_erro_sem_linhas": (
+            "Nenhuma linha de dados encontrada depois do cabeçalho."
+        ),
+        "sondagem_erro_cabecalhos_ausentes": (
+            "Para uma lista de valores, informe também os cabeçalhos."
+        ),
+        "sondagem_erro_leitura": (
+            "Não foi possível ler a tabela de sondagem. Confira o "
+            "separador e os cabeçalhos."
+        ),
+        "sondagem_erro_tabela_desalinhada": (
+            "As linhas {linhas} têm número de campos diferente do "
+            "cabeçalho. Confira o separador: com vírgula decimal, use "
+            "';', tabulação ou '|' para não criar colunas extras."
+        ),
+        "sondagem_erro_tempo_excedido": (
+            "A análise excedeu o prazo de {segundos} e foi interrompida "
+            "sem gerar grade parcial. Reduza a tabela ou divida os furos "
+            "em lotes."
+        ),
+        "sondagem_erro_cancelada": (
+            "Análise cancelada. A grade anterior, se existir, foi "
+            "preservada."
+        ),
+        "sondagem_sucesso": (
+            "{n} intervalo(s) válido(s) em {furos} furo(s)."
+        ),
+        "sondagem_metric_intervalos": "Intervalos válidos",
+        "sondagem_metric_invalidos": "Linhas inválidas",
+        "sondagem_metric_sobreposicoes": "Sobreposições",
+        "sondagem_metric_lacunas": "Lacunas",
+        "sondagem_aviso_invalidos": (
+            "{n} linha(s) inválida(s) foram mantidas no relatório e não "
+            "entram na grade principal."
+        ),
+        "sondagem_aviso_sobreposicoes": (
+            "{n} sobreposição(ões) de profundidade detectada(s)."
+        ),
+        "sondagem_aviso_lacunas": (
+            "{n} lacuna(s) entre intervalos consecutivos detectada(s)."
+        ),
+        "sondagem_filtros": "Filtros da grade",
+        "sondagem_filtro_furo": "Furo",
+        "sondagem_filtro_todos_furos": "Todos os furos",
+        "sondagem_filtro_litologia": "Litologia",
+        "sondagem_filtro_situacao": "Situação",
+        "sondagem_filtro_busca": "Busca textual",
+        "sondagem_busca_placeholder": "ex.: granito, A-01, saprolito",
+        "sondagem_grade_alt": (
+            "Grade De–Até com {n} intervalo(s) de sondagem."
+        ),
+        "sondagem_contagem_exibida": (
+            "{exibidos} de {total} intervalo(s) exibido(s)."
+        ),
+        "sondagem_sem_resultado_filtro": (
+            "Nenhum intervalo atende aos filtros selecionados."
+        ),
+        "sondagem_invalidos_titulo": "Linhas inválidas ({n})",
+        "sondagem_invalidos_alt": (
+            "Relatório de linhas inválidas com número da linha, furo, "
+            "profundidades originais e motivo."
+        ),
+        "sondagem_sobreposicoes_titulo": "Sobreposições ({n})",
+        "sondagem_sobreposicoes_alt": (
+            "Intervalos que avançam sobre o intervalo anterior do mesmo "
+            "furo, com a espessura da sobreposição."
+        ),
+        "sondagem_lacunas_titulo": "Lacunas ({n})",
+        "sondagem_lacunas_alt": (
+            "Vãos entre intervalos consecutivos do mesmo furo, com a "
+            "espessura da lacuna."
+        ),
+        "sondagem_coluna_linha": "Linha",
+        "sondagem_coluna_furo": "Furo",
+        "sondagem_coluna_de": "De (m)",
+        "sondagem_coluna_ate": "Até (m)",
+        "sondagem_coluna_de_original": "De (original)",
+        "sondagem_coluna_ate_original": "Até (original)",
+        "sondagem_coluna_unidade": "Unidade",
+        "sondagem_coluna_espessura": "Espessura (m)",
+        "sondagem_coluna_litologia": "Litologia",
+        "sondagem_coluna_amostra": "Amostra",
+        "sondagem_coluna_observacao": "Observação",
+        "sondagem_coluna_situacao": "Situação",
+        "sondagem_coluna_motivo": "Motivo",
+        "sondagem_coluna_anterior": "Linha anterior",
+        "sondagem_coluna_sobreposicao": "Sobreposição (m)",
+        "sondagem_coluna_lacuna": "Lacuna (m)",
+        "sondagem_situacao_valido": "Válido",
+        "sondagem_situacao_sobreposicao": "Sobreposição",
+        "sondagem_situacao_lacuna": "Lacuna",
+        "sondagem_situacao_sobreposicao_lacuna": "Sobreposição e lacuna",
+        "sondagem_situacao_invalido": "Inválido",
+        "sondagem_situacao_desconhecida": "Não classificada",
+        "sondagem_motivo_furo_ausente": "Furo não informado",
+        "sondagem_motivo_de_ausente": "Profundidade inicial ausente",
+        "sondagem_motivo_ate_ausente": "Profundidade final ausente",
+        "sondagem_motivo_de_invalido": "Profundidade inicial inválida",
+        "sondagem_motivo_ate_invalido": "Profundidade final inválida",
+        "sondagem_motivo_intervalo_invalido": "Intervalo não reconhecido",
+        "sondagem_motivo_de_negativo": "Profundidade inicial negativa",
+        "sondagem_motivo_ate_nao_maior": (
+            "Profundidade final menor ou igual à inicial"
+        ),
+        "sondagem_motivo_unidade_invalida": "Unidade de profundidade inválida",
+        "sondagem_motivo_generico": "Linha inválida",
+        "sondagem_aviso_neutralizacao": (
+            "Fórmulas iniciadas por =, +, -, @, tabulação, CR ou LF são "
+            "neutralizadas no CSV/XLSX; números negativos válidos são "
+            "preservados."
+        ),
+        "sondagem_exportar_csv": "Baixar CSV sanitizado",
+        "sondagem_exportar_xlsx": "Baixar XLSX sanitizado",
+        "sondagem_ajuda_csv": (
+            "UTF-8 com BOM, separador ';' e vírgula decimal; inclui as "
+            "linhas inválidas no relatório."
+        ),
+        "sondagem_ajuda_xlsx": (
+            "Planilha em memória; células perigosas ficam como texto e os "
+            "números seguem numéricos."
+        ),
+        "sondagem_arquivo_csv": "grade_sondagem.csv",
+        "sondagem_arquivo_xlsx": "grade_sondagem.xlsx",
+        "aba_ajuda": (
+            "A conversa, o histórico e as escolhas da barra lateral são "
+            "preservados ao alternar entre as abas."
+        ),
+        # -- Aba 2: resolução espacial e pacote offline -------------
+        "espacial_titulo": "Resolução espacial e pacote offline",
+        "espacial_caption": (
+            "Converta coordenadas ou códigos CIM, confira a hierarquia "
+            "cartográfica de 1:1.000.000 a 1:25.000 e baixe a folha para "
+            "consultar tudo sem rede."
+        ),
+        "espacial_modo": "Tipo de consulta",
+        "espacial_modo_coordenadas": "Coordenadas",
+        "espacial_modo_folha": "Folha CIM",
+        "espacial_latitude": "Latitude",
+        "espacial_longitude": "Longitude",
+        "espacial_folha_cim": "Código da folha CIM",
+        "espacial_placeholder_folha": "ex.: SA.20, SB.21-X-B, SC.22-Z-D-IV",
+        "espacial_rotulado": "Coordenadas rotuladas (não inverter)",
+        "espacial_ajuda_rotulado": (
+            "Ligado, a ordem latitude/longitude é respeitada mesmo quando "
+            "o par parece invertido; um erro de entrada é recusado em vez "
+            "de virar um ponto falso."
+        ),
+        "espacial_consultar": "Resolver posição",
+        "espacial_limpar": "Limpar resultado",
+        "espacial_cartao_titulo": "Cartão de resolução espacial",
+        "espacial_resultado_coordenadas": "Coordenadas normalizadas",
+        "espacial_inversao_detectada": (
+            "Eixos invertidos automaticamente: leitura corrigida para "
+            "{par}."
+        ),
+        "espacial_inversao_indevida": (
+            "A latitude informada está fora de ±90°. O par parece "
+            "invertido; confirme a ordem latitude/longitude."
+        ),
+        "espacial_coordenada_invalida": (
+            "Coordenadas inválidas. Use latitude entre -90 e 90 e "
+            "longitude entre -180 e 180."
+        ),
+        "espacial_coordenada_ausente": "Informe latitude e longitude.",
+        "espacial_folha_invalida": (
+            "Código CIM inválido. Use o formato SA.20 ou "
+            "SB.21-X-B-IV-1."
+        ),
+        "espacial_erro_generico": (
+            "Não foi possível resolver a consulta espacial."
+        ),
+        "espacial_hierarquia": "Hierarquia cartográfica",
+        "espacial_escala": "Escala",
+        "espacial_codigo": "Código",
+        "espacial_centroide": "Centroide",
+        "espacial_limites": "Limites",
+        "espacial_pacote_titulo": "Pacote offline da folha CIM",
+        "espacial_pacote_caption": (
+            "O pacote grava o manifesto e os registros por fonte na "
+            "memória operacional SQLite (spatial_cache). Depois do "
+            "download, a consulta e a exportação funcionam sem rede."
+        ),
+        "espacial_pacote_folha": "Folha do pacote",
+        "espacial_pacote_baixar": (
+            "Baixar / Atualizar Pacote Offline da Folha"
+        ),
+        "espacial_pacote_disponivel": "Pacote offline disponível",
+        "espacial_pacote_indisponivel": (
+            "Pacote offline ainda não baixado para esta folha"
+        ),
+        "espacial_pacote_collected_at": "Coletado em",
+        "espacial_pacote_source_version": "Versão da fonte",
+        "espacial_pacote_total": "Registros no pacote",
+        "espacial_pacote_fontes": "Totais por fonte",
+        "espacial_pacote_fonte": "Fonte",
+        "espacial_pacote_registros": "Registros",
+        "espacial_pacote_exportar_manifesto": "Baixar manifesto (JSON)",
+        "espacial_pacote_exportar_dados": "Exportar dados offline (CSV)",
+        "espacial_pacote_sem_dados": (
+            "Nenhuma feição compatível cai nesta folha. O pacote "
+            "anterior foi preservado e não foi sobrescrito com um "
+            "snapshot vazio."
+        ),
+        "espacial_pacote_criado": (
+            "Pacote offline gravado: {total} registro(s) em "
+            "{fontes} fonte(s)."
+        ),
+        "espacial_pacote_erro": (
+            "Não foi possível gravar o pacote offline: {erro}"
+        ),
+        "espacial_pacote_remover": "Remover pacote offline",
+        "espacial_pacote_removido": "Pacote offline removido.",
+        "espacial_pacote_memoria": (
+            "Persistido em SQLite; nenhum arquivo temporário é gravado."
+        ),
+        "espacial_offline_titulo": "Consulta desconectada",
+        "espacial_offline_caption": (
+            "Leitura exclusiva do SQLite local. Nenhum conector é "
+            "chamado nesta seção."
+        ),
+        "espacial_offline_sem_dados": (
+            "Nenhum registro offline para o filtro de fonte selecionado."
+        ),
+        "espacial_offline_fonte": "Filtrar fonte offline",
+        "espacial_offline_todas": "Todas as fontes",
+        "espacial_mapa_titulo": "Mapa interativo por fonte",
+        "espacial_mapa_fontes": "Fontes exibidas",
+        "espacial_mapa_sem_feicoes": (
+            "Nenhuma feição nas fontes selecionadas. Escolha ao menos "
+            "uma fonte acima."
+        ),
+        "espacial_mapa_alt": (
+            "Mapa interativo com {n} feição(ões) da resolução espacial."
+        ),
+        "espacial_mapa_tooltip": (
+            "Nome: {nome}\nFonte: {fonte}\nFolha CIM: {folha}"
+        ),
+        "espacial_tabela_titulo": "Prévia tabular antes do download",
+        "espacial_tabela_alt": (
+            "Tabela com nome, fonte, coordenadas e folha CIM de cada "
+            "feição exibida."
+        ),
+        "espacial_exportar_csv": "Baixar CSV sanitizado",
+        "espacial_exportar_xlsx": "Baixar XLSX sanitizado",
+        "espacial_exportar_qgis": "Baixar GeoJSON para QGIS",
+        "espacial_ajuda_csv": (
+            "UTF-8 com BOM e separador ';': abre no Excel e no QGIS."
+        ),
+        "espacial_ajuda_xlsx": (
+            "Planilha com prévia e dados; células perigosas ficam como "
+            "texto."
+        ),
+        "espacial_ajuda_qgis": (
+            "GeoJSON WGS84 com atributos sanitizados, pronto para "
+            "arrastar no QGIS."
+        ),
+        "espacial_aviso_neutralizacao": (
+            "Fórmulas iniciadas por =, +, -, @, tabulação, CR ou LF são "
+            "neutralizadas antes de qualquer download."
+        ),
+        "espacial_sem_feicoes_sessao": (
+            "Ainda não há feições espaciais nesta sessão. Resolva uma "
+            "posição ou consulte fontes na Aba 1 para alimentar o mapa."
+        ),
+        "espacial_coluna_fonte": "Fonte",
+        "espacial_coluna_nome": "Nome",
+        "espacial_coluna_latitude": "Latitude",
+        "espacial_coluna_longitude": "Longitude",
+        "espacial_coluna_folha": "Folha CIM",
+        "espacial_pacote_manifesto": "Manifesto do pacote",
+        "espacial_pacote_nao_encontrado": (
+            "Pacote não encontrado para a folha {folha}."
+        ),
     },
     "en": {
         # -- Header and status --------------------------------------
@@ -1101,10 +1694,10 @@ TEXTOS_I18N = {
             "Markdown. When off, the answer uses only the other enabled "
             "sources."
         ),
-        "grupo_acervo_web": "General Collection & Web",
-        "grupo_hidrologia": "Hydrology & Hydrogeology",
-        "grupo_recursos_minerais": "Mineral Resources & Geology",
-        "grupo_bases_cientificas": "International Scientific Databases",
+        "grupo_geologia_geofisica": "Geology & Geophysics",
+        "grupo_recursos_minerais_anm": "Mineral Resources & ANM",
+        "grupo_hidrogeologia_hidricos": "Hydrogeology & Water",
+        "grupo_literatura_apoio": "Literature & Support",
         "web_tecnicos": "Prioritize technical domains (.gov / SciELO / USGS)",
         "ajuda_web_tecnicos": (
             "Restricts the search to technical and institutional "
@@ -1332,6 +1925,52 @@ TEXTOS_I18N = {
         ),
         "fonte_legenda": "Source: {fonte}",
         "roteamento_legenda": " · Routing: {intencao}",
+        # -- Per-step progress and cancellation (Phase D3a) ---------
+        "progresso_titulo": "Query progress",
+        "progresso_etapa_atual": "Current step: {etapa}",
+        "progresso_texto_parcial": "Streaming answer preview",
+        "progresso_aguardando": "Waiting for the query to start...",
+        "botao_cancelar_consulta": "Cancel query",
+        "ajuda_cancelar_consulta": (
+            "Interrupts the running query. The partial answer and temporary "
+            "files are discarded and no message is saved to history."
+        ),
+        "consulta_em_andamento": (
+            "A query is already running. Cancel it or wait for it to finish "
+            "before sending another question."
+        ),
+        "cancelamento_solicitado": (
+            "Query cancelled. No answer was saved to history and the "
+            "temporary conversion files were removed."
+        ),
+        "status_cancelado": "Query cancelled.",
+        "progresso_etapa_preparando": "Preparing the query",
+        "progresso_etapa_roteamento": "Classifying the question intent",
+        "progresso_etapa_sgb": "Querying RIGeo / SGB",
+        "progresso_etapa_documentos": "Searching the local document base",
+        "progresso_etapa_documentos_consultas": (
+            "Generating the bilingual document queries"
+        ),
+        "progresso_etapa_documentos_indice": "Indexing the local documents",
+        "progresso_etapa_documento_pagina": "Converting document pages",
+        "progresso_etapa_documento_ocr": "Running OCR on scanned pages",
+        "progresso_etapa_ana": "Querying ANA / HidroWeb",
+        "progresso_etapa_web": "Searching the open web",
+        "progresso_etapa_openalex": "Querying OpenAlex",
+        "progresso_etapa_usgs": "Querying USGS ScienceBase",
+        "progresso_etapa_intl_geo": (
+            "Querying the international geological surveys"
+        ),
+        "progresso_etapa_geosgb": "Querying GeoSGB / SGB",
+        "progresso_etapa_anm": "Querying ANM / SIGMINE",
+        "progresso_etapa_macrostrat": "Querying Macrostrat",
+        "progresso_etapa_siagas": "Querying SIAGAS / RIMAS",
+        "progresso_etapa_geossit": "Querying INDE / GEOSSIT",
+        "progresso_etapa_llm": "Generating the answer with Ollama",
+        "progresso_etapa_concluida": "Query completed",
+        "progresso_etapa_cancelando": "Cancelling the query...",
+        "progresso_etapa_cancelada": "Query cancelled",
+        "progresso_etapa_erro": "The query failed",
         # -- Query status details -----------------------------------
         "status_intencao": "Intent: {intencao}",
         "status_intencao_padrao": "defined in the sidebar",
@@ -1695,6 +2334,544 @@ TEXTOS_I18N = {
         "resumo_linhas_colunas": (
             "{linhas} row(s) in the original table · {colunas} "
             "column(s) in the typed table."
+        ),
+        # -- Output contract governance (Phase D1) --------------------
+        "governanca_motivo_texto_livre": (
+            "Free-form output detected: the answer was preserved but "
+            "requires human review."
+        ),
+        "governanca_motivo_resposta_vazia": (
+            "The model returned an empty answer."
+        ),
+        "governanca_motivo_contrato_invalido": (
+            "The output contract is incomplete or malformed."
+        ),
+        "governanca_motivo_observado_sem_evidencia": (
+            "An OBSERVED claim without evidence_id was downgraded to "
+            "INFERRED."
+        ),
+        "governanca_motivo_evidencia_desconhecida": (
+            "The cited evidence is not in the catalog and the link was "
+            "removed."
+        ),
+        "governanca_motivo_classificacao_desconhecida": (
+            "Unrecognized claim classification; treated as INFERRED."
+        ),
+        "governanca_motivo_veredito_invalido": (
+            "The verdict declared by the model is invalid."
+        ),
+        "governanca_motivo_falha_declarada": (
+            "The model declared a FAIL verdict."
+        ),
+        "governanca_motivo_veredito_hold": (
+            "The model declared a HOLD verdict."
+        ),
+        "governanca_motivo_fonte_timeout": (
+            "Timed out while querying the source."
+        ),
+        "governanca_motivo_fonte_tls": (
+            "TLS/certificate failure while querying the source."
+        ),
+        "governanca_motivo_fonte_rede": (
+            "Network failure while querying the source."
+        ),
+        "governanca_motivo_fonte_http": (
+            "The source returned HTTP error {status}."
+        ),
+        "governanca_motivo_fonte_indisponivel": (
+            "The source is unavailable; the result requires a retry."
+        ),
+        "governanca_motivo_contrato_valido": (
+            "Valid contract: every OBSERVED claim has evidence."
+        ),
+        # -- D4 workstation: adaptive layout and epistemic semantics ----
+        "aba_sintese": "🧠 Technical Synthesis",
+        "aba_mapa_workstation": "🗺️ Spatial Map",
+        "aba_dados_exportacao": "📊 Data & Export",
+        "workstation_indicadores": "Indicators",
+        "workstation_fontes_ativas": "Active sources",
+        "workstation_alvos_cim": "CIM targets / sheets",
+        "workstation_governanca_titulo": "Epistemic governance",
+        "workstation_sem_afirmacoes": (
+            "No audited claim yet. The OBSERVED x INFERRED ratio appears "
+            "with the first response."
+        ),
+        "workstation_rastreabilidade_titulo": (
+            "Traceability & Governance"
+        ),
+        "workstation_evidencias_alt": (
+            "Ranked table of the cited evidence_id values"
+        ),
+        "workstation_coluna_evidencia": "evidence_id",
+        "workstation_coluna_citacoes": "Citations",
+        "workstation_coluna_aderencia": "Adherence",
+        "workstation_ajuda_aderencia": (
+            "Share of OBSERVED citations for this evidence_id."
+        ),
+        "workstation_sem_evidencias": (
+            "No evidence_id cited in this conversation's responses."
+        ),
+        "workstation_motor_titulo": "Governance & Engine",
+        "workstation_modo_online": "Online mode",
+        "workstation_modo_offline": "Offline mode",
+        "workstation_modelo_ativo": "Active model: {modelo}",
+        "workstation_modelo_fallback": "local fallback",
+        "workstation_criterios": "Classification criteria",
+        "workstation_criterio_observed": (
+            "OBSERVED: anchored in evidence_id/traceable source."
+        ),
+        "workstation_criterio_inferred": (
+            "INFERRED: interpretive synthesis by the model."
+        ),
+        "workstation_resumo_proporcao": (
+            "OBSERVED {observed:.1f}% · INFERRED {inferred:.1f}%"
+        ),
+        "workstation_mapa_vazio": (
+            "No point or CIM sheet detected in this conversation."
+        ),
+        "workstation_mapa_contagem": (
+            "{n} point(s) and sheet(s) on the map."
+        ),
+        "workstation_mapa_alt": (
+            "Spatial map with {n} detected feature(s)"
+        ),
+        "workstation_mapa_tabela_alt": (
+            "Tabular preview of the map features"
+        ),
+        "workstation_coluna_nome": "Name",
+        "workstation_coluna_camada": "Layer",
+        "workstation_coluna_folha": "CIM sheet",
+        "workstation_baixar_csv": "Download map CSV",
+        "workstation_cim_ferramentas": "CIM tools and offline package",
+        # -- D1 sidebar: service, network, persistence and history ------
+        "secao_servico": "⚙️ Local service",
+        "servico_ollama_online": "Ollama online · {modelo}",
+        "servico_ollama_offline": "Ollama offline · {modelo}",
+        "servico_modelo_ativo": "Active model: {modelo}",
+        "servico_roteador": "Router: local SLM (Ollama)",
+        "servico_roteador_regra": "Router: deterministic local rule",
+        "servico_roteador_fallback": "Router: deterministic fallback",
+        "servico_roteador_pendente": "Router: waiting for the first query",
+        "ajuda_servico_roteador": (
+            "Origin of the last routing decision. The router uses the "
+            "local SLM when it answers and falls back to a deterministic "
+            "rule/heuristic when Ollama is unavailable."
+        ),
+        "ajuda_servico_ollama": (
+            "Ollama service state, queried at /api/version."
+        ),
+        "rede_online": "🌐 Online",
+        "rede_cache_folha_cim": "🗂️ Offline cache by CIM sheet",
+        "rede_offline_sem_cache": "⚠️ Offline with no CIM cache",
+        "rede_cache_folhas": "{n} CIM sheet(s) in local cache",
+        "ajuda_rede_online": (
+            "The local service is reachable; external sources can be "
+            "queried."
+        ),
+        "ajuda_rede_cache": (
+            "No connection right now: answers use the spatial cache by "
+            "CIM sheet and the connectors' local caches."
+        ),
+        "dados_diretorio": "Persistence: {caminho}",
+        "dados_origem_env": "source: ASSISTENTE_DATA_DIR",
+        "dados_origem_localappdata": "source: %LOCALAPPDATA%\\NexusGeoIA",
+        "dados_origem_projeto": "source: application folder",
+        "ajuda_dados_diretorio": (
+            "Writable directory reserved for the SQLite database, "
+            "documents and caches. Set ASSISTENTE_DATA_DIR to move it."
+        ),
+        "sidebar_nova_conversa": "➕ New Conversation",
+        "ajuda_sidebar_nova_conversa": (
+            "Saves the current conversation to SQLite and opens a blank "
+            "one without deleting documents or history."
+        ),
+        "historico_workflow_marcador": "Workflow: {workflow}",
+        "historico_folha_marcador": "CIM sheet: {folha}",
+        "historico_sqlite_erro": (
+            "The SQLite history could not be read; the list may be "
+            "incomplete."
+        ),
+        "aviso_historico_salvar_erro": (
+            "The conversation could not be saved to the local database."
+        ),
+        "aviso_historico_excluir_erro": (
+            "The conversation could not be deleted from the local database."
+        ),
+        # -- Tab 1 (Query & Evidence) ----------------------------------
+        "workflow_titulo": "🧭 Workflow",
+        "workflow_ajuda": (
+            "Explicit workflow choice before sending the question. The "
+            "workflow is recorded in every answer and in the history."
+        ),
+        "workflow_consulta_direta": "Direct Query",
+        "workflow_triagem_area": "Area Screening / Mineral Viability",
+        "workflow_hidrogeologia": "Hydrogeology",
+        "workflow_sondagem": "Drilling & Lithology",
+        "workflow_caption": (
+            "Active workflow: {workflow}. The decision is recorded in "
+            "the answer and in the history."
+        ),
+        "workflow_instrucao_consulta_direta": (
+            "Workflow: Direct Query. Answer objectively, without extra "
+            "screening steps."
+        ),
+        "workflow_instrucao_triagem_area": (
+            "Workflow: Area Screening / Mineral Viability. Structure the "
+            "answer into geological context, evidence, mineral viability "
+            "and data gaps."
+        ),
+        "workflow_instrucao_hidrogeologia": (
+            "Workflow: Hydrogeology. Prioritize aquifers, wells, flow "
+            "rates and the link between surface and groundwater."
+        ),
+        "workflow_instrucao_sondagem": (
+            "Workflow: Drilling & Lithology. Prioritize lithology, depth, "
+            "core samples and correlation between sections."
+        ),
+        "workflow_badge": "🧭 {workflow}",
+        "governanca_veredito_pass": "PASS · valid contract",
+        "governanca_veredito_hold": "HOLD · review required",
+        "governanca_veredito_fail": "FAIL · non-compliant",
+        "governanca_badge_observed": "OBSERVED · {n}",
+        "governanca_badge_inferred": "INFERRED · {n}",
+        "governanca_motivo": "Objective reason: {motivo}",
+        "governanca_sem_afirmacoes": (
+            "The answer brought no structured claims; the verdict "
+            "follows the contract rule."
+        ),
+        "governanca_afirmacoes": "Auditable claims ({n})",
+        "governanca_evidencia": "Evidence",
+        "governanca_ajuda": (
+            "Verdict computed by core/governance.py from the output "
+            "contract; it never shows a traceback in the interface."
+        ),
+        "governanca_coluna_afirmacao": "Claim",
+        "governanca_coluna_classificacao": "Classification",
+        "governanca_coluna_evidencia": "evidence_id",
+        "proveniencia_expander": "🧾 Answer provenance",
+        "proveniencia_contagem": "{n} traced evidence item(s)",
+        "proveniencia_vazia": (
+            "No traceable source was recorded for this answer."
+        ),
+        "proveniencia_ajuda": (
+            "Structured lineage table: source type, locator, collection "
+            "date and whether the data came live or from the offline cache."
+        ),
+        "proveniencia_origem_live": "Live",
+        "proveniencia_origem_cache": "Cache Offline",
+        "proveniencia_origem_local": "Local",
+        "proveniencia_truncada": (
+            "Showing {n} of {total} traced evidence items."
+        ),
+        # -- Main-area tabs (Phase D2) ------------------------------
+        "aba_consulta": "💬 Query & Evidence",
+        "aba_espacial": "🧭 Spatial Resolution",
+        "aba_dados": "📊 Data & Export",
+        "aba_sondagem": "🧪 Drilling & Lithology",
+        # -- Tab 4: De-To drilling grid (Phase D3b) ------------------
+        "sondagem_titulo": "De–To drilling grid",
+        "sondagem_caption": (
+            "Paste a table of holes and intervals with Portuguese or "
+            "English headers. The parser recognizes De/Até, Prof. de/até, "
+            "Intervalo, From/To, Furo/Hole and Litologia/Lithology, "
+            "normalizes comma and dot decimals, converts m/cm and keeps "
+            "invalid rows in the report without discarding valid "
+            "intervals."
+        ),
+        "sondagem_texto_rotulo": "Drilling table (pasted CSV/TSV)",
+        "sondagem_texto_ajuda": (
+            "Separator ';', tab, comma or '|'. Use a decimal comma with "
+            "the ';' separator to avoid ambiguity. The Unit column "
+            "accepts m or cm and the header may also declare it, as in "
+            "'From (cm)' or 'Interval (m)'. A unit written in the cell "
+            "takes precedence; 'Interval' accepts '0 - 1.5 m', "
+            "'0 to 1.5' and '0 até 1.5 m'."
+        ),
+        "sondagem_exemplo": (
+            "Hole;From (m);To (m);Unit;Lithology;Sample;Remarks\n"
+            "BH-01;0.00;2.50;;Topsoil;S-01;Surface\n"
+            "BH-01;2.50;5.00;;Saprolite;S-02;\n"
+            "BH-01;5.00;8.00;;Weathered rock;S-03;\n"
+            "BH-02;0;150;cm;Colluvial soil;S-04;\n"
+            "BH-02;150;300;cm;Granite;S-05;\n"
+        ),
+        "sondagem_analisar": "Analyze grid",
+        "sondagem_limpar": "Clear result",
+        "sondagem_erro_cabecalhos": (
+            "Required headers were not recognized: {campos}. Use "
+            "Hole/Furo and From/To or a Depth interval column. The unit "
+            "may appear in parentheses, as in 'From (cm)'."
+        ),
+        "sondagem_erro_tabela_vazia": (
+            "The table is empty. Paste the holes and De–To intervals."
+        ),
+        "sondagem_erro_sem_linhas": (
+            "No data row was found after the header."
+        ),
+        "sondagem_erro_cabecalhos_ausentes": (
+            "For a list of values, provide the headers as well."
+        ),
+        "sondagem_erro_leitura": (
+            "The drilling table could not be read. Check the separator "
+            "and the headers."
+        ),
+        "sondagem_erro_tabela_desalinhada": (
+            "Rows {linhas} have a different number of fields than the "
+            "header. Check the separator: with a decimal comma, use "
+            "';', tab or '|' so no extra columns are created."
+        ),
+        "sondagem_erro_tempo_excedido": (
+            "The analysis exceeded the {segundos} time limit and was "
+            "stopped without producing a partial grid. Reduce the table "
+            "or split the holes into batches."
+        ),
+        "sondagem_erro_cancelada": (
+            "Analysis cancelled. The previous grid, when present, was "
+            "preserved."
+        ),
+        "sondagem_sucesso": (
+            "{n} valid interval(s) in {furos} hole(s)."
+        ),
+        "sondagem_metric_intervalos": "Valid intervals",
+        "sondagem_metric_invalidos": "Invalid rows",
+        "sondagem_metric_sobreposicoes": "Overlaps",
+        "sondagem_metric_lacunas": "Gaps",
+        "sondagem_aviso_invalidos": (
+            "{n} invalid row(s) were kept in the report and are not part "
+            "of the main grid."
+        ),
+        "sondagem_aviso_sobreposicoes": (
+            "{n} depth overlap(s) detected."
+        ),
+        "sondagem_aviso_lacunas": (
+            "{n} gap(s) between consecutive intervals detected."
+        ),
+        "sondagem_filtros": "Grid filters",
+        "sondagem_filtro_furo": "Hole",
+        "sondagem_filtro_todos_furos": "All holes",
+        "sondagem_filtro_litologia": "Lithology",
+        "sondagem_filtro_situacao": "Status",
+        "sondagem_filtro_busca": "Text search",
+        "sondagem_busca_placeholder": "e.g. granite, S-01, saprolite",
+        "sondagem_grade_alt": (
+            "De–To grid with {n} drilling interval(s)."
+        ),
+        "sondagem_contagem_exibida": (
+            "{exibidos} of {total} interval(s) displayed."
+        ),
+        "sondagem_sem_resultado_filtro": (
+            "No interval matches the selected filters."
+        ),
+        "sondagem_invalidos_titulo": "Invalid rows ({n})",
+        "sondagem_invalidos_alt": (
+            "Invalid-row report with line number, hole, original depths "
+            "and reason."
+        ),
+        "sondagem_sobreposicoes_titulo": "Overlaps ({n})",
+        "sondagem_sobreposicoes_alt": (
+            "Intervals that run into the previous interval of the same "
+            "hole, with the overlap thickness."
+        ),
+        "sondagem_lacunas_titulo": "Gaps ({n})",
+        "sondagem_lacunas_alt": (
+            "Gaps between consecutive intervals of the same hole, with "
+            "the gap thickness."
+        ),
+        "sondagem_coluna_linha": "Line",
+        "sondagem_coluna_furo": "Hole",
+        "sondagem_coluna_de": "From (m)",
+        "sondagem_coluna_ate": "To (m)",
+        "sondagem_coluna_de_original": "From (original)",
+        "sondagem_coluna_ate_original": "To (original)",
+        "sondagem_coluna_unidade": "Unit",
+        "sondagem_coluna_espessura": "Thickness (m)",
+        "sondagem_coluna_litologia": "Lithology",
+        "sondagem_coluna_amostra": "Sample",
+        "sondagem_coluna_observacao": "Remarks",
+        "sondagem_coluna_situacao": "Status",
+        "sondagem_coluna_motivo": "Reason",
+        "sondagem_coluna_anterior": "Previous line",
+        "sondagem_coluna_sobreposicao": "Overlap (m)",
+        "sondagem_coluna_lacuna": "Gap (m)",
+        "sondagem_situacao_valido": "Valid",
+        "sondagem_situacao_sobreposicao": "Overlap",
+        "sondagem_situacao_lacuna": "Gap",
+        "sondagem_situacao_sobreposicao_lacuna": "Overlap and gap",
+        "sondagem_situacao_invalido": "Invalid",
+        "sondagem_situacao_desconhecida": "Unclassified",
+        "sondagem_motivo_furo_ausente": "Hole not provided",
+        "sondagem_motivo_de_ausente": "Missing from depth",
+        "sondagem_motivo_ate_ausente": "Missing to depth",
+        "sondagem_motivo_de_invalido": "Invalid from depth",
+        "sondagem_motivo_ate_invalido": "Invalid to depth",
+        "sondagem_motivo_intervalo_invalido": "Interval not recognized",
+        "sondagem_motivo_de_negativo": "Negative from depth",
+        "sondagem_motivo_ate_nao_maior": (
+            "To depth is less than or equal to from depth"
+        ),
+        "sondagem_motivo_unidade_invalida": "Invalid depth unit",
+        "sondagem_motivo_generico": "Invalid row",
+        "sondagem_aviso_neutralizacao": (
+            "Formulas starting with =, +, -, @, tab, CR or LF are "
+            "neutralized in CSV/XLSX; valid negative numbers are "
+            "preserved."
+        ),
+        "sondagem_exportar_csv": "Download sanitized CSV",
+        "sondagem_exportar_xlsx": "Download sanitized XLSX",
+        "sondagem_ajuda_csv": (
+            "UTF-8 with BOM, ';' separator and decimal comma; invalid "
+            "rows are included in the report."
+        ),
+        "sondagem_ajuda_xlsx": (
+            "In-memory workbook; dangerous cells stay as text and numbers "
+            "remain numeric."
+        ),
+        "sondagem_arquivo_csv": "drilling_grid.csv",
+        "sondagem_arquivo_xlsx": "drilling_grid.xlsx",
+        "aba_ajuda": (
+            "The conversation, history and sidebar choices are preserved "
+            "when switching tabs."
+        ),
+        # -- Tab 2: spatial resolution and offline package ----------
+        "espacial_titulo": "Spatial resolution and offline package",
+        "espacial_caption": (
+            "Convert coordinates or CIM codes, inspect the cartographic "
+            "hierarchy from 1:1,000,000 to 1:25,000 and download the "
+            "sheet to query everything offline."
+        ),
+        "espacial_modo": "Query type",
+        "espacial_modo_coordenadas": "Coordinates",
+        "espacial_modo_folha": "CIM sheet",
+        "espacial_latitude": "Latitude",
+        "espacial_longitude": "Longitude",
+        "espacial_folha_cim": "CIM sheet code",
+        "espacial_placeholder_folha": "e.g. SA.20, SB.21-X-B, SC.22-Z-D-IV",
+        "espacial_rotulado": "Labelled coordinates (do not invert)",
+        "espacial_ajuda_rotulado": (
+            "When on, the latitude/longitude order is respected even when "
+            "the pair looks inverted; an input error is rejected instead "
+            "of becoming a false point."
+        ),
+        "espacial_consultar": "Resolve position",
+        "espacial_limpar": "Clear result",
+        "espacial_cartao_titulo": "Spatial resolution card",
+        "espacial_resultado_coordenadas": "Normalized coordinates",
+        "espacial_inversao_detectada": (
+            "Axes automatically inverted: reading corrected to {par}."
+        ),
+        "espacial_inversao_indevida": (
+            "The informed latitude is outside ±90°. The pair looks "
+            "inverted; confirm the latitude/longitude order."
+        ),
+        "espacial_coordenada_invalida": (
+            "Invalid coordinates. Use latitude between -90 and 90 and "
+            "longitude between -180 and 180."
+        ),
+        "espacial_coordenada_ausente": "Enter latitude and longitude.",
+        "espacial_folha_invalida": (
+            "Invalid CIM code. Use the format SA.20 or SB.21-X-B-IV-1."
+        ),
+        "espacial_erro_generico": "The spatial query could not be resolved.",
+        "espacial_hierarquia": "Cartographic hierarchy",
+        "espacial_escala": "Scale",
+        "espacial_codigo": "Code",
+        "espacial_centroide": "Centroid",
+        "espacial_limites": "Bounds",
+        "espacial_pacote_titulo": "CIM sheet offline package",
+        "espacial_pacote_caption": (
+            "The package stores the manifest and per-source records in "
+            "the operational SQLite memory (spatial_cache). After the "
+            "download, queries and exports work offline."
+        ),
+        "espacial_pacote_folha": "Package sheet",
+        "espacial_pacote_baixar": (
+            "Download / Update Sheet Offline Package"
+        ),
+        "espacial_pacote_disponivel": "Offline package available",
+        "espacial_pacote_indisponivel": (
+            "Offline package not downloaded for this sheet yet"
+        ),
+        "espacial_pacote_collected_at": "Collected at",
+        "espacial_pacote_source_version": "Source version",
+        "espacial_pacote_total": "Records in package",
+        "espacial_pacote_fontes": "Totals per source",
+        "espacial_pacote_fonte": "Source",
+        "espacial_pacote_registros": "Records",
+        "espacial_pacote_exportar_manifesto": "Download manifest (JSON)",
+        "espacial_pacote_exportar_dados": "Export offline data (CSV)",
+        "espacial_pacote_sem_dados": (
+            "No compatible feature falls in this sheet. The previous "
+            "package was preserved and not overwritten with an empty "
+            "snapshot."
+        ),
+        "espacial_pacote_criado": (
+            "Offline package saved: {total} record(s) in {fontes} "
+            "source(s)."
+        ),
+        "espacial_pacote_erro": (
+            "The offline package could not be saved: {erro}"
+        ),
+        "espacial_pacote_remover": "Remove offline package",
+        "espacial_pacote_removido": "Offline package removed.",
+        "espacial_pacote_memoria": (
+            "Stored in SQLite; no temporary file is written."
+        ),
+        "espacial_offline_titulo": "Disconnected query",
+        "espacial_offline_caption": (
+            "Reads the local SQLite only. No connector is called in this "
+            "section."
+        ),
+        "espacial_offline_sem_dados": (
+            "No offline record for the selected source filter."
+        ),
+        "espacial_offline_fonte": "Filter offline source",
+        "espacial_offline_todas": "All sources",
+        "espacial_mapa_titulo": "Interactive map by source",
+        "espacial_mapa_fontes": "Sources displayed",
+        "espacial_mapa_sem_feicoes": (
+            "No feature in the selected sources. Choose at least one "
+            "source above."
+        ),
+        "espacial_mapa_alt": (
+            "Interactive map with {n} spatial resolution feature(s)."
+        ),
+        "espacial_mapa_tooltip": (
+            "Name: {nome}\nSource: {fonte}\nCIM sheet: {folha}"
+        ),
+        "espacial_tabela_titulo": "Tabular preview before download",
+        "espacial_tabela_alt": (
+            "Table with name, source, coordinates and CIM sheet for each "
+            "displayed feature."
+        ),
+        "espacial_exportar_csv": "Download sanitized CSV",
+        "espacial_exportar_xlsx": "Download sanitized XLSX",
+        "espacial_exportar_qgis": "Download GeoJSON for QGIS",
+        "espacial_ajuda_csv": (
+            "UTF-8 with BOM and ';' separator: opens in Excel and QGIS."
+        ),
+        "espacial_ajuda_xlsx": (
+            "Workbook with preview and data; dangerous cells stay as text."
+        ),
+        "espacial_ajuda_qgis": (
+            "WGS84 GeoJSON with sanitized attributes, ready to drag into "
+            "QGIS."
+        ),
+        "espacial_aviso_neutralizacao": (
+            "Formulas starting with =, +, -, @, tab, CR or LF are "
+            "neutralized before any download."
+        ),
+        "espacial_sem_feicoes_sessao": (
+            "There are no spatial features in this session yet. Resolve a "
+            "position or query sources in Tab 1 to feed the map."
+        ),
+        "espacial_coluna_fonte": "Source",
+        "espacial_coluna_nome": "Name",
+        "espacial_coluna_latitude": "Latitude",
+        "espacial_coluna_longitude": "Longitude",
+        "espacial_coluna_folha": "CIM sheet",
+        "espacial_pacote_manifesto": "Package manifest",
+        "espacial_pacote_nao_encontrado": (
+            "Package not found for sheet {folha}."
         ),
     },
 }

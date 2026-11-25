@@ -1,8 +1,8 @@
-# Protocolo de Validação Científica e Mitigação de Viés entre Famílias de LLMs (NexusGeo IA v0.9.0)
+# Protocolo de Validação Científica e Mitigação de Viés entre Famílias de LLMs (NexusGeo IA v1.0.0)
 
-![Versão](https://img.shields.io/badge/vers%C3%A3o-v0.9.0-blue)
+![Versão](https://img.shields.io/badge/vers%C3%A3o-v1.0.0-blue)
 
-Documento metodológico de referência do **NexusGeo IA v0.9.0**. Define o
+Documento metodológico de referência do **NexusGeo IA v1.0.0**. Define o
 fluxo auditável de pesquisa geocientífica assistida por LLM, com separação
 entre a recuperação determinística de dados primários e a síntese local, e
 com auditoria adversarial obrigatória por um modelo de **família distinta**
@@ -141,8 +141,9 @@ Características que tornam essa camada adequada à auditoria:
 
 ### 2.2 Camada de síntese local
 
-A síntese roda no Ollama, por padrão com `qwen3:14b` (modelo rápido) e,
-quando disponível, `qwen3:27b` para maior profundidade. O texto base está em
+A síntese roda no Ollama com o único modelo oficial da v1.0.0,
+`nexusgeo-qwen3-4b-v2-q4` (GGUF `Q4_K_M`), e fallback técnico automático
+para `qwen3:4b`. O texto base está em
 `prompts/system_base.txt` e recebe o bloco do Perfil Analítico ativo
 (`core/analytical_profiles.py`). O orquestrador (`core/assistant.py`)
 injeta as tabelas de contexto e a instrução de idioma
@@ -178,7 +179,7 @@ auditor não recebe apenas a conclusão; recebe o lastro.
 
 | Papel | Família | Exemplos aceitos |
 |---|---|---|
-| **Família A** — geradora local | Qwen | `qwen3:14b`, `qwen3:27b` via Ollama |
+| **Família A** — geradora local | Qwen | `nexusgeo-qwen3-4b-v2-q4` (oficial), `qwen3:4b` (fallback técnico único) via Ollama |
 | **Família B** — auditora | não-Qwen | Gemini, DeepSeek, Claude, GPT ou outro provedor de família distinta |
 
 Regras:
@@ -224,14 +225,14 @@ silenciosamente o anterior.
 
 ## 4. Estágio 1 — Recuperação Determinística e Triagem Local (Família A)
 
-**Responsável:** NexusGeo IA com modelo local Qwen 3 (`qwen3:14b` ou
-`qwen3:27b`).
+**Responsável:** NexusGeo IA com modelo local Qwen 3
+(`nexusgeo-qwen3-4b-v2-q4`, com fallback técnico único `qwen3:4b`).
 **Objetivo:** transformar a pergunta em um pacote de evidências primárias
 verificável, antes de qualquer conclusão forte.
 
 ### 4.1 Pré-condições
 
-1. Registrar `APP_VERSION` (`0.9.0`), o modelo Ollama selecionado e o
+1. Registrar `APP_VERSION` (`1.0.0`), o modelo Ollama selecionado e o
    Perfil Analítico ativo.
 2. Ligar apenas as fontes pertinentes ao objeto estudado. Em dúvida, ligar
    mais fontes: é preferível recuperar ruído e descartar na triagem a
@@ -317,8 +318,8 @@ técnico produzido por outro modelo de linguagem.
 
 CONTEXTO DA AUDITORIA
 - Documento auditado: {{NOME_DO_ARQUIVO_MD}}
-- Aplicativo e versão: NexusGeo IA v{{VERSAO}} (ex.: 0.9.0)
-- Modelo gerador (Família A): {{MODELO_GERADOR}} (ex.: qwen3:14b via Ollama)
+- Aplicativo e versão: NexusGeo IA v{{VERSAO}} (ex.: 1.0.0)
+- Modelo gerador (Família A): {{MODELO_GERADOR}} (ex.: nexusgeo-qwen3-4b-v2-q4 via Ollama; fallback qwen3:4b)
 - Perfil analítico declarado: {{PERFIL}}
 - Fontes primárias consultadas: {{LISTA_DE_FONTES}}
 - Anexos disponíveis: {{LISTA_DE_PDF_TABELAS_CSV}}
@@ -526,8 +527,8 @@ pergunta, as fontes, os modelos e a conclusão.
 
 | Campo | Exemplo | Onde fica |
 |---|---|---|
-| Versão do aplicativo | `NexusGeo IA v0.9.0` | `APP_VERSION` em `config.py` |
-| Modelo gerador (Família A) | `qwen3:14b` (Ollama) | mensagem e registro do parecer |
+| Versão do aplicativo | `NexusGeo IA v1.0.0` | `APP_VERSION` em `config.py` |
+| Modelo gerador (Família A) | `nexusgeo-qwen3-4b-v2-q4` (Ollama; fallback `qwen3:4b`) | mensagem e registro do parecer |
 | Modelo auditor (Família B) | `gemini-2.5-pro` / `deepseek-chat` | relatório de auditoria |
 | Perfil analítico | `Exploração Mineral & Geoquímica` | cabeçalho do parecer |
 | Fontes consultadas | RIGeo, GeoSGB, ANM/SIGMINE, OpenAlex | cabeçalho e metadados |
@@ -542,7 +543,7 @@ pergunta, as fontes, os modelos e a conclusão.
 #### (a) Artigo científico — seção de métodos
 
 > As consultas às bases geocientíficas foram realizadas com o NexusGeo IA
-> v0.9.0 (Serviço Geológico do Brasil, Agência Nacional de Mineração, ANA,
+> v1.0.0 (Serviço Geológico do Brasil, Agência Nacional de Mineração, ANA,
 > SIAGAS/RIMAS, INDE/GEOSSIT, Macrostrat, OpenAlex e serviços geológicos
 > internacionais), com recuperação determinística por APIs públicas e
 > síntese local pelo modelo {{MODELO_A}} (Ollama). O texto produzido foi
@@ -557,7 +558,7 @@ pergunta, as fontes, os modelos e a conclusão.
 #### (b) Relatório técnico — nota de método
 
 > **Método e controle de viés.** Dados primários recuperados por APIs
-> públicas (NexusGeo IA v0.9.0) e sintetizados localmente por {{MODELO_A}}.
+> públicas (NexusGeo IA v1.0.0) e sintetizados localmente por {{MODELO_A}}.
 > Revisão adversarial por {{MODELO_B}} (família distinta), com lista de
 > afirmações sem lastro, hipóteses alternativas e alertas de escala. A
 > contraprova bibliográfica foi registrada em {{N_ARQUIVO}}. As conclusões
@@ -566,7 +567,7 @@ pergunta, as fontes, os modelos e a conclusão.
 
 #### (c) Parecer Técnico — rodapé de linhagem
 
-> Parecer emitido com NexusGeo IA v0.9.0 · Modelo gerador: {{MODELO_A}} ·
+> Parecer emitido com NexusGeo IA v1.0.0 · Modelo gerador: {{MODELO_A}} ·
 > Auditoria: {{MODELO_B}} ({{DATA_AUDITORIA}}) · Perfil:
 > {{PERFIL}} · Fontes: {{FONTES}} · Hash de rastreabilidade: {{HASH}}.
 > Afirmações interpretativas estão identificadas no corpo do documento;

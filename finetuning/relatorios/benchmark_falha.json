@@ -1,0 +1,409 @@
+{
+  "gerado_em": "2026-11-22T19:57:44+00:00",
+  "preditor": "falha",
+  "modelo": null,
+  "dataset": {
+    "arquivo": "D:\\curso IA\\projetos\\ia-generativa-python-integracoes\\ia-generativa-python-integracoes\\finetuning\\datasets\\nexusgeoia_behavior_v1.jsonl",
+    "total": 212,
+    "avaliados": 212,
+    "sha256": "ed4edd9b6fd317cabc10c712edf3709013a1d98479be966e00d4086d2006fe5f"
+  },
+  "filtros": {
+    "tarefas": [],
+    "idiomas": [],
+    "limite": null
+  },
+  "duracao_ms": 0.339,
+  "metricas": {
+    "global": {
+      "total": 212,
+      "corretos": 0,
+      "acuracia": 0.0,
+      "esquema_ok": 0,
+      "acuracia_esquema": 0.0,
+      "falhas_parsing": 0,
+      "taxa_falha_parsing": 0.0,
+      "erros_execucao": 212,
+      "taxa_erro_execucao": 1.0,
+      "latencia_ms": {
+        "media": 0.001,
+        "p50": 0.001,
+        "p95": 0.001,
+        "min": 0.0,
+        "max": 0.006
+      }
+    },
+    "por_tarefa": {
+      "governance_label": {
+        "total": 58,
+        "corretos": 0,
+        "acuracia": 0.0,
+        "esquema_ok": 0,
+        "acuracia_esquema": 0.0,
+        "falhas_parsing": 0,
+        "taxa_falha_parsing": 0.0,
+        "erros_execucao": 58,
+        "taxa_erro_execucao": 1.0,
+        "latencia_ms": {
+          "media": 0.001,
+          "p50": 0.001,
+          "p95": 0.001,
+          "min": 0.0,
+          "max": 0.001
+        }
+      },
+      "sondagem_extract": {
+        "total": 74,
+        "corretos": 0,
+        "acuracia": 0.0,
+        "esquema_ok": 0,
+        "acuracia_esquema": 0.0,
+        "falhas_parsing": 0,
+        "taxa_falha_parsing": 0.0,
+        "erros_execucao": 74,
+        "taxa_erro_execucao": 1.0,
+        "latencia_ms": {
+          "media": 0.001,
+          "p50": 0.001,
+          "p95": 0.001,
+          "min": 0.0,
+          "max": 0.004
+        }
+      },
+      "workflow_intent": {
+        "total": 80,
+        "corretos": 0,
+        "acuracia": 0.0,
+        "esquema_ok": 0,
+        "acuracia_esquema": 0.0,
+        "falhas_parsing": 0,
+        "taxa_falha_parsing": 0.0,
+        "erros_execucao": 80,
+        "taxa_erro_execucao": 1.0,
+        "latencia_ms": {
+          "media": 0.001,
+          "p50": 0.001,
+          "p95": 0.002,
+          "min": 0.0,
+          "max": 0.006
+        }
+      }
+    },
+    "por_idioma": {
+      "en": {
+        "total": 106,
+        "corretos": 0,
+        "acuracia": 0.0,
+        "esquema_ok": 0,
+        "acuracia_esquema": 0.0,
+        "falhas_parsing": 0,
+        "taxa_falha_parsing": 0.0,
+        "erros_execucao": 106,
+        "taxa_erro_execucao": 1.0,
+        "latencia_ms": {
+          "media": 0.001,
+          "p50": 0.001,
+          "p95": 0.001,
+          "min": 0.0,
+          "max": 0.003
+        }
+      },
+      "pt": {
+        "total": 106,
+        "corretos": 0,
+        "acuracia": 0.0,
+        "esquema_ok": 0,
+        "acuracia_esquema": 0.0,
+        "falhas_parsing": 0,
+        "taxa_falha_parsing": 0.0,
+        "erros_execucao": 106,
+        "taxa_erro_execucao": 1.0,
+        "latencia_ms": {
+          "media": 0.001,
+          "p50": 0.001,
+          "p95": 0.001,
+          "min": 0.0,
+          "max": 0.006
+        }
+      }
+    },
+    "por_familia": {
+      "ambiguo": {
+        "total": 30,
+        "corretos": 0,
+        "acuracia": 0.0,
+        "esquema_ok": 0,
+        "acuracia_esquema": 0.0,
+        "falhas_parsing": 0,
+        "taxa_falha_parsing": 0.0,
+        "erros_execucao": 30,
+        "taxa_erro_execucao": 1.0,
+        "latencia_ms": {
+          "media": 0.001,
+          "p50": 0.001,
+          "p95": 0.001,
+          "min": 0.0,
+          "max": 0.002
+        }
+      },
+      "incompleto": {
+        "total": 36,
+        "corretos": 0,
+        "acuracia": 0.0,
+        "esquema_ok": 0,
+        "acuracia_esquema": 0.0,
+        "falhas_parsing": 0,
+        "taxa_falha_parsing": 0.0,
+        "erros_execucao": 36,
+        "taxa_erro_execucao": 1.0,
+        "latencia_ms": {
+          "media": 0.001,
+          "p50": 0.001,
+          "p95": 0.001,
+          "min": 0.0,
+          "max": 0.001
+        }
+      },
+      "negativo": {
+        "total": 46,
+        "corretos": 0,
+        "acuracia": 0.0,
+        "esquema_ok": 0,
+        "acuracia_esquema": 0.0,
+        "falhas_parsing": 0,
+        "taxa_falha_parsing": 0.0,
+        "erros_execucao": 46,
+        "taxa_erro_execucao": 1.0,
+        "latencia_ms": {
+          "media": 0.001,
+          "p50": 0.001,
+          "p95": 0.001,
+          "min": 0.0,
+          "max": 0.001
+        }
+      },
+      "normal": {
+        "total": 100,
+        "corretos": 0,
+        "acuracia": 0.0,
+        "esquema_ok": 0,
+        "acuracia_esquema": 0.0,
+        "falhas_parsing": 0,
+        "taxa_falha_parsing": 0.0,
+        "erros_execucao": 100,
+        "taxa_erro_execucao": 1.0,
+        "latencia_ms": {
+          "media": 0.001,
+          "p50": 0.001,
+          "p95": 0.001,
+          "min": 0.0,
+          "max": 0.006
+        }
+      }
+    },
+    "confusao": {
+      "consulta_direta": {
+        "<falha>": 34
+      },
+      "triagem_area": {
+        "<falha>": 12
+      },
+      "hidrogeologia": {
+        "<falha>": 16
+      },
+      "sondagem": {
+        "<falha>": 18
+      },
+      "valido": {
+        "<falha>": 44
+      },
+      "invalido": {
+        "<falha>": 24
+      },
+      "erro_contrato": {
+        "<falha>": 6
+      },
+      "PASS": {
+        "<falha>": 20
+      },
+      "HOLD": {
+        "<falha>": 30
+      },
+      "FAIL": {
+        "<falha>": 8
+      }
+    },
+    "falhas": [
+      {
+        "id": "wf-pt-001",
+        "tarefa": "workflow_intent",
+        "idioma": "pt",
+        "erro_execucao": "RuntimeError: falha_injetada:wf-pt-001",
+        "falha_parsing": false,
+        "erros_esquema": [],
+        "esperado": null,
+        "obtido": null
+      },
+      {
+        "id": "wf-en-001",
+        "tarefa": "workflow_intent",
+        "idioma": "en",
+        "erro_execucao": "RuntimeError: falha_injetada:wf-en-001",
+        "falha_parsing": false,
+        "erros_esquema": [],
+        "esperado": null,
+        "obtido": null
+      },
+      {
+        "id": "wf-pt-002",
+        "tarefa": "workflow_intent",
+        "idioma": "pt",
+        "erro_execucao": "RuntimeError: falha_injetada:wf-pt-002",
+        "falha_parsing": false,
+        "erros_esquema": [],
+        "esperado": null,
+        "obtido": null
+      },
+      {
+        "id": "wf-en-002",
+        "tarefa": "workflow_intent",
+        "idioma": "en",
+        "erro_execucao": "RuntimeError: falha_injetada:wf-en-002",
+        "falha_parsing": false,
+        "erros_esquema": [],
+        "esperado": null,
+        "obtido": null
+      },
+      {
+        "id": "wf-pt-003",
+        "tarefa": "workflow_intent",
+        "idioma": "pt",
+        "erro_execucao": "RuntimeError: falha_injetada:wf-pt-003",
+        "falha_parsing": false,
+        "erros_esquema": [],
+        "esperado": null,
+        "obtido": null
+      },
+      {
+        "id": "wf-en-003",
+        "tarefa": "workflow_intent",
+        "idioma": "en",
+        "erro_execucao": "RuntimeError: falha_injetada:wf-en-003",
+        "falha_parsing": false,
+        "erros_esquema": [],
+        "esperado": null,
+        "obtido": null
+      },
+      {
+        "id": "wf-pt-004",
+        "tarefa": "workflow_intent",
+        "idioma": "pt",
+        "erro_execucao": "RuntimeError: falha_injetada:wf-pt-004",
+        "falha_parsing": false,
+        "erros_esquema": [],
+        "esperado": null,
+        "obtido": null
+      },
+      {
+        "id": "wf-en-004",
+        "tarefa": "workflow_intent",
+        "idioma": "en",
+        "erro_execucao": "RuntimeError: falha_injetada:wf-en-004",
+        "falha_parsing": false,
+        "erros_esquema": [],
+        "esperado": null,
+        "obtido": null
+      },
+      {
+        "id": "wf-pt-005",
+        "tarefa": "workflow_intent",
+        "idioma": "pt",
+        "erro_execucao": "RuntimeError: falha_injetada:wf-pt-005",
+        "falha_parsing": false,
+        "erros_esquema": [],
+        "esperado": null,
+        "obtido": null
+      },
+      {
+        "id": "wf-en-005",
+        "tarefa": "workflow_intent",
+        "idioma": "en",
+        "erro_execucao": "RuntimeError: falha_injetada:wf-en-005",
+        "falha_parsing": false,
+        "erros_esquema": [],
+        "esperado": null,
+        "obtido": null
+      },
+      {
+        "id": "wf-pt-006",
+        "tarefa": "workflow_intent",
+        "idioma": "pt",
+        "erro_execucao": "RuntimeError: falha_injetada:wf-pt-006",
+        "falha_parsing": false,
+        "erros_esquema": [],
+        "esperado": null,
+        "obtido": null
+      },
+      {
+        "id": "wf-en-006",
+        "tarefa": "workflow_intent",
+        "idioma": "en",
+        "erro_execucao": "RuntimeError: falha_injetada:wf-en-006",
+        "falha_parsing": false,
+        "erros_esquema": [],
+        "esperado": null,
+        "obtido": null
+      }
+    ],
+    "total_falhas": 212
+  },
+  "db": {
+    "antes": {
+      "principal": {
+        "caminho": "D:\\curso IA\\projetos\\ia-generativa-python-integracoes\\ia-generativa-python-integracoes\\data\\nexusgeoia.db",
+        "existe": true,
+        "tamanho": 131072,
+        "sha256": "cf876e9a49e07f8643e705b509dc080e43e42dcffdd41f20e269a08cc8564281"
+      },
+      "sidecars": [
+        {
+          "caminho": "D:\\curso IA\\projetos\\ia-generativa-python-integracoes\\ia-generativa-python-integracoes\\data\\nexusgeoia.db-wal",
+          "existe": true,
+          "tamanho": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "caminho": "D:\\curso IA\\projetos\\ia-generativa-python-integracoes\\ia-generativa-python-integracoes\\data\\nexusgeoia.db-shm",
+          "existe": true,
+          "tamanho": 32768,
+          "sha256": "fd4c9fda9cd3f9ae7c962b0ddf37232294d55580e1aa165aa06129b8549389eb"
+        }
+      ]
+    },
+    "depois": {
+      "principal": {
+        "caminho": "D:\\curso IA\\projetos\\ia-generativa-python-integracoes\\ia-generativa-python-integracoes\\data\\nexusgeoia.db",
+        "existe": true,
+        "tamanho": 131072,
+        "sha256": "cf876e9a49e07f8643e705b509dc080e43e42dcffdd41f20e269a08cc8564281"
+      },
+      "sidecars": [
+        {
+          "caminho": "D:\\curso IA\\projetos\\ia-generativa-python-integracoes\\ia-generativa-python-integracoes\\data\\nexusgeoia.db-wal",
+          "existe": true,
+          "tamanho": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "caminho": "D:\\curso IA\\projetos\\ia-generativa-python-integracoes\\ia-generativa-python-integracoes\\data\\nexusgeoia.db-shm",
+          "existe": true,
+          "tamanho": 32768,
+          "sha256": "fd4c9fda9cd3f9ae7c962b0ddf37232294d55580e1aa165aa06129b8549389eb"
+        }
+      ]
+    },
+    "intocado": true,
+    "DB_INTOCADO": true
+  },
+  "db_intocado": true
+}

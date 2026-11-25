@@ -1,17 +1,20 @@
-"""Testes offline do assistente de modelos LLM (``setup_llm.py``).
+"""Testes offline do configurador do modelo local (``setup_llm.py``).
 
-Cobrem a matriz dos três modelos, a seleção múltipla, a fila de download
-com o ``/api/pull`` simulado, a persistência em ``config_local.json`` e
-a prioridade de leitura em ``config.py``. Nenhum teste abre janela,
-acessa a rede, executa o Ollama ou usa navegador.
+Cobrem o fluxo único do modelo oficial da v1.0.0, o download atômico do
+GGUF, o fallback técnico ``qwen3:4b``, a persistência em
+``config_local.json`` e a prioridade de leitura em ``config.py``.
+Nenhum teste abre janela, acessa a rede, executa o Ollama ou usa
+navegador.
 """
 
 import inspect
+import io
 import json
 import os
 import shutil
 import unittest
 import uuid
+from contextlib import redirect_stdout
 from pathlib import Path
 from unittest import mock
 
@@ -124,114 +127,112 @@ def json_dumps(dados):
 
 
 # ---------------------------------------------------------------------------
-# Catálogo e seleção
+# Fluxo único do modelo oficial (v1.0.0)
 # ---------------------------------------------------------------------------
 
-class TestCatalogo(unittest.TestCase):
-    """Os três modelos exatos, com perfil, RAM e comportamento."""
+class TestModeloUnico(unittest.TestCase):
+    """Não existe catálogo: só o modelo oficial e o fallback técnico."""
 
-    def test_exatamente_tres_modelos_na_ordem_esperada(self):
+    def test_modelo_oficial_e_fallback_tecnico(self):
         self.assertEqual(
-            setup_llm.identificadores_modelos(),
-            ["qwen3:4b", "qwen3:14b", "qwen2.5:3b"],
+            setup_llm.NOME_MODELO_LOCAL,
+            "nexusgeo-qwen3-4b-v2-q4",
+        )
+        self.assertEqual(setup_llm.ARQUIVO_GGUF_LOCAL, "nexusgeo-qwen3-4b-v2-Q4_K_M.gguf")
+        self.assertEqual(setup_llm.MODELO_TECNICO_FALLBACK, "qwen3:4b")
+
+    def test_catalogo_antigo_nao_existe_mais(self):
+        for atributo in (
+            "CATALOGO_MODELOS",
+            "ModeloLLM",
+            "identificadores_modelos",
+            "obter_modelo",
+            "normalizar_modelos",
+            "modelos_iniciais",
+            "estimar_ram_gb",
+            "modelo_padrao",
+            "interpretar_escolha_cli",
+            "executar_seletor_cli",
+            "montar_tabela_modelos",
+            "memoria_total_gb",
+            "formatar_ram",
+        ):
+            with self.subTest(atributo=atributo):
+                self.assertFalse(hasattr(setup_llm, atributo))
+
+    def test_url_oficial_do_gguf(self):
+        self.assertTrue(
+            setup_llm.URL_GGUF_OFICIAL.startswith(
+                "https://github.com/Prof-Tiago-Maia/NexusGeoIA/releases/"
+            )
+        )
+        self.assertTrue(
+            setup_llm.URL_GGUF_OFICIAL.endswith(
+                "/v1.0.0/nexusgeo-qwen3-4b-v2-Q4_K_M.gguf"
+            )
         )
 
-    def test_ram_de_cada_modelo(self):
-        self.assertEqual(setup_llm.obter_modelo("qwen3:4b").ram_gb, 2.6)
-        self.assertEqual(setup_llm.obter_modelo("qwen3:14b").ram_gb, 9.0)
-        self.assertEqual(setup_llm.obter_modelo("qwen2.5:3b").ram_gb, 1.9)
+    def test_formatar_mb_pt_e_en(self):
+        self.assertEqual(setup_llm.formatar_mb(1024 * 1024, "pt"), "1,0 MB")
+        self.assertEqual(setup_llm.formatar_mb(1024 * 1024, "en"), "1.0 MB")
+        self.assertEqual(setup_llm.formatar_mb(None, "pt"), "—")
 
-    def test_perfis_de_hardware_nos_dois_idiomas(self):
-        quatro = setup_llm.obter_modelo("qwen3:4b")
-        quatorze = setup_llm.obter_modelo("qwen3:14b")
-        leve = setup_llm.obter_modelo("qwen2.5:3b")
-
-        self.assertIn("16 GB", quatro.perfil("pt"))
-        self.assertIn("Sem GPU dedicada", quatro.perfil("pt"))
-        self.assertIn("Offline Installer Default", quatro.perfil("en"))
-
-        self.assertIn("32+", quatorze.perfil("pt"))
-        self.assertIn("8 GB VRAM", quatorze.perfil("pt"))
-
-        self.assertIn("8 GB", leve.perfil("pt"))
-        self.assertIn("Older laptops", leve.perfil("en"))
-
-    def test_comportamentos_dos_dois_idiomas(self):
-        for modelo in setup_llm.CATALOGO_MODELOS:
-            self.assertTrue(modelo.comportamento("pt").strip())
-            self.assertTrue(modelo.comportamento("en").strip())
-
-    def test_formatar_ram_pt_e_en(self):
-        self.assertEqual(setup_llm.formatar_ram(2.6, "pt"), "~2,6 GB")
-        self.assertEqual(setup_llm.formatar_ram(2.6, "en"), "~2.6 GB")
-
-    def test_ram_formatada_do_modelo(self):
+    def test_nome_base_modelo(self):
         self.assertEqual(
-            setup_llm.obter_modelo("qwen3:14b").ram_formatada("pt"),
-            "~9,0 GB",
-        )
-
-    def test_modelo_desconhecido_devolve_none(self):
-        self.assertIsNone(setup_llm.obter_modelo("llama3:8b"))
-
-    def test_normalizar_modelos_descarta_invalidos_e_duplicados(self):
-        self.assertEqual(
-            setup_llm.normalizar_modelos(
-                ["qwen3:4b", "llama3:8b", "qwen3:4b", " qwen2.5:3b "]
-            ),
-            ["qwen3:4b", "qwen2.5:3b"],
-        )
-
-
-class TestSelecao(unittest.TestCase):
-    """Pré-seleção por RAM, RAM estimada e prioridade do modelo padrão."""
-
-    def test_pre_selecao_por_ram(self):
-        self.assertEqual(setup_llm.modelos_iniciais(8.0), ["qwen2.5:3b"])
-        self.assertEqual(setup_llm.modelos_iniciais(16.0), ["qwen3:4b"])
-        self.assertEqual(setup_llm.modelos_iniciais(31.7), ["qwen3:14b"])
-        self.assertEqual(setup_llm.modelos_iniciais(64.0), ["qwen3:14b"])
-
-    def test_ram_estimada_soma_os_marcados(self):
-        self.assertEqual(
-            setup_llm.estimar_ram_gb(["qwen3:4b", "qwen3:14b"]),
-            11.6,
-        )
-        self.assertEqual(setup_llm.estimar_ram_gb(["qwen2.5:3b"]), 1.9)
-        self.assertEqual(setup_llm.estimar_ram_gb([]), 0.0)
-
-    def test_modelo_padrao_prioriza_14b(self):
-        self.assertEqual(
-            setup_llm.modelo_padrao(["qwen2.5:3b", "qwen3:14b", "qwen3:4b"]),
-            "qwen3:14b",
+            setup_llm.nome_base_modelo("nexusgeo-qwen3-4b-v2-q4:latest"),
+            "nexusgeo-qwen3-4b-v2-q4",
         )
         self.assertEqual(
-            setup_llm.modelo_padrao(["qwen2.5:3b", "qwen3:4b"]),
-            "qwen3:4b",
+            setup_llm.nome_base_modelo("qwen3:4b"),
+            "qwen3",
         )
-        self.assertEqual(
-            setup_llm.modelo_padrao(["qwen2.5:3b"]),
-            "qwen2.5:3b",
-        )
-        self.assertEqual(setup_llm.modelo_padrao([]), "")
+        self.assertEqual(setup_llm.nome_base_modelo(None), "")
 
-    def test_texto_de_progresso(self):
+    def test_textos_pt_e_en_paridade(self):
         self.assertEqual(
-            setup_llm.texto_de_progresso(1, 2, "qwen3:4b", "pt"),
-            "Baixando 1/2: qwen3:4b...",
-        )
-        self.assertEqual(
-            setup_llm.texto_de_progresso(2, 3, "qwen2.5:3b", "en"),
-            "Downloading 2/3: qwen2.5:3b...",
+            set(setup_llm.TEXTOS["pt"]),
+            set(setup_llm.TEXTOS["en"]),
         )
 
-    def test_percentual_tolerante(self):
-        self.assertEqual(setup_llm.calcular_percentual(50, 100), 50.0)
-        self.assertEqual(setup_llm.calcular_percentual(0, 100), 0.0)
-        self.assertEqual(setup_llm.calcular_percentual(100, 100), 100.0)
-        self.assertIsNone(setup_llm.calcular_percentual(10, 0))
-        self.assertIsNone(setup_llm.calcular_percentual(None, 100))
-        self.assertIsNone(setup_llm.calcular_percentual("x", "y"))
+        for idioma in ("pt", "en"):
+            with self.subTest(idioma=idioma):
+                self.assertIn(
+                    "nexusgeo-qwen3-4b-v2-q4",
+                    setup_llm.texto("subtitulo", idioma),
+                )
+                self.assertNotIn(
+                    "três modelos",
+                    setup_llm.texto("subtitulo", idioma).lower(),
+                )
+
+    def test_modelo_local_registrado(self):
+        with mock.patch.object(
+            setup_llm,
+            "modelos_instalados",
+            return_value=["qwen3:4b"],
+        ):
+            self.assertFalse(setup_llm.modelo_local_registrado())
+
+        with mock.patch.object(
+            setup_llm,
+            "modelos_instalados",
+            return_value=["nexusgeo-qwen3-4b-v2-q4:latest"],
+        ):
+            self.assertTrue(setup_llm.modelo_local_registrado())
+
+        with mock.patch.object(
+            setup_llm,
+            "modelos_instalados",
+            return_value=["nexusgeo-qwen3-4b-v2-q4", "qwen3:4b"],
+        ):
+            self.assertTrue(setup_llm.modelo_local_registrado())
+
+        with mock.patch.object(
+            setup_llm,
+            "modelos_instalados",
+            side_effect=OSError("offline"),
+        ):
+            self.assertFalse(setup_llm.modelo_local_registrado())
 
 
 # ---------------------------------------------------------------------------
@@ -277,7 +278,7 @@ class TestServicoOllama(unittest.TestCase):
             return_value={
                 "models": [
                     {"name": "qwen3:4b"},
-                    {"model": "qwen2.5:3b"},
+                    {"model": "nexusgeo-qwen3-4b-v2-q4"},
                     {"name": ""},
                     "ignorado",
                 ]
@@ -285,7 +286,7 @@ class TestServicoOllama(unittest.TestCase):
         ):
             self.assertEqual(
                 setup_llm.modelos_instalados(),
-                ["qwen3:4b", "qwen2.5:3b"],
+                ["qwen3:4b", "nexusgeo-qwen3-4b-v2-q4"],
             )
 
     def test_modelos_instalados_sem_lista(self):
@@ -487,14 +488,17 @@ class TestDiagnosticoPermissao(unittest.TestCase):
         eventos = []
 
         resultado = setup_llm.baixar_modelos(
-            ["qwen3:4b", "qwen3:14b"],
+            ["qwen3:4b", "nexusgeo-qwen3-4b-v2-q4"],
             sessao=sessao,
             ao_progresso=eventos.append,
             idioma="pt",
         )
 
         # O segundo modelo continua baixando normalmente.
-        self.assertEqual(resultado["instalados"], ["qwen3:14b"])
+        self.assertEqual(
+            resultado["instalados"],
+            ["nexusgeo-qwen3-4b-v2-q4"],
+        )
 
         falha = resultado["falhas"]["qwen3:4b"]
 
@@ -546,21 +550,32 @@ class TestDiagnosticoPermissao(unittest.TestCase):
         self.assertIn("icacls", falha)
 
 
-class TestInterfaceSemFalsoAlerta(unittest.TestCase):
-    """A janela só alerta "Ollama indisponível" depois da espera."""
+class TestInterfaceSemCatalogo(unittest.TestCase):
+    """A janela v1.0.0 não tem checkboxes, tabela nem sugestão por RAM."""
 
-    def test_aviso_modal_vem_depois_do_polling(self):
+    def test_janela_nao_tem_checkbox_nem_catalogo(self):
         codigo = inspect.getsource(setup_llm.abrir_interface)
 
-        posicao_espera = codigo.index("aguardar_ollama")
-        posicao_aviso = codigo.index("sem_ollama_titulo")
+        for proibido in (
+            "Checkbutton",
+            "CATALOGO_MODELOS",
+            "modelos_iniciais",
+            "memoria_total_gb",
+            "estimar_ram_gb",
+        ):
+            with self.subTest(proibido=proibido):
+                self.assertNotIn(proibido, codigo)
 
-        self.assertLess(posicao_espera, posicao_aviso)
+        self.assertIn("Progressbar", codigo)
+        self.assertIn("garantir_modelo_oficial", codigo)
 
-    def test_confirmar_fica_bloqueado_durante_a_verificacao(self):
-        codigo = inspect.getsource(setup_llm.abrir_interface)
+    def test_interface_tem_apenas_fluxo_unico(self):
+        codigo = inspect.getsource(setup_llm.principal)
 
-        self.assertIn('estado["verificando"] or estado["baixando"]', codigo)
+        self.assertIn("modelo_local_registrado", codigo)
+        self.assertIn("caminho_gguf_local", codigo)
+        self.assertIn("abrir_interface", codigo)
+        self.assertNotIn("seletor", codigo)
 
 
 # ---------------------------------------------------------------------------
@@ -1025,131 +1040,105 @@ class TestGarantirServicoComInstalacao(unittest.TestCase):
 # Fila de download
 # ---------------------------------------------------------------------------
 
-class TestDownload(unittest.TestCase):
-    """Download sequencial em streaming com o ``/api/pull`` dublado."""
-
-    def test_baixa_dois_modelos_em_sequencia(self):
-        sessao = SessaoFalsa()
-        eventos = []
-
-        resultado = setup_llm.baixar_modelos(
-            ["qwen3:4b", "qwen3:14b"],
-            sessao=sessao,
-            ao_progresso=eventos.append,
-        )
-
-        self.assertEqual(
-            resultado["instalados"],
-            ["qwen3:4b", "qwen3:14b"],
-        )
-        self.assertEqual(resultado["falhas"], {})
-        self.assertEqual(resultado["modelo_padrao"], "qwen3:14b")
-
-        self.assertEqual(
-            [chamada["modelo"] for chamada in sessao.chamadas],
-            ["qwen3:4b", "qwen3:14b"],
-        )
-
-        for chamada in sessao.chamadas:
-            self.assertTrue(chamada["url"].endswith("/api/pull"))
-            self.assertTrue(chamada["stream"])
-
-        inicios = [evento for evento in eventos if evento["tipo"] == "inicio"]
-
-        self.assertEqual(len(inicios), 2)
-        self.assertEqual(inicios[0]["texto"], "Baixando 1/2: qwen3:4b...")
-        self.assertEqual(inicios[1]["texto"], "Baixando 2/2: qwen3:14b...")
-
-        progressos = [
-            evento for evento in eventos if evento["tipo"] == "progresso"
-        ]
-
-        self.assertTrue(
-            any(evento["percentual"] == 50.0 for evento in progressos)
-        )
-        self.assertEqual(eventos[-1]["tipo"], "fim")
-
-    def test_selecao_multipla_com_os_tres(self):
-        sessao = SessaoFalsa()
-        eventos = []
-
-        resultado = setup_llm.baixar_modelos(
-            list(setup_llm.identificadores_modelos()),
-            sessao=sessao,
-            ao_progresso=eventos.append,
-        )
-
-        self.assertEqual(len(resultado["instalados"]), 3)
-        self.assertEqual(len(sessao.chamadas), 3)
-        self.assertEqual(
-            len([evento for evento in eventos if evento["tipo"] == "inicio"]),
-            3,
-        )
-        self.assertEqual(resultado["modelo_padrao"], "qwen3:14b")
-
-    def test_um_modelo_so(self):
-        sessao = SessaoFalsa()
-
-        resultado = setup_llm.baixar_modelos(
-            ["qwen2.5:3b"],
-            sessao=sessao,
-        )
-
-        self.assertEqual(resultado["instalados"], ["qwen2.5:3b"])
-        self.assertEqual(resultado["modelo_padrao"], "qwen2.5:3b")
-        self.assertEqual(len(sessao.chamadas), 1)
-        self.assertTrue(sessao.respostas[0].fechada)
-
-    def test_falha_de_um_modelo_nao_interrompe_o_seguinte(self):
-        sessao = SessaoFalsa(
-            erros={"qwen3:4b": "model not found"},
-        )
-        eventos = []
-
-        resultado = setup_llm.baixar_modelos(
-            ["qwen3:4b", "qwen3:14b"],
-            sessao=sessao,
-            ao_progresso=eventos.append,
-        )
-
-        self.assertEqual(resultado["instalados"], ["qwen3:14b"])
-        self.assertIn("qwen3:4b", resultado["falhas"])
-        self.assertIn("model not found", resultado["falhas"]["qwen3:4b"])
-
-        erros = [evento for evento in eventos if evento["tipo"] == "erro"]
-
-        self.assertEqual(len(erros), 1)
-        self.assertEqual(erros[0]["modelo"], "qwen3:4b")
-
-    def test_http_de_erro_vira_erro_download(self):
-        sessao = SessaoFalsa(status=500)
-
-        with self.assertRaises(setup_llm.ErroDownload):
-            setup_llm.baixar_modelo("qwen3:4b", sessao=sessao)
-
-    def test_fila_vazia_recusa(self):
-        with self.assertRaises(ValueError):
-            setup_llm.baixar_modelos([])
-
-    def test_modelo_fora_do_catalogo_recusa(self):
-        with self.assertRaises(ValueError):
-            setup_llm.baixar_modelos(["llama3:8b"])
-
-    def test_sessao_e_fechada_mesmo_com_erro(self):
-        sessao = SessaoFalsa(erros={"qwen3:4b": "boom"})
-
-        with self.assertRaises(setup_llm.ErroDownload):
-            setup_llm.baixar_modelo("qwen3:4b", sessao=sessao)
-
-        self.assertTrue(sessao.respostas[0].fechada)
-
-
 # ---------------------------------------------------------------------------
-# Persistência e prioridade no config.py
+# Download do GGUF oficial e persistência do modelo único
 # ---------------------------------------------------------------------------
 
-class TestPersistencia(unittest.TestCase):
-    """Gravação do config_local.json e leitura pelo config.py."""
+class RespostaGgufFalsa:
+    """Resposta binária mínima compatível com ``baixar_gguf_oficial``."""
+
+    def __init__(self, blocos, total=None, falhar_em=None):
+        self._blocos = list(blocos)
+        self._falhar_em = falhar_em
+        self.headers = {}
+        if total is not None:
+            self.headers["Content-Length"] = str(total)
+        self.fechada = False
+        self.lido = 0
+
+    def read(self, tamanho=None):
+        self.lido += 1
+
+        if self._falhar_em is not None and self.lido >= self._falhar_em:
+            raise OSError("conexão interrompida")
+
+        if not self._blocos:
+            return b""
+
+        return self._blocos.pop(0)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        self.fechada = True
+        return False
+
+
+def _abrir_com(resposta):
+    return lambda _url: resposta
+
+
+class TestDownloadGgufOficial(unittest.TestCase):
+    """Download atômico do GGUF com progresso e limpeza do parcial."""
+
+    def setUp(self):
+        self._pasta = novo_diretorio_temporario()
+        self.destino = self._pasta / "nexusgeo-qwen3-4b-v2-Q4_K_M.gguf"
+
+    def tearDown(self):
+        shutil.rmtree(self._pasta, ignore_errors=True)
+
+    def test_baixa_e_reporta_progresso(self):
+        blocos = [b"a" * 1024, b"b" * 1024, b""]
+        resposta = RespostaGgufFalsa(blocos, total=2048)
+        eventos = []
+
+        caminho = setup_llm.baixar_gguf_oficial(
+            destino=self.destino,
+            ao_progresso=eventos.append,
+            abrir=_abrir_com(resposta),
+        )
+
+        self.assertEqual(caminho, self.destino)
+        self.assertEqual(self.destino.read_bytes(), b"a" * 1024 + b"b" * 1024)
+        self.assertFalse(
+            (self._pasta / (self.destino.name + ".part")).exists()
+        )
+        self.assertGreaterEqual(len(eventos), 2)
+        self.assertEqual(eventos[-1]["baixado_bytes"], 2048)
+        self.assertEqual(eventos[-1]["percentual"], 100.0)
+
+    def test_falha_de_rede_remove_o_parcial(self):
+        resposta = RespostaGgufFalsa(
+            [b"a" * 512],
+            total=2048,
+            falhar_em=2,
+        )
+
+        with self.assertRaises(setup_llm.ErroDownload):
+            setup_llm.baixar_gguf_oficial(
+                destino=self.destino,
+                abrir=_abrir_com(resposta),
+            )
+
+        self.assertFalse(self.destino.exists())
+        self.assertFalse(
+            (self._pasta / (self.destino.name + ".part")).exists()
+        )
+
+    def test_download_vazio_falha(self):
+        with self.assertRaises(setup_llm.ErroDownload):
+            setup_llm.baixar_gguf_oficial(
+                destino=self.destino,
+                abrir=_abrir_com(RespostaGgufFalsa([])),
+            )
+
+        self.assertFalse(self.destino.exists())
+
+
+class TestPersistenciaModeloUnico(unittest.TestCase):
+    """O config_local.json grava o modelo único e o ``modelo_ollama``."""
 
     def setUp(self):
         self._pasta = novo_diretorio_temporario()
@@ -1161,119 +1150,273 @@ class TestPersistencia(unittest.TestCase):
     def _ler(self):
         return json.loads(self.caminho.read_text(encoding="utf-8"))
 
-    def test_precisa_configurar_sem_arquivo(self):
-        self.assertTrue(setup_llm.precisa_configurar(self.caminho))
+    def test_persistir_modelo_oficial(self):
+        dados = setup_llm.persistir_modelo(caminho=self.caminho)
 
-    def test_persistir_grava_lista_e_padrao(self):
-        dados = setup_llm.persistir_selecao(
-            ["qwen2.5:3b", "qwen3:4b"],
+        self.assertEqual(dados["modelo_ollama"], setup_llm.NOME_MODELO_LOCAL)
+        self.assertEqual(dados["modelo_padrao"], setup_llm.NOME_MODELO_LOCAL)
+        self.assertEqual(
+            dados["modelos_instalados"],
+            [setup_llm.NOME_MODELO_LOCAL],
+        )
+        self.assertEqual(dados["versao_config"], config.VERSAO_CONFIG_LOCAL)
+        self.assertIn("atualizado_em", dados)
+
+    def test_persistir_fallback_tecnico(self):
+        dados = setup_llm.persistir_modelo(
+            setup_llm.MODELO_TECNICO_FALLBACK,
             caminho=self.caminho,
         )
 
-        self.assertTrue(self.caminho.is_file())
-        self.assertEqual(
-            dados["modelos_instalados"],
-            ["qwen2.5:3b", "qwen3:4b"],
-        )
+        self.assertEqual(dados["modelo_ollama"], "qwen3:4b")
         self.assertEqual(dados["modelo_padrao"], "qwen3:4b")
 
-        lido = self._ler()
-
-        self.assertEqual(lido["modelo_padrao"], "qwen3:4b")
-        self.assertEqual(lido["versao_config"], config.VERSAO_CONFIG_LOCAL)
-        self.assertIn("atualizado_em", lido)
-
-    def test_persistir_acumula_com_forcar(self):
-        setup_llm.persistir_selecao(["qwen3:4b"], caminho=self.caminho)
-        dados = setup_llm.persistir_selecao(
-            ["qwen3:14b"],
+    def test_persistir_acumula_sem_duplicar(self):
+        setup_llm.persistir_modelo(caminho=self.caminho)
+        dados = setup_llm.persistir_modelo(
+            setup_llm.MODELO_TECNICO_FALLBACK,
             caminho=self.caminho,
         )
 
         self.assertEqual(
             dados["modelos_instalados"],
-            ["qwen3:4b", "qwen3:14b"],
+            [setup_llm.MODELO_TECNICO_FALLBACK, setup_llm.NOME_MODELO_LOCAL],
         )
-        self.assertEqual(dados["modelo_padrao"], "qwen3:14b")
-        self.assertFalse(setup_llm.precisa_configurar(self.caminho))
+        self.assertEqual(dados["modelo_padrao"], setup_llm.MODELO_TECNICO_FALLBACK)
 
-    def test_persistir_sem_modelo_valido_recusa(self):
+    def test_persistir_rejeita_modelo_vazio(self):
         with self.assertRaises(ValueError):
-            setup_llm.persistir_selecao([], caminho=self.caminho)
-
-        with self.assertRaises(ValueError):
-            setup_llm.persistir_selecao(["llama3:8b"], caminho=self.caminho)
+            setup_llm.persistir_modelo("", caminho=self.caminho)
 
         self.assertFalse(self.caminho.exists())
 
-    def test_modelos_ja_instalados(self):
-        setup_llm.persistir_selecao(
-            ["qwen2.5:3b"],
-            caminho=self.caminho,
-        )
-
-        self.assertEqual(
-            setup_llm.modelos_ja_instalados(self.caminho),
-            ["qwen2.5:3b"],
-        )
-
-    def test_config_local_corrompido_nao_quebra(self):
-        self.caminho.write_text("{invalido", encoding="utf-8")
-
-        self.assertEqual(config.carregar_config_local(self.caminho), {})
+    def test_precisa_configurar(self):
         self.assertTrue(setup_llm.precisa_configurar(self.caminho))
 
-    def test_config_local_com_bom_do_notepad(self):
-        conteudo = json.dumps(
-            {
-                "modelos_instalados": ["qwen3:14b"],
-                "modelo_padrao": "qwen3:14b",
-            }
+        setup_llm.persistir_modelo(caminho=self.caminho)
+
+        self.assertFalse(setup_llm.precisa_configurar(self.caminho))
+        self.assertEqual(
+            setup_llm.modelos_ja_instalados(self.caminho),
+            [setup_llm.NOME_MODELO_LOCAL],
         )
-        self.caminho.write_bytes(b"\xef\xbb\xbf" + conteudo.encode("utf-8"))
+
+    def test_modelo_ollama_alimenta_o_config(self):
+        self.caminho.write_text(
+            json.dumps({"modelo_ollama": "qwen3:4b"}),
+            encoding="utf-8",
+        )
 
         self.assertEqual(
-            config.carregar_config_local(self.caminho)["modelo_padrao"],
-            "qwen3:14b",
+            config.modelo_padrao_do_config(
+                config.carregar_config_local(self.caminho)
+            ),
+            "qwen3:4b",
         )
-        self.assertFalse(setup_llm.precisa_configurar(self.caminho))
+
+
+class TestFluxoModeloOficial(unittest.TestCase):
+    """Ordem registrado -> GGUF local -> download -> fallback técnico."""
+
+    def setUp(self):
+        self._pasta = novo_diretorio_temporario()
+        self.gguf = self._pasta / setup_llm.ARQUIVO_GGUF_LOCAL
+        self.eventos = []
+
+    def tearDown(self):
+        shutil.rmtree(self._pasta, ignore_errors=True)
+
+    def _fluxo(self, servico=None):
+        with mock.patch.object(
+            setup_llm,
+            "garantir_servico_ollama",
+            return_value=servico or {"ativo": True},
+        ):
+            return setup_llm.garantir_modelo_oficial(
+                ao_progresso=self.eventos.append,
+            )
+
+    def test_modelo_ja_registrado_nao_baixa(self):
+        with mock.patch.object(
+            setup_llm, "modelo_local_registrado", return_value=True
+        ), mock.patch.object(
+            setup_llm, "persistir_modelo", return_value={"modelo_padrao": setup_llm.NOME_MODELO_LOCAL}
+        ) as persistir, mock.patch.object(
+            setup_llm, "baixar_gguf_oficial"
+        ) as baixar, mock.patch.object(
+            setup_llm, "registrar_modelo_local"
+        ) as registrar:
+            resultado = self._fluxo()
+
+        self.assertEqual(resultado["origem"], "registrado")
+        self.assertEqual(resultado["modelo"], setup_llm.NOME_MODELO_LOCAL)
+        persistir.assert_called_once_with(setup_llm.NOME_MODELO_LOCAL)
+        baixar.assert_not_called()
+        registrar.assert_not_called()
+        self.assertEqual(self.eventos[-1]["tipo"], "finalizado")
+
+    def test_gguf_local_e_registrado(self):
+        with mock.patch.object(
+            setup_llm, "modelo_local_registrado", return_value=False
+        ), mock.patch.object(
+            setup_llm, "caminho_gguf_local", return_value=self.gguf
+        ), mock.patch.object(
+            setup_llm, "registrar_modelo_local", return_value=setup_llm.NOME_MODELO_LOCAL
+        ) as registrar, mock.patch.object(
+            setup_llm, "persistir_modelo", return_value={}
+        ), mock.patch.object(
+            setup_llm, "baixar_gguf_oficial"
+        ) as baixar:
+            resultado = self._fluxo()
+
+        self.assertEqual(resultado["origem"], "gguf")
+        registrar.assert_called_once()
+        self.assertEqual(registrar.call_args.kwargs["gguf"], self.gguf)
+        baixar.assert_not_called()
+
+    def test_gguf_ausente_baixa_e_registra(self):
+        with mock.patch.object(
+            setup_llm, "modelo_local_registrado", return_value=False
+        ), mock.patch.object(
+            setup_llm, "caminho_gguf_local", return_value=None
+        ), mock.patch.object(
+            setup_llm, "baixar_gguf_oficial", return_value=self.gguf
+        ) as baixar, mock.patch.object(
+            setup_llm, "registrar_modelo_local", return_value=setup_llm.NOME_MODELO_LOCAL
+        ), mock.patch.object(
+            setup_llm, "persistir_modelo", return_value={}
+        ):
+            resultado = self._fluxo()
+
+        self.assertEqual(resultado["origem"], "gguf")
+        baixar.assert_called_once()
+
+    def test_falha_de_download_usa_fallback_tecnico(self):
+        with mock.patch.object(
+            setup_llm, "modelo_local_registrado", return_value=False
+        ), mock.patch.object(
+            setup_llm, "caminho_gguf_local", return_value=None
+        ), mock.patch.object(
+            setup_llm, "baixar_gguf_oficial", side_effect=setup_llm.ErroDownload("sem rede")
+        ), mock.patch.object(
+            setup_llm, "baixar_modelo"
+        ) as baixar_modelo, mock.patch.object(
+            setup_llm, "persistir_modelo", return_value={}
+        ) as persistir:
+            resultado = self._fluxo()
+
+        self.assertEqual(resultado["origem"], "fallback")
+        self.assertEqual(resultado["modelo"], "qwen3:4b")
+        baixar_modelo.assert_called_once()
+        self.assertEqual(baixar_modelo.call_args.args[0], "qwen3:4b")
+        persistir.assert_called_once_with("qwen3:4b")
+
+    def test_falha_do_ollama_create_usa_fallback(self):
+        with mock.patch.object(
+            setup_llm, "modelo_local_registrado", return_value=False
+        ), mock.patch.object(
+            setup_llm, "caminho_gguf_local", return_value=self.gguf
+        ), mock.patch.object(
+            setup_llm, "registrar_modelo_local", return_value=None
+        ), mock.patch.object(
+            setup_llm, "baixar_modelo"
+        ) as baixar_modelo, mock.patch.object(
+            setup_llm, "persistir_modelo", return_value={}
+        ):
+            resultado = self._fluxo()
+
+        self.assertEqual(resultado["origem"], "fallback")
+        self.assertEqual(baixar_modelo.call_args.args[0], "qwen3:4b")
+
+    def test_ollama_indisponivel_levanta_erro(self):
+        with mock.patch.object(
+            setup_llm, "modelo_local_registrado", return_value=False
+        ), mock.patch.object(
+            setup_llm, "caminho_gguf_local", return_value=None
+        ):
+            with self.assertRaises(setup_llm.ErroDownload):
+                self._fluxo({"ativo": False, "mensagem": "sem Ollama"})
+
+    def test_fallback_que_falha_levanta_erro(self):
+        with mock.patch.object(
+            setup_llm, "modelo_local_registrado", return_value=False
+        ), mock.patch.object(
+            setup_llm, "caminho_gguf_local", return_value=None
+        ), mock.patch.object(
+            setup_llm, "baixar_gguf_oficial", side_effect=setup_llm.ErroDownload("sem rede")
+        ), mock.patch.object(
+            setup_llm, "baixar_modelo", side_effect=RuntimeError("Ollama offline")
+        ):
+            with self.assertRaises(setup_llm.ErroDownload):
+                self._fluxo()
 
 
 class TestEntradaPrincipal(unittest.TestCase):
-    """``--forcar`` controla a abertura da janela."""
+    """O ``--forcar`` controla o atalho e a janela de download."""
 
-    def test_sem_forcar_e_configurado_nao_abre_interface(self):
+    def test_modelo_registrado_nao_abre_interface(self):
         with mock.patch.object(
-            setup_llm,
-            "precisa_configurar",
-            return_value=False,
-        ), mock.patch.object(setup_llm, "abrir_interface") as abrir:
+            setup_llm, "modelo_local_registrado", return_value=True
+        ), mock.patch.object(
+            setup_llm, "persistir_modelo"
+        ) as persistir, mock.patch.object(
+            setup_llm, "abrir_interface"
+        ) as abrir:
             self.assertEqual(setup_llm.principal([]), 0)
-            abrir.assert_not_called()
 
-    def test_sem_configuracao_abre_interface(self):
-        with mock.patch.object(
-            setup_llm,
-            "precisa_configurar",
-            return_value=True,
-        ), mock.patch.object(setup_llm, "abrir_interface") as abrir:
-            self.assertEqual(setup_llm.principal([]), 0)
-            abrir.assert_called_once_with(forcar=False)
+        persistir.assert_called_once_with(setup_llm.NOME_MODELO_LOCAL)
+        abrir.assert_not_called()
 
-    def test_forcar_abre_interface_mesmo_configurado(self):
+    def test_forcar_refaz_registro_sem_interface(self):
         with mock.patch.object(
-            setup_llm,
-            "precisa_configurar",
-            return_value=False,
-        ), mock.patch.object(setup_llm, "abrir_interface") as abrir:
+            setup_llm, "modelo_local_registrado", return_value=True
+        ), mock.patch.object(
+            setup_llm, "caminho_gguf_local", return_value=Path("gguf.gguf")
+        ), mock.patch.object(
+            setup_llm, "registrar_modelo_local", return_value=setup_llm.NOME_MODELO_LOCAL
+        ), mock.patch.object(
+            setup_llm, "persistir_modelo"
+        ) as persistir, mock.patch.object(
+            setup_llm, "abrir_interface"
+        ) as abrir:
             self.assertEqual(setup_llm.principal(["--forcar"]), 0)
-            abrir.assert_called_once_with(forcar=True)
+
+        persistir.assert_called_once_with(setup_llm.NOME_MODELO_LOCAL)
+        abrir.assert_not_called()
+
+    def test_sem_gguf_usa_interface(self):
+        with mock.patch.object(
+            setup_llm, "modelo_local_registrado", return_value=False
+        ), mock.patch.object(
+            setup_llm, "caminho_gguf_local", return_value=None
+        ), mock.patch.object(
+            setup_llm, "tkinter_disponivel", return_value=True
+        ), mock.patch.object(setup_llm, "abrir_interface") as abrir:
+            self.assertEqual(setup_llm.principal([]), 0)
+
+        abrir.assert_called_once_with(forcar=False)
+
+    def test_sem_tkinter_cai_para_cli(self):
+        with mock.patch.object(
+            setup_llm, "modelo_local_registrado", return_value=False
+        ), mock.patch.object(
+            setup_llm, "caminho_gguf_local", return_value=None
+        ), mock.patch.object(
+            setup_llm, "tkinter_disponivel", return_value=False
+        ), mock.patch.object(
+            setup_llm, "executar_fluxo_cli", return_value=0
+        ) as cli:
+            self.assertEqual(setup_llm.principal([]), 0)
+
+        cli.assert_called_once_with(forcar=False)
 
     def test_falha_da_interface_retorna_codigo_de_erro(self):
         with mock.patch.object(
-            setup_llm,
-            "precisa_configurar",
-            return_value=True,
+            setup_llm, "modelo_local_registrado", return_value=False
+        ), mock.patch.object(
+            setup_llm, "caminho_gguf_local", return_value=None
+        ), mock.patch.object(
+            setup_llm, "tkinter_disponivel", return_value=True
         ), mock.patch.object(
             setup_llm,
             "abrir_interface",
@@ -1282,22 +1425,61 @@ class TestEntradaPrincipal(unittest.TestCase):
             self.assertEqual(setup_llm.principal([]), 1)
 
 
+class TestFluxoCli(unittest.TestCase):
+    """O terminal executa o mesmo fluxo único e grava a configuração."""
+
+    def test_cli_sucesso(self):
+        saida = io.StringIO()
+
+        with mock.patch.object(
+            setup_llm,
+            "garantir_modelo_oficial",
+            return_value={
+                "modelo": setup_llm.NOME_MODELO_LOCAL,
+                "origem": "registrado",
+                "caminho_config": "C:\\dados\\config_local.json",
+            },
+        ) as garantir, redirect_stdout(saida):
+            codigo = setup_llm.executar_fluxo_cli()
+
+        self.assertEqual(codigo, 0)
+        garantir.assert_called_once_with(
+            forcar=False,
+            idioma="pt",
+            ao_progresso=mock.ANY,
+        )
+        self.assertIn("config_local.json", saida.getvalue())
+
+    def test_cli_falha(self):
+        saida = io.StringIO()
+
+        with mock.patch.object(
+            setup_llm,
+            "garantir_modelo_oficial",
+            side_effect=setup_llm.ErroDownload("sem rede"),
+        ), redirect_stdout(saida):
+            codigo = setup_llm.executar_fluxo_cli()
+
+        self.assertEqual(codigo, 1)
+        self.assertIn("sem rede", saida.getvalue())
+
+
 class TestConfigPrioridade(unittest.TestCase):
     """Prioridade config local > ambiente > fallback, sem tocar no disco."""
 
     def test_config_local_vence_o_ambiente(self):
         self.assertEqual(
             config.resolver_modelo_inicial(
-                {"modelo_padrao": "qwen3:14b"},
-                {"OLLAMA_MODEL": "qwen2.5:3b"},
+                {"modelo_padrao": "nexusgeo-qwen3-4b-v2-q4"},
+                {"OLLAMA_MODEL": "qwen3:4b"},
             ),
-            "qwen3:14b",
+            "nexusgeo-qwen3-4b-v2-q4",
         )
 
     def test_ambiente_vence_o_fallback(self):
         self.assertEqual(
-            config.resolver_modelo_inicial({}, {"OLLAMA_MODEL": "qwen2.5:3b"}),
-            "qwen2.5:3b",
+            config.resolver_modelo_inicial({}, {"OLLAMA_MODEL": "qwen3:4b"}),
+            "qwen3:4b",
         )
 
     def test_fallback_qwen3_4b(self):
@@ -1307,34 +1489,28 @@ class TestConfigPrioridade(unittest.TestCase):
         )
         self.assertEqual(config.MODELO_FALLBACK, "qwen3:4b")
 
-    def test_prioridade_por_lista_sem_padrao(self):
+    def test_prioridade_do_modelo_oficial(self):
         self.assertEqual(
             config.modelo_padrao_do_config(
-                {"modelos_instalados": ["qwen2.5:3b", "qwen3:14b"]}
-            ),
-            "qwen3:14b",
-        )
-
-    def test_config_local_do_ambiente_de_teste(self):
-        pasta = novo_diretorio_temporario()
-
-        try:
-            caminho = pasta / "config_local.json"
-
-            config.salvar_config_local(
                 {
-                    "modelos_instalados": ["qwen3:4b"],
-                    "modelo_padrao": "qwen3:4b",
-                },
-                caminho,
-            )
-
-            self.assertEqual(
-                config.carregar_config_local(caminho)["modelo_padrao"],
-                "qwen3:4b",
-            )
-        finally:
-            shutil.rmtree(pasta, ignore_errors=True)
+                    "modelos_instalados": [
+                        "qwen3:4b",
+                        "nexusgeo-qwen3-4b-v2-q4",
+                    ]
+                }
+            ),
+            "nexusgeo-qwen3-4b-v2-q4",
+        )
+        self.assertEqual(
+            config.modelo_padrao_do_config(
+                {"modelos_instalados": ["qwen3:4b"]}
+            ),
+            "qwen3:4b",
+        )
+        self.assertEqual(
+            config.PRIORIDADE_MODELOS_PADRAO,
+            ("nexusgeo-qwen3-4b-v2-q4", "qwen3:4b"),
+        )
 
     def test_normalizar_lista_modelos(self):
         self.assertEqual(
@@ -1345,266 +1521,6 @@ class TestConfigPrioridade(unittest.TestCase):
         )
         self.assertEqual(config.normalizar_lista_modelos("qwen3:4b"), ["qwen3:4b"])
         self.assertEqual(config.normalizar_lista_modelos(None), [])
-
-
-# ---------------------------------------------------------------------------
-# Interface Tkinter: grade de 4 colunas e janela oculta
-# ---------------------------------------------------------------------------
-
-def _tkinter_disponivel():
-    """Diz se a janela Tk pode ser criada neste ambiente."""
-
-    try:
-        import tkinter as tk
-
-        raiz = tk.Tk()
-        raiz.withdraw()
-        raiz.destroy()
-    except Exception:
-        return False
-
-    return True
-
-
-def _filhos_recursivos(widget):
-    """Percorre a árvore de widgets (Tk não expõe isso pronto)."""
-
-    for filho in widget.winfo_children():
-        yield filho
-
-        yield from _filhos_recursivos(filho)
-
-
-@unittest.skipUnless(
-    _tkinter_disponivel(),
-    "Tkinter/display indisponível para montar a janela oculta",
-)
-class TestGradeTabelaModelos(unittest.TestCase):
-    """Cabeçalho e linhas compartilham minsize, padx e alinhamento."""
-
-    def setUp(self):
-        import tkinter as tk
-        from tkinter import ttk
-
-        self.tk = tk
-        self.raiz = tk.Tk()
-        self.raiz.withdraw()
-
-        estilo = ttk.Style(master=self.raiz)
-        estilo.configure("Cabecalho.TLabel", font=("Segoe UI", 10, "bold"))
-
-        self.interior = ttk.Frame(self.raiz)
-        self.interior.pack()
-
-        self.variaveis = {
-            identificador: tk.BooleanVar(master=self.raiz, value=False)
-            for identificador in setup_llm.identificadores_modelos()
-        }
-
-        self.linhas = setup_llm.montar_tabela_modelos(
-            self.interior,
-            idioma="pt",
-            variaveis=self.variaveis,
-            recomendados=["qwen3:4b"],
-        )
-
-    def tearDown(self):
-        try:
-            self.raiz.destroy()
-        except Exception:
-            pass
-
-    def test_minsize_e_peso_das_quatro_colunas(self):
-        esperado = (135, 250, 105, 390)
-
-        for indice, largura in enumerate(esperado):
-            with self.subTest(coluna=indice):
-                self.assertEqual(
-                    int(
-                        self.interior.grid_columnconfigure(
-                            indice, "minsize"
-                        )
-                    ),
-                    largura,
-                )
-
-        self.assertEqual(
-            int(self.interior.grid_columnconfigure(3, "weight")),
-            1,
-        )
-        self.assertEqual(
-            int(self.interior.grid_columnconfigure(2, "weight")),
-            0,
-        )
-
-    def test_cabecalho_e_linhas_usam_o_mesmo_padx(self):
-        cabecalhos = [
-            widget
-            for widget in self.interior.winfo_children()
-            if int(widget.grid_info().get("row", -1)) == 0
-        ]
-
-        self.assertEqual(len(cabecalhos), 4)
-        self.assertEqual(
-            [int(widget.grid_info()["column"]) for widget in cabecalhos],
-            [0, 1, 2, 3],
-        )
-
-        for widget in cabecalhos:
-            self.assertEqual(int(widget.grid_info()["padx"]), 8)
-
-        for linha in self.linhas:
-            check, perfil, ram, comportamento = linha
-            caixa = check.master
-
-            self.assertEqual(int(caixa.grid_info()["column"]), 0)
-            self.assertEqual(int(caixa.grid_info()["padx"]), 8)
-
-            for widget, coluna in (
-                (perfil, 1),
-                (ram, 2),
-                (comportamento, 3),
-            ):
-                with self.subTest(coluna=coluna):
-                    self.assertEqual(
-                        int(widget.grid_info()["column"]), coluna
-                    )
-                    self.assertEqual(
-                        int(widget.grid_info()["padx"]), 8
-                    )
-                    self.assertEqual(
-                        widget.grid_info()["sticky"], "nw"
-                    )
-
-    def test_ram_alinhada_sob_o_titulo_e_sem_largura_fixa(self):
-        self.assertEqual(
-            [ram.cget("text") for _, _, ram, _ in self.linhas],
-            ["~2,6 GB", "~9,0 GB", "~1,9 GB"],
-        )
-
-        for _, _, ram, _ in self.linhas:
-            self.assertNotEqual(int(ram.cget("width") or 0), 12)
-            self.assertEqual(str(ram.cget("anchor")), "w")
-
-    def test_perfil_e_comportamento_com_wraplength(self):
-        for _, perfil, _, comportamento in self.linhas:
-            self.assertEqual(int(perfil.cget("wraplength")), 235)
-            self.assertEqual(str(perfil.cget("justify")), "left")
-            self.assertEqual(str(perfil.cget("anchor")), "w")
-
-            self.assertEqual(
-                int(comportamento.cget("wraplength")), 375
-            )
-            self.assertEqual(
-                str(comportamento.cget("justify")), "left"
-            )
-            self.assertEqual(
-                str(comportamento.cget("anchor")), "w"
-            )
-
-    def test_tag_recomendado_apenas_no_modelo_previsto(self):
-        self.assertEqual(
-            setup_llm.texto_tag_recomendado("pt"),
-            "[Recomendado]",
-        )
-        self.assertEqual(
-            setup_llm.texto_tag_recomendado("en"),
-            "[Recommended]",
-        )
-
-        encontrados = {}
-
-        for (check, *_), identificador in zip(
-            self.linhas, setup_llm.identificadores_modelos()
-        ):
-            textos = [
-                str(filho.cget("text"))
-                for filho in check.master.winfo_children()
-                if hasattr(filho, "cget")
-            ]
-            encontrados[identificador] = "[Recomendado]" in textos
-
-        self.assertTrue(encontrados["qwen3:4b"])
-        self.assertFalse(encontrados["qwen3:14b"])
-        self.assertFalse(encontrados["qwen2.5:3b"])
-
-    def test_remontagem_troca_o_idioma_da_tag(self):
-        self.linhas = setup_llm.montar_tabela_modelos(
-            self.interior,
-            idioma="en",
-            variaveis=self.variaveis,
-            recomendados=["qwen2.5:3b"],
-        )
-
-        textos = [
-            str(filho.cget("text"))
-            for filho in self.linhas[2][0].master.winfo_children()
-            if hasattr(filho, "cget")
-        ]
-
-        self.assertIn("[Recommended]", textos)
-        self.assertNotIn("[Recomendado]", textos)
-
-
-@unittest.skipUnless(
-    _tkinter_disponivel(),
-    "Tkinter/display indisponível para o smoke test da janela",
-)
-class TestJanelaOcultaSetupLlm(unittest.TestCase):
-    """``abrir_interface(oculta=True)`` monta a janela sem exibi-la."""
-
-    def test_abre_e_fecha_com_tabela_na_grade(self):
-        import tkinter as tk
-        from tkinter import ttk
-
-        capturado = {}
-
-        def mainloop_imediato(raiz_tk):
-            try:
-                raiz_tk.update_idletasks()
-
-                canvas = next(
-                    widget
-                    for widget in _filhos_recursivos(raiz_tk)
-                    if isinstance(widget, tk.Canvas)
-                )
-                capturado["altura_canvas"] = int(canvas.cget("height"))
-
-                janelas = canvas.find_all()
-                interior = raiz_tk.nametowidget(
-                    canvas.itemcget(janelas[0], "window")
-                )
-                capturado["minsizes"] = [
-                    int(interior.grid_columnconfigure(i, "minsize"))
-                    for i in range(4)
-                ]
-                capturado["peso_coluna_3"] = int(
-                    interior.grid_columnconfigure(3, "weight")
-                )
-                capturado["rotulos"] = [
-                    str(widget.cget("text"))
-                    for widget in _filhos_recursivos(interior)
-                    if isinstance(widget, ttk.Label)
-                ]
-            finally:
-                raiz_tk.destroy()
-
-        with mock.patch.object(
-            setup_llm, "memoria_total_gb", return_value=16.0
-        ), mock.patch.object(
-            setup_llm, "modelos_ja_instalados", return_value=[]
-        ), mock.patch.object(
-            tk.Tk, "mainloop", mainloop_imediato
-        ):
-            setup_llm.abrir_interface(oculta=True)
-
-        self.assertEqual(capturado["altura_canvas"], 260)
-        self.assertEqual(
-            capturado["minsizes"], [135, 250, 105, 390]
-        )
-        self.assertEqual(capturado["peso_coluna_3"], 1)
-        self.assertIn("[Recomendado]", capturado["rotulos"])
-        self.assertIn("qwen3:4b", capturado["rotulos"])
 
 
 if __name__ == "__main__":

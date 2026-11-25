@@ -7,8 +7,8 @@ Streamlit. A sintaxe do PowerShell é conferida pelo parser da própria
 linguagem quando ``powershell``/``pwsh`` está disponível.
 """
 
-import io
 import inspect
+import io
 import json
 import os
 import re
@@ -16,14 +16,17 @@ import shutil
 import socket
 import subprocess
 import sys
-import tomllib
+import types
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
 from unittest import mock
 
+import tomllib
+
 import launcher_desktop
 import setup_llm
+from tests import _db_intocado
 
 RAIZ = Path(__file__).resolve().parent.parent
 PACKAGING = RAIZ / "packaging"
@@ -32,9 +35,60 @@ PACKAGING = RAIZ / "packaging"
 PORTA_PREFERIDA = 8501
 PORTA_MAXIMA = 8510
 
+# Estado do diretório de dados durante a suíte (ver setUpModule).
+_DIRETORIO_DADOS_ORIGINAL = None
+_PASTA_DADOS_TESTE = None
+
+
+def setUpModule():
+    """Aponta o launcher para uma pasta descartável durante os testes.
+
+    O log diagnóstico (<DATA_DIR>/launcher.log) e o registro de instância
+    nunca podem tocar o perfil real do usuário quando a suíte executa
+    abrir_navegador_url, abrir_navegador_quando_pronto ou main.
+    """
+
+    global _DIRETORIO_DADOS_ORIGINAL, _PASTA_DADOS_TESTE
+
+    _DIRETORIO_DADOS_ORIGINAL = launcher_desktop.DIRETORIO_DADOS
+    _PASTA_DADOS_TESTE = RAIZ / "build" / "_tmp_dados_launcher_testes"
+    shutil.rmtree(_PASTA_DADOS_TESTE, ignore_errors=True)
+    _PASTA_DADOS_TESTE.mkdir(parents=True, exist_ok=True)
+    launcher_desktop.DIRETORIO_DADOS = _PASTA_DADOS_TESTE
+
+
+def tearDownModule():
+    """Restaura o diretório real e remove a pasta temporária."""
+
+    if _DIRETORIO_DADOS_ORIGINAL is not None:
+        launcher_desktop.DIRETORIO_DADOS = _DIRETORIO_DADOS_ORIGINAL
+
+    if _PASTA_DADOS_TESTE is not None:
+        shutil.rmtree(_PASTA_DADOS_TESTE, ignore_errors=True)
+
 
 def ler(caminho):
     return Path(caminho).read_text(encoding="utf-8")
+
+
+def carregar_modulo_packaging(nome):
+    """Importa um helper de packaging/ pelo caminho, sem depender do pacote.
+
+    O diretório packaging/ não tem __init__.py e o nome "packaging" colide
+    com a distribuição do PyPI; por isso a carga é feita por arquivo.
+    """
+
+    import importlib.util
+
+    caminho = PACKAGING / f"{nome}.py"
+    spec = importlib.util.spec_from_file_location(
+        f"nexusgeo_packaging_{nome}",
+        caminho,
+    )
+    modulo = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(modulo)
+
+    return modulo
 
 
 def validar_iss(conteudo):
@@ -74,7 +128,7 @@ def validar_iss(conteudo):
     for numero, linha in enumerate(conteudo.splitlines(), start=1):
         limpa = linha.strip()
 
-        if not limpa or limpa.startswith(";") or limpa.startswith("#"):
+        if not limpa or limpa.startswith((";", "#")):
             continue
 
         if limpa.startswith("[") and limpa.endswith("]"):
@@ -352,13 +406,13 @@ class TestInstallerIss(unittest.TestCase):
 
     def test_nome_do_instalador(self):
         self.assertIn(
-            "OutputBaseFilename=NexusGeoIA_v0.9.0_Setup",
+            "OutputBaseFilename=NexusGeoIA_v1.0.0_Setup",
             self.iss,
         )
         self.assertIn("AppName=NexusGeo IA", self.iss)
-        self.assertIn("AppVersion=0.9.0", self.iss)
+        self.assertIn("AppVersion=1.0.0", self.iss)
         self.assertIn('#define MyAppName "NexusGeo IA"', self.iss)
-        self.assertIn('#define MyAppVersion "0.9.0"', self.iss)
+        self.assertIn('#define MyAppVersion "1.0.0"', self.iss)
 
     def test_idioma_portugues_brasil(self):
         self.assertIn("BrazilianPortuguese.isl", self.iss)
@@ -370,7 +424,7 @@ class TestInstallerIss(unittest.TestCase):
         self.assertIn("Name: \"desktopicon\"", self.iss)
 
     def test_atalho_gerenciar_modelos(self):
-        self.assertIn("Gerenciar Modelos LLM", self.iss)
+        self.assertIn("Gerenciar Modelo Local", self.iss)
         self.assertGreaterEqual(self.iss.count("--setup-modelo"), 2)
 
     def test_assistente_roda_ao_final_da_instalacao(self):
@@ -760,6 +814,79 @@ class TestPortaDinamicaLauncher(unittest.TestCase):
         gravar.assert_called_once_with(8504)
         remover.assert_called_once_with()
 
+    def test_monitor_de_sessao_e_agendado_antes_do_cli(self):
+        """O monitor sobe imediatamente antes de ``cli.main()``."""
+
+        ordem = []
+        thread = mock.Mock()
+        thread.name = "nexusgeo-monitor-sessao"
+        thread.daemon = True
+        thread.is_alive.return_value = True
+
+        def agendar(porta):
+            ordem.append(("agendar", porta))
+
+            return thread
+
+        def main_falso():
+            ordem.append("main")
+            raise SystemExit(0)
+
+        argumentos_originais = list(sys.argv)
+        self.addCleanup(
+            lambda: sys.argv.__setitem__(slice(None), argumentos_originais)
+        )
+
+        with mock.patch.dict(
+            os.environ, {launcher_desktop.ENV_MONITOR_SESSAO: "1"}
+        ), mock.patch.object(
+            launcher_desktop,
+            "caminho_app",
+            return_value=RAIZ / "app.py",
+        ), mock.patch.object(
+            launcher_desktop, "preparar_ambiente"
+        ), mock.patch.object(
+            launcher_desktop, "_gravar_registro_instancia"
+        ), mock.patch.object(
+            launcher_desktop, "_remover_registro_instancia"
+        ), mock.patch.object(
+            launcher_desktop,
+            "agendar_monitor_sessao",
+            side_effect=agendar,
+        ) as agendou, mock.patch.object(
+            launcher_desktop, "registrar_log_launcher"
+        ) as registrar, mock.patch(
+            "streamlit.web.cli.main",
+            side_effect=main_falso,
+        ):
+            codigo = launcher_desktop.executar_servidor_streamlit(8504)
+
+        self.assertEqual(codigo, 0)
+        self.assertEqual(ordem, [("agendar", 8504), "main"])
+        agendou.assert_called_once_with(8504)
+        registrar.assert_any_call(
+            "monitor de sessões iniciado "
+            "(janela=25.0s, inatividade=10.0s)"
+        )
+
+    def test_agendar_monitor_sessao_usa_thread_daemon(self):
+        thread = mock.Mock()
+
+        with mock.patch.object(
+            launcher_desktop.threading,
+            "Thread",
+            return_value=thread,
+        ) as criadora:
+            retorno = launcher_desktop.agendar_monitor_sessao(8504)
+
+        self.assertIs(retorno, thread)
+        thread.start.assert_called_once_with()
+        _, opcoes = criadora.call_args
+        self.assertTrue(opcoes["daemon"])
+        self.assertIs(opcoes["target"], launcher_desktop.monitorar_sessoes_ativas)
+        self.assertEqual(opcoes["name"], "nexusgeo-monitor-sessao")
+        self.assertEqual(opcoes["kwargs"], {"porta": 8504})
+
     def test_argumentos_do_streamlit_usam_a_porta_escolhida(self):
         argumentos = launcher_desktop.argumentos_streamlit(8502)
 
@@ -1000,7 +1127,7 @@ class TestAutotesteExecutavel(unittest.TestCase):
             shutil.rmtree(pasta, ignore_errors=True)
 
     def test_autoteste_nao_abre_servidor_nem_setup(self):
-        # O autoteste precisa sair antes do assistente de modelos e do
+        # O autoteste precisa sair antes do configurador do modelo local e do
         # Streamlit: sem isso o smoke test do build travaria esperando
         # interação de janela.
         with mock.patch.object(
@@ -1035,26 +1162,27 @@ class TestAutotesteExecutavel(unittest.TestCase):
 
         self.assertEqual(codigo, 1)
 
-    def test_build_portatil_nao_executa_o_exe_por_padrao(self):
+    def test_build_portatil_executa_o_self_test_obrigatorio(self):
         codigo = ler(PACKAGING / "build_portatil.ps1")
 
-        # O aplicativo e desktop: sobe o Streamlit e nao termina sozinho.
-        # Executar o binario no build e opt-in (-SmokeExe); o padrao monta
-        # o pacote sem abrir o .exe.
-        self.assertIn("[switch]$SmokeExe", codigo)
-        self.assertIn("if (-not $SmokeExe)", codigo)
-        self.assertIn("Smoke test do executavel: ignorado (use -SmokeExe)", codigo)
+        # O build so conclui quando o .exe compilado passa no --self-test.
+        # O smoke test deixou de ser opt-in: nao existe mais -SmokeExe.
+        self.assertIn("smoke_exe.py", codigo)
+        self.assertIn("--self-test", codigo)
+        self.assertIn("Self-test obrigatorio do executavel", codigo)
+        self.assertNotIn("if (-not $SmokeExe)", codigo)
+        self.assertNotIn("[switch]$SmokeExe", codigo)
 
-        smoke = codigo.index("if (-not $SmokeExe)")
+        smoke = codigo.index("Self-test obrigatorio do executavel")
         zip_final = codigo.index("Gerando $ZipFinal")
 
         self.assertLess(
             smoke,
             zip_final,
-            "o bloco do autoteste deve ficar antes da geracao do .zip",
+            "o self-test deve rodar antes da geracao do .zip",
         )
-        self.assertIn("--autoteste", codigo)
-        self.assertIn("ASSISTENTE_SMOKE_REPORT", codigo)
+        self.assertIn("ASSISTENTE_SELFTEST_REPORT", codigo)
+        self.assertIn("self_test.json", codigo)
 
     def test_build_portatil_inclui_o_protocolo_de_pesquisa(self):
         codigo = ler(PACKAGING / "build_portatil.ps1")
@@ -1067,6 +1195,445 @@ class TestAutotesteExecutavel(unittest.TestCase):
 
         self.assertIn("NexusGeo IA", conteudo)
         self.assertGreater(len(conteudo), 2000)
+
+
+class TestCoberturaModulosPyInstaller(unittest.TestCase):
+    """A v1.0.0 inteira precisa entrar no bundle do PyInstaller.
+
+    Varre os .py reais de core, services, ui, adapters e utils e garante
+    que o manifesto gerado pelo build cobre cada um. Também confere que o
+    .spec coleta submodules/dados dos cinco pacotes — o equivalente a
+    --collect-submodules e --collect-data.
+    """
+
+    def setUp(self):
+        self.coleta = carregar_modulo_packaging("coleta_interna")
+        self.build = ler(PACKAGING / "build_portatil.ps1")
+        self.spec = ler(PACKAGING / "assistente.spec")
+
+    def test_manifesto_cobre_todos_os_py_reais(self):
+        manifesto = self.coleta.montar_manifesto(RAIZ)
+
+        self.assertEqual(
+            manifesto["pacotes"],
+            ["core", "services", "ui", "adapters", "utils"],
+        )
+        self.assertEqual(
+            manifesto["modulos_raiz"],
+            ["config", "setup_llm"],
+        )
+
+        esperados = set()
+
+        for pacote in ("core", "services", "ui", "adapters", "utils"):
+            for arquivo in (RAIZ / pacote).rglob("*.py"):
+                if "__pycache__" in arquivo.parts:
+                    continue
+
+                partes = list(
+                    arquivo.relative_to(RAIZ).with_suffix("").parts
+                )
+
+                if partes and partes[-1] == "__init__":
+                    partes.pop()
+
+                if partes:
+                    esperados.add(".".join(partes))
+
+        esperados.update({"config", "setup_llm"})
+
+        self.assertEqual(set(manifesto["modulos"]), esperados)
+        self.assertEqual(
+            self.coleta.validar_manifesto(manifesto, RAIZ),
+            [],
+        )
+
+        for modulo in (
+            "core.governance",
+            "core.context_builder",
+            "services.db_service",
+            "services.history_db",
+            "services.sondagem",
+            "services.exportacao_segura",
+            "ui.workstation_layout",
+            "adapters.spatial_cim",
+            "utils.i18n",
+            "config",
+            "setup_llm",
+        ):
+            self.assertIn(modulo, manifesto["modulos"])
+
+    def test_build_descreve_a_coleta_dinamica(self):
+        for trecho in (
+            "coleta_interna.py",
+            '"modulos_internos.json"',
+            "NEXUSGEO_MODULOS_MANIFEST",
+            "--collect-submodules",
+            "--collect-data",
+            '@("core", "services", "ui", "adapters", "utils")',
+        ):
+            self.assertIn(trecho, self.build)
+
+        self.assertIn(
+            "$env:NEXUSGEO_MODULOS_MANIFEST = $ManifestoModulos",
+            self.build,
+        )
+        self.assertIn(
+            "& $PythonExe $ColetaInterna --raiz $Raiz --saida $ManifestoModulos",
+            self.build,
+        )
+
+    def test_spec_coleta_submodulos_e_dados_dos_cinco_pacotes(self):
+        for trecho in (
+            'PACOTES_INTERNOS = ("core", "services", "ui", "adapters", "utils")',
+            "collect_submodules(pacote)",
+            "collect_data_files(pacote)",
+            "NEXUSGEO_MODULOS_MANIFEST",
+            "_faltantes_do_manifesto",
+            '_manifesto_modulos = RAIZ / "build" / "modulos_internos.json"',
+            '(str(_manifesto_modulos), ".")',
+            '(str(RAIZ / "ui"), "ui")',
+            'glob("Modelfile.*")',
+        ):
+            self.assertIn(trecho, self.spec)
+
+    def test_build_confere_ui_e_finetuning_no_internal(self):
+        for trecho in (
+            r'"ui\workstation_layout.py"',
+            r'"finetuning\Modelfile.nexusgeo-qwen3-4b-v2"',
+            '"modulos_internos.json"',
+        ):
+            self.assertIn(trecho, self.build)
+
+    def test_build_instala_self_test_antes_do_zip(self):
+        self.assertIn("smoke_exe.py", self.build)
+        self.assertIn("--self-test", self.build)
+        self.assertIn("Self-test obrigatorio do executavel", self.build)
+
+        self_test = self.build.index("Self-test obrigatorio do executavel")
+        zip_final = self.build.index("Gerando $ZipFinal")
+
+        self.assertLess(self_test, zip_final)
+
+
+class TestSelfTestExecutavel(unittest.TestCase):
+    """O --self-test valida a cadeia inteira sem abrir navegador."""
+
+    def test_argumentos_e_relatorio(self):
+        self.assertEqual(launcher_desktop.ARG_SELFTEST, "--self-test")
+        self.assertEqual(
+            launcher_desktop.ENV_RELATORIO_SELFTEST,
+            "ASSISTENTE_SELFTEST_REPORT",
+        )
+
+        fonte = ler(RAIZ / "launcher_desktop.py")
+
+        self.assertIn("--self-test", fonte)
+        self.assertIn("autodiagnostico", fonte)
+        self.assertIn("verificar_modulos_internos", fonte)
+        self.assertIn("verificar_banco_sqlite_wal", fonte)
+        self.assertIn("verificar_modelo_oficial", fonte)
+        self.assertIn("verificar_app_py_dry_run", fonte)
+
+    def test_modulos_internos_do_projeto_inclui_todos_os_pacotes(self):
+        nomes = launcher_desktop.modulos_internos_do_projeto(RAIZ)
+
+        for prefixo in ("core.", "services.", "ui.", "adapters.", "utils."):
+            self.assertTrue(
+                any(nome.startswith(prefixo) for nome in nomes),
+                f"nenhum módulo {prefixo}* descoberto",
+            )
+
+        self.assertIn("config", nomes)
+        self.assertIn("setup_llm", nomes)
+        self.assertIn("core.governance", nomes)
+        self.assertIn("services.history_db", nomes)
+
+    def test_autodiagnostico_aprova_o_projeto(self):
+        pasta = RAIZ / "build" / "_tmp_selftest"
+        pasta.mkdir(parents=True, exist_ok=True)
+
+        relatorio = pasta / "self_test.json"
+
+        if relatorio.is_file():
+            relatorio.unlink()
+
+        try:
+            resultado = launcher_desktop.autodiagnostico(
+                relatorio=str(relatorio)
+            )
+
+            self.assertTrue(resultado["ok"], resultado["falhas"])
+            self.assertTrue(relatorio.is_file())
+
+            dados = json.loads(relatorio.read_text(encoding="utf-8"))
+
+            self.assertTrue(dados["ok"])
+            self.assertFalse(dados["congelado"])
+
+            nomes = [
+                verificacao["nome"]
+                for verificacao in dados["verificacoes"]
+            ]
+
+            for nome in (
+                "recursos_runtime",
+                "modulos_internos",
+                "banco_sqlite_wal",
+                "modelo_oficial",
+                "app_py_dry_run",
+                "certificados",
+            ):
+                self.assertIn(nome, nomes)
+        finally:
+            shutil.rmtree(pasta, ignore_errors=True)
+
+    def test_autodiagnostico_nao_altera_o_banco_real(self):
+        antes = _db_intocado.capturar()
+        resultado = launcher_desktop.autodiagnostico()
+        depois = _db_intocado.capturar()
+
+        self.assertTrue(resultado["ok"], resultado["falhas"])
+        self.assertTrue(
+            _db_intocado.comparar(antes, depois)["DB_INTOCADO"]
+        )
+
+    def test_main_self_test_nao_abre_servidor_nem_setup(self):
+        with mock.patch.object(
+            launcher_desktop,
+            "autodiagnostico",
+            return_value={"ok": True, "verificacoes": [], "falhas": []},
+        ) as teste, mock.patch.object(
+            launcher_desktop, "configuracao_pendente"
+        ) as pendente, mock.patch.object(
+            launcher_desktop, "iniciar_streamlit"
+        ) as streamlit:
+            codigo = launcher_desktop.main(["--self-test"])
+
+        self.assertEqual(codigo, 0)
+        teste.assert_called_once()
+        pendente.assert_not_called()
+        streamlit.assert_not_called()
+
+    def test_autodiagnostico_reprovado_devolve_codigo_1(self):
+        with mock.patch.object(
+            launcher_desktop,
+            "autodiagnostico",
+            return_value={
+                "ok": False,
+                "verificacoes": [
+                    {"nome": "modulos_internos", "ok": False, "erro": "x"}
+                ],
+                "falhas": ["modulos_internos: x"],
+            },
+        ):
+            codigo = launcher_desktop.main(["--self-test"])
+
+        self.assertEqual(codigo, 1)
+
+    def test_smoke_exe_valida_relatorio(self):
+        modulo = carregar_modulo_packaging("smoke_exe")
+
+        dados = {
+            "ok": True,
+            "concluido": True,
+            "falhas": [],
+            "verificacoes": [
+                {"nome": nome, "ok": True}
+                for nome in (
+                    modulo.VERIFICACOES_OBRIGATORIAS
+                    + modulo.VERIFICACOES_RECOMENDADAS
+                )
+            ],
+        }
+
+        self.assertEqual(modulo.validar_relatorio(dados), [])
+
+        dados["ok"] = False
+        dados["falhas"] = ["core.governance ausente"]
+
+        problemas = modulo.validar_relatorio(dados)
+
+        self.assertTrue(any("ok" in item for item in problemas))
+        self.assertTrue(any("core.governance" in item for item in problemas))
+
+    def test_smoke_exe_compila_e_aceita_argumentos(self):
+        caminho = PACKAGING / "smoke_exe.py"
+
+        self.assertTrue(caminho.is_file())
+        compile(ler(caminho), str(caminho), "exec")
+
+        fonte = ler(caminho)
+
+        for trecho in ("--exe", "--relatorio", "--timeout", "--self-test"):
+            self.assertIn(trecho, fonte)
+
+
+class TestDBIntocado(unittest.TestCase):
+    """Guarda real de ``data/nexusgeoia.db`` durante a suíte (D2 -> D3)."""
+
+    def test_ambiente_do_autoteste_e_temporario_e_restaurado(self):
+        anterior = os.environ.get("NEXUSGEO_DB_PATH")
+
+        with launcher_desktop.ambiente_autoteste_isolado() as pasta:
+            banco = Path(os.environ["NEXUSGEO_DB_PATH"])
+            self.assertNotEqual(banco.resolve(), _db_intocado.BANCO_REAL)
+            self.assertTrue(str(banco).startswith(str(pasta)))
+            self.assertEqual(os.environ["ASSISTENTE_DATA_DIR"], str(pasta))
+            self.assertEqual(os.environ["NEXUSGEO_TEST_MODE"], "1")
+
+        self.assertEqual(os.environ.get("NEXUSGEO_DB_PATH"), anterior)
+
+    def test_ambiente_do_modulo_app_restaura_sys_modules(self):
+        """O isolamento de ``app`` devolve o estado exato de sys.modules."""
+
+        sentinela = types.ModuleType("app")
+        sentinela_sub = types.ModuleType("app.sub")
+        anteriores = {
+            nome: sys.modules[nome]
+            for nome in list(sys.modules)
+            if nome == "app" or nome.startswith("app.")
+        }
+
+        try:
+            # Caso do autoteste em processo limpo (--onedir): nada em
+            # sys.modules antes e nada depois.
+            with launcher_desktop.ambiente_modulo_app_isolado():
+                self.assertNotIn("app", sys.modules)
+                sys.modules["app"] = types.ModuleType("app")
+                sys.modules["app.sub"] = types.ModuleType("app.sub")
+
+            self.assertNotIn("app", sys.modules)
+            self.assertNotIn("app.sub", sys.modules)
+
+            # Caso em que a suíte já importou ``app``: a identidade
+            # original é restaurada, sem sobrar o módulo temporário.
+            sys.modules["app"] = sentinela
+            sys.modules["app.sub"] = sentinela_sub
+
+            with launcher_desktop.ambiente_modulo_app_isolado():
+                self.assertNotIn("app", sys.modules)
+                self.assertNotIn("app.sub", sys.modules)
+
+            self.assertIs(sys.modules.get("app"), sentinela)
+            self.assertIs(sys.modules.get("app.sub"), sentinela_sub)
+        finally:
+            for nome in [
+                nome
+                for nome in list(sys.modules)
+                if nome == "app" or nome.startswith("app.")
+            ]:
+                sys.modules.pop(nome, None)
+
+            sys.modules.update(anteriores)
+
+    def test_comparacao_detecta_alteracao_de_hash_e_tamanho(self):
+        pasta = RAIZ / "build" / "_tmp_db_intocado"
+        pasta.mkdir(parents=True, exist_ok=True)
+        arquivo = pasta / "banco.db"
+
+        try:
+            arquivo.write_bytes(b"conteudo-inicial")
+            antes = _db_intocado.capturar(arquivo)
+            depois = _db_intocado.capturar(arquivo)
+            self.assertTrue(
+                _db_intocado.comparar(antes, depois)["DB_INTOCADO"]
+            )
+
+            arquivo.write_bytes(b"conteudo-alterado")
+            alterado = _db_intocado.capturar(arquivo)
+            verificacao = _db_intocado.comparar(antes, alterado)
+            self.assertFalse(verificacao["intocado"])
+            self.assertFalse(verificacao["mesmo_sha256"])
+        finally:
+            shutil.rmtree(pasta, ignore_errors=True)
+
+    def test_guarda_reprova_sem_encerrar_o_processo(self):
+        """A falha vira relatório/veredito; o processo termina normalmente."""
+
+        pasta = RAIZ / "build" / "_tmp_db_guard_teste"
+        arquivo = pasta / "relatorio.json"
+        inicial = _db_intocado._IMPRESSAO_INICIAL
+        resultado_anterior = _db_intocado._RESULTADO_FINAL
+        pasta.mkdir(parents=True, exist_ok=True)
+
+        try:
+            _db_intocado._IMPRESSAO_INICIAL = {
+                "caminho": "banco",
+                "existe": True,
+                "tamanho": 10,
+                "sha256": "antes",
+            }
+
+            with mock.patch.object(
+                _db_intocado,
+                "capturar",
+                return_value={
+                    "caminho": "banco",
+                    "existe": True,
+                    "tamanho": 11,
+                    "sha256": "depois",
+                },
+            ), mock.patch.object(
+                _db_intocado, "PASTA_RELATORIOS", pasta
+            ), mock.patch.object(
+                _db_intocado, "ARQUIVO_RELATORIO", arquivo
+            ), redirect_stdout(io.StringIO()) as saida:
+                resultado = _db_intocado.finalizar_guarda(origem="teste")
+
+            self.assertFalse(resultado["intocado"])
+            self.assertFalse(resultado["DB_INTOCADO"])
+            self.assertTrue(_db_intocado.falha_de_integridade())
+            self.assertIn("DB_INTOCADO=False", saida.getvalue())
+            self.assertTrue(arquivo.is_file())
+
+            relatorio = json.loads(arquivo.read_text(encoding="utf-8"))
+            self.assertFalse(relatorio["intocado"])
+            self.assertEqual(relatorio["origem"], "teste")
+        finally:
+            _db_intocado._IMPRESSAO_INICIAL = inicial
+            _db_intocado._RESULTADO_FINAL = resultado_anterior
+            shutil.rmtree(pasta, ignore_errors=True)
+
+    def test_guarda_nao_usa_os_exit(self):
+        """A finalização da guarda não pode matar o processo à força."""
+
+        codigo = ler(RAIZ / "tests" / "_db_intocado.py")
+
+        self.assertNotIn("os._exit", codigo)
+        self.assertIn("atexit.register", codigo)
+        self.assertIn("falha_de_integridade", codigo)
+
+    def test_autoteste_nao_altera_o_banco_real(self):
+        modulos_app = {
+            nome: sys.modules[nome]
+            for nome in list(sys.modules)
+            if nome == "app" or nome.startswith("app.")
+        }
+        antes = _db_intocado.capturar()
+        resultado = launcher_desktop.autoteste()
+        depois = _db_intocado.capturar()
+
+        self.assertTrue(resultado["ok"], resultado["falhas"])
+        verificacao = _db_intocado.comparar(antes, depois)
+        self.assertTrue(
+            verificacao["DB_INTOCADO"],
+            verificacao,
+        )
+
+        # O import de ``app`` do autoteste não pode deixar módulo
+        # residual: o estado de sys.modules precisa ser o mesmo.
+        self.assertEqual(
+            set(modulos_app),
+            {
+                nome
+                for nome in sys.modules
+                if nome == "app" or nome.startswith("app.")
+            },
+        )
+
+        for nome, modulo in modulos_app.items():
+            self.assertIs(sys.modules[nome], modulo)
 
 
 class TestSmokeTestArtefatos(unittest.TestCase):
@@ -1096,15 +1663,15 @@ class TestSmokeTestArtefatos(unittest.TestCase):
 
         proibidas = modulo._entradas_proibidas(
             [
-                "NexusGeoIA_v0.9.0_Portatil/NexusGeoIA.exe",
-                "NexusGeoIA_v0.9.0_Portatil/iniciar.bat",
-                "NexusGeoIA_v0.9.0_Portatil/.dsh/estado.json",
-                "NexusGeoIA_v0.9.0_Portatil/tests/test_x.py",
-                "NexusGeoIA_v0.9.0_Portatil/__pycache__/app.cpython-314.pyc",
-                "NexusGeoIA_v0.9.0_Portatil/.env",
-                "NexusGeoIA_v0.9.0_Portatil/secrets.toml",
-                "NexusGeoIA_v0.9.0_Portatil/estrutura.txt",
-                "NexusGeoIA_v0.9.0_Portatil/tmpabc/lixo.txt",
+                "NexusGeoIA_v1.0.0_Portatil/NexusGeoIA.exe",
+                "NexusGeoIA_v1.0.0_Portatil/iniciar.bat",
+                "NexusGeoIA_v1.0.0_Portatil/.dsh/estado.json",
+                "NexusGeoIA_v1.0.0_Portatil/tests/test_x.py",
+                "NexusGeoIA_v1.0.0_Portatil/__pycache__/app.cpython-314.pyc",
+                "NexusGeoIA_v1.0.0_Portatil/.env",
+                "NexusGeoIA_v1.0.0_Portatil/secrets.toml",
+                "NexusGeoIA_v1.0.0_Portatil/estrutura.txt",
+                "NexusGeoIA_v1.0.0_Portatil/tmpabc/lixo.txt",
             ]
         )
 
@@ -1119,8 +1686,8 @@ class TestSmokeTestArtefatos(unittest.TestCase):
         pasta = RAIZ / "build" / "_tmp_smoke_zip"
         pasta.mkdir(parents=True, exist_ok=True)
 
-        staging = pasta / "NexusGeoIA_v0.9.0_Portatil"
-        zip_final = pasta / "NexusGeoIA_v0.9.0_Portatil.zip"
+        staging = pasta / "NexusGeoIA_v1.0.0_Portatil"
+        zip_final = pasta / "NexusGeoIA_v1.0.0_Portatil.zip"
 
         try:
             import zipfile
@@ -1133,7 +1700,7 @@ class TestSmokeTestArtefatos(unittest.TestCase):
                     "_internal/app.py",
                 ):
                     arquivo.writestr(
-                        f"NexusGeoIA_v0.9.0_Portatil/{nome}", b"x"
+                        f"NexusGeoIA_v1.0.0_Portatil/{nome}", b"x"
                     )
 
             falhas = []
@@ -1154,8 +1721,8 @@ class TestSmokeTestArtefatos(unittest.TestCase):
         pasta = RAIZ / "build" / "_tmp_smoke_zip_sem_internal"
         pasta.mkdir(parents=True, exist_ok=True)
 
-        staging = pasta / "NexusGeoIA_v0.9.0_Portatil"
-        zip_final = pasta / "NexusGeoIA_v0.9.0_Portatil.zip"
+        staging = pasta / "NexusGeoIA_v1.0.0_Portatil"
+        zip_final = pasta / "NexusGeoIA_v1.0.0_Portatil.zip"
 
         try:
             import zipfile
@@ -1163,7 +1730,7 @@ class TestSmokeTestArtefatos(unittest.TestCase):
             with zipfile.ZipFile(zip_final, "w") as arquivo:
                 for nome in ("NexusGeoIA.exe", "iniciar.bat", "LEIA-ME.txt"):
                     arquivo.writestr(
-                        f"NexusGeoIA_v0.9.0_Portatil/{nome}", b"x"
+                        f"NexusGeoIA_v1.0.0_Portatil/{nome}", b"x"
                     )
 
             falhas = []
@@ -1301,18 +1868,18 @@ class TestSmokeTestArtefatos(unittest.TestCase):
         pasta = RAIZ / "build" / "_tmp_smoke_zip_sujo"
         pasta.mkdir(parents=True, exist_ok=True)
 
-        staging = pasta / "NexusGeoIA_v0.9.0_Portatil"
-        zip_final = pasta / "NexusGeoIA_v0.9.0_Portatil.zip"
+        staging = pasta / "NexusGeoIA_v1.0.0_Portatil"
+        zip_final = pasta / "NexusGeoIA_v1.0.0_Portatil.zip"
 
         try:
             import zipfile
 
             with zipfile.ZipFile(zip_final, "w") as arquivo:
                 arquivo.writestr(
-                    "NexusGeoIA_v0.9.0_Portatil/NexusGeoIA.exe", b"x"
+                    "NexusGeoIA_v1.0.0_Portatil/NexusGeoIA.exe", b"x"
                 )
                 arquivo.writestr(
-                    "NexusGeoIA_v0.9.0_Portatil/.git/config", b"x"
+                    "NexusGeoIA_v1.0.0_Portatil/.git/config", b"x"
                 )
 
             falhas = []
@@ -1382,6 +1949,7 @@ class TestScriptsPowerShell(unittest.TestCase):
                 capture_output=True,
                 text=True,
                 timeout=120,
+                check=False,
             )
 
             self.assertEqual(
@@ -1478,7 +2046,7 @@ class TestScriptsPowerShell(unittest.TestCase):
             "secrets.toml",
             "estrutura.txt",
             "tmp*",
-            "NexusGeoIA_v0.9.0_Portatil",
+            "NexusGeoIA_v1.0.0_Portatil",
         ):
             self.assertIn(trecho, codigo)
 
@@ -1607,7 +2175,7 @@ class TestScriptsPowerShell(unittest.TestCase):
             "assistente.spec",
             "installer.iss",
             "Find-Iscc",
-            "NexusGeoIA_v0.9.0_Setup.exe",
+            "NexusGeoIA_v1.0.0_Setup.exe",
             "NexusGeoIA.exe",
             "SemPortatil",
             "ExigirInno",
@@ -1704,9 +2272,88 @@ class TestScriptsPowerShell(unittest.TestCase):
     def test_iniciar_bat_abre_o_navegador_na_porta_escolhida(self):
         codigo = ler(RAIZ / "iniciar.bat")
 
+        # Caminho de desenvolvimento (sem NexusGeoIA.exe): quem abre a
+        # aba e o proprio Streamlit, na porta dinamica escolhida.
         self.assertIn("--server.headless=false", codigo)
         self.assertIn("--server.port=%PORTA%", codigo)
         self.assertIn("http://localhost:%PORTA%", codigo)
+
+    def test_iniciar_bat_abre_o_navegador_do_executavel_portatil(self):
+        codigo = ler(RAIZ / "iniciar.bat")
+
+        # O executavel e compilado com console=False: no processo sem
+        # console o Shell do Windows ignora os.startfile() em silencio e
+        # a aba nunca abre. Quem abre a aba, no pacote portatil, e o
+        # iniciar.bat (console visivel), lendo instancia_ativa.json.
+        self.assertIn(
+            'set "REGISTRO_INSTANCIA=%~dp0instancia_ativa.json"',
+            codigo,
+        )
+        self.assertIn(":aguardar_registro", codigo)
+        self.assertIn("if %TENTATIVAS_REGISTRO% GEQ 30", codigo)
+        self.assertIn("ConvertFrom-Json", codigo)
+        self.assertIn(".porta", codigo)
+        self.assertIn('set "PORTA=8501"', codigo)
+        self.assertIn('start "" "http://localhost:%PORTA%"', codigo)
+
+        # O registro e gravado antes do import do Streamlit: o .bat so
+        # abre a URL quando o socket da porta responde, e nunca antes de
+        # o registro aparecer.
+        self.assertIn(":aguardar_porta", codigo)
+        self.assertIn("ConnectAsync", codigo)
+
+        posicao_registro = codigo.index(
+            'if exist "%REGISTRO_INSTANCIA%" goto :abrir_navegador'
+        )
+        posicao_start = codigo.index('start "" "http://localhost:%PORTA%"')
+
+        self.assertLess(posicao_registro, posicao_start)
+
+    def test_iniciar_bat_remove_registro_obsoleto_antes_de_iniciar(self):
+        codigo = ler(RAIZ / "iniciar.bat")
+
+        # O registro so e apagado quando nenhum NexusGeoIA.exe esta
+        # ativo: com instancia viva o arquivo e a fonte da porta dela.
+        self.assertIn(":existe_executavel_ativo", codigo)
+        self.assertIn("tasklist", codigo)
+        self.assertIn('del /q "%REGISTRO_INSTANCIA%"', codigo)
+
+        posicao_checagem = codigo.index("call :existe_executavel_ativo")
+        posicao_start = codigo.index('start "" /B "%EXE_PATH%" %*')
+
+        self.assertLess(posicao_checagem, posicao_start)
+
+    def test_iniciar_bat_acompanha_o_servidor_ate_encerrar(self):
+        codigo = ler(RAIZ / "iniciar.bat")
+
+        # Depois de abrir a aba, o .bat espera o servidor terminar
+        # (registro removido ou processo morto) e encerra limpo, sem
+        # deixar a janela do console aberta.
+        self.assertIn(":aguardar_servidor", codigo)
+        self.assertIn(
+            'if not exist "%REGISTRO_INSTANCIA%" goto :executavel_encerrado',
+            codigo,
+        )
+        self.assertIn(":executavel_encerrado", codigo)
+
+    def test_iniciar_bat_nao_abre_navegador_nos_modos_diagnosticos(self):
+        codigo = ler(RAIZ / "iniciar.bat")
+
+        # --self-test (usado pelo smoke_exe.py) e os demais modos de
+        # diagnostico nao sobem servidor: rodam de forma sincrona, sem
+        # esperar registro e sem abrir navegador.
+        self.assertIn(
+            'if /I "%~1"=="--self-test" goto :executavel_sincrono',
+            codigo,
+        )
+        self.assertIn(":executavel_sincrono", codigo)
+
+        posicao_self_test = codigo.index('"%~1"=="--self-test"')
+        posicao_start = codigo.index('start "" /B "%EXE_PATH%" %*')
+        posicao_navegador = codigo.index('start "" "http://localhost:%PORTA%"')
+
+        self.assertLess(posicao_self_test, posicao_start)
+        self.assertLess(posicao_self_test, posicao_navegador)
 
     def test_iniciar_bat_escolhe_a_primeira_porta_livre(self):
         codigo = ler(RAIZ / "iniciar.bat")
@@ -1762,6 +2409,296 @@ class TestScriptsPowerShell(unittest.TestCase):
         self.assertLess(posicao_label, posicao_erro)
 
 
+class TestModulosDaReleaseNoPacote(unittest.TestCase):
+    r"""Gate 3: .streamlit, ui\ e finetuning\Modelfile.* viajam na release.
+
+    O porte da v1.0.0 passou a publicar .streamlit\config.toml (tema
+    escuro), os modulos de apresentacao (ui\, inclusive
+    workstation_layout.py) e os templates do modelo proprio
+    (finetuning\Modelfile.*). O pacote --onedir e a fonte unica: o
+    staging do portatil herda a pasta publicada e o instalador embute
+    dist\NexusGeoIA\* recursivamente.
+    """
+
+    def setUp(self):
+        self.portatil = ler(PACKAGING / "build_portatil.ps1")
+        self.installer = ler(PACKAGING / "build_installer.ps1")
+
+    def test_arquivos_da_release_existem_no_repositorio(self):
+        for relativo in (
+            ".streamlit/config.toml",
+            "ui/__init__.py",
+            "ui/workstation_layout.py",
+            "finetuning/Modelfile.nexusgeo-qwen3-4b-v2",
+        ):
+            self.assertTrue((RAIZ / relativo).is_file(), relativo)
+
+        # ui/ e finetuning/Modelfile.* sao copiados por inteiro (o
+        # Modelfile -q4 e opcional, mas existe nesta release).
+        self.assertGreaterEqual(len(list((RAIZ / "ui").glob("*.py"))), 6)
+        self.assertTrue(
+            (RAIZ / "finetuning" / "Modelfile.nexusgeo-qwen3-4b-v2-q4").is_file()
+        )
+
+    def test_build_portatil_copia_os_modulos_para_o_pacote(self):
+        for trecho in (
+            "function Copy-ModulosDeDistribuicao",
+            'Copy-PastaPublicavel (Join-Path $Raiz "ui")',
+            '(Join-Path $Destino "ui")',
+            'Join-Path "finetuning" $modelfile',
+            '"Modelfile.nexusgeo-qwen3-4b-v2"',
+            '"Modelfile.nexusgeo-qwen3-4b-v2-q4"',
+            "Copy-ModulosDeDistribuicao $PastaApp",
+        ):
+            self.assertIn(trecho, self.portatil)
+
+        # A copia precisa acontecer antes do staging herdar a pasta
+        # publicada; senao ui\ e finetuning\ ficariam de fora do .zip.
+        copia = self.portatil.index("Copy-ModulosDeDistribuicao $PastaApp")
+        staging = self.portatil.index("Copy-PastaPublicavel $PastaApp $Staging")
+
+        self.assertLess(
+            copia,
+            staging,
+            "os modulos devem ser copiados antes do staging do portatil",
+        )
+
+    def test_build_portatil_valida_os_modulos_na_montagem(self):
+        trecho = self.portatil[
+            self.portatil.index("$conteudoEsperado = @("):
+            self.portatil.index("foreach ($item in $conteudoEsperado)")
+        ]
+
+        for item in ('"ui",', '"finetuning"', '".streamlit",'):
+            self.assertIn(item, trecho)
+
+        # models\ so entra na montagem quando o GGUF foi embutido.
+        self.assertIn('$conteudoEsperado += "models"', self.portatil)
+
+        for validacao in (
+            'Join-Path "ui" "workstation_layout.py"',
+            'Join-Path "ui" "__init__.py"',
+            'Join-Path ".streamlit" "config.toml"',
+            "$ModelfilesNexusGeo",
+        ):
+            self.assertIn(validacao, self.portatil)
+
+    def test_build_portatil_exige_os_arquivos_antes_de_compilar(self):
+        # Sem .streamlit\config.toml, ui\workstation_layout.py ou o
+        # Modelfile principal o build para antes do PyInstaller.
+        for trecho in (
+            'Assert-Arquivo (Join-Path $Raiz ".streamlit\\config.toml")',
+            'Assert-Arquivo (Join-Path $Raiz "ui\\workstation_layout.py")',
+            'Assert-Arquivo (Join-Path $Raiz "finetuning\\$ModelfilePrincipal")',
+        ):
+            self.assertIn(trecho, self.portatil)
+
+    def test_build_installer_inclui_e_confere_os_modulos(self):
+        for trecho in (
+            "function Copy-ModuloPublicavel",
+            'Copy-ModuloPublicavel (Join-Path $Raiz "ui")',
+            '"Modelfile.nexusgeo-qwen3-4b-v2"',
+            '"Modelfile.nexusgeo-qwen3-4b-v2-q4"',
+            'Join-Path "ui" "workstation_layout.py"',
+            "_internal\\.streamlit\\config.toml",
+            "recursesubdirs",
+            "Conferindo .streamlit, ui e finetuning no pacote onedir",
+        ):
+            self.assertIn(trecho, self.installer)
+
+
+class TestFlagIncludeCustomGGUF(unittest.TestCase):
+    """-IncludeCustomGGUF e opt-in e o pacote padrao continua leve.
+
+    Os testes de comportamento extraem as funcoes de GGUF do proprio
+    build_portatil.ps1 e as executam sobre um arquivo mock leve (~1 KB):
+    nenhum GGUF real de ~2,5 GB e copiado.
+    """
+
+    NOME = "nexusgeo-qwen3-4b-v2-Q4_K_M.gguf"
+    CACHE = r"D:\hf_cache"
+
+    def setUp(self):
+        self.codigo = ler(PACKAGING / "build_portatil.ps1")
+
+    @staticmethod
+    def _powershell():
+        for nome in ("pwsh", "powershell"):
+            caminho = shutil.which(nome)
+
+            if caminho:
+                return caminho
+
+        return None
+
+    @staticmethod
+    def _extrair_funcoes(codigo):
+        partes = []
+
+        for nome in ("Resolve-GgufCustom", "Copy-GgufCustomParaPacote"):
+            inicio = codigo.index(f"function {nome}")
+            fim = codigo.index("\n}\n", inicio) + 3
+            partes.append(codigo[inicio:fim])
+
+        return "\n".join(partes)
+
+    def _executar_copia(self, interpretador, raiz, cache, pacote):
+        script = raiz / "copia_gguf.ps1"
+        script.write_text(
+            self._extrair_funcoes(self.codigo)
+            + "\n$destino = Copy-GgufCustomParaPacote"
+            + f" -RaizProjeto '{raiz}'"
+            + f" -CacheAlternativo '{cache}'"
+            + f" -NomeArquivo '{self.NOME}'"
+            + f" -Pacote '{pacote}'\n"
+            + "Write-Output $destino\n",
+            encoding="utf-8",
+        )
+
+        return subprocess.run(
+            [
+                interpretador,
+                "-NoProfile",
+                "-NonInteractive",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                str(script),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=120,
+            check=False,
+        )
+
+    def test_parametro_switch_documentado(self):
+        parametros = self.codigo[
+            self.codigo.index("param("):
+            self.codigo.index("$ErrorActionPreference")
+        ]
+
+        self.assertIn("[switch]$IncludeCustomGGUF", parametros)
+        self.assertIn(".PARAMETER IncludeCustomGGUF", self.codigo)
+
+    def test_procura_no_projeto_e_no_cache_hf(self):
+        self.assertIn(self.NOME, self.codigo)
+        self.assertIn(self.CACHE, self.codigo)
+        self.assertIn(
+            'Join-Path (Join-Path $RaizProjeto "models") $NomeArquivo',
+            self.codigo,
+        )
+        self.assertIn(
+            "Join-Path $CacheAlternativo $NomeArquivo",
+            self.codigo,
+        )
+
+    def test_sem_a_flag_o_pacote_continua_leve(self):
+        marcador = "if ($IncludeCustomGGUF) {"
+        self.assertIn(marcador, self.codigo)
+
+        bloco = self.codigo[self.codigo.index(marcador):]
+        bloco = bloco[:bloco.index("\nelse {")]
+
+        # A copia so existe dentro do bloco da flag; o caminho padrao
+        # apenas informa que o GGUF nao foi embutido.
+        chamada = "$ggufDestino = Copy-GgufCustomParaPacote"
+
+        self.assertIn(chamada, bloco)
+        self.assertNotIn(
+            chamada,
+            self.codigo[:self.codigo.index(marcador)],
+        )
+        self.assertIn("nao embutido", self.codigo)
+        self.assertIn("-IncludeCustomGGUF", self.codigo)
+
+    def test_copia_arquivo_mock_leve_do_projeto(self):
+        interpretador = self._powershell()
+
+        if not interpretador:
+            self.skipTest("PowerShell nao disponivel para executar a copia")
+
+        pasta = RAIZ / "build" / "_tmp_gguf_portatil"
+        projeto = pasta / "projeto"
+        cache = pasta / "hf_cache"
+        pacote = pasta / "pacote"
+
+        try:
+            (projeto / "models").mkdir(parents=True, exist_ok=True)
+            cache.mkdir(parents=True, exist_ok=True)
+            pacote.mkdir(parents=True, exist_ok=True)
+
+            origem = projeto / "models" / self.NOME
+            origem.write_bytes(b"GGUF" + b"\0" * 1021)
+
+            resultado = self._executar_copia(
+                interpretador, projeto, cache, pacote
+            )
+
+            self.assertEqual(resultado.returncode, 0, resultado.stderr)
+
+            destino = pacote / "models" / self.NOME
+
+            self.assertTrue(destino.is_file())
+            self.assertEqual(destino.read_bytes(), origem.read_bytes())
+        finally:
+            shutil.rmtree(pasta, ignore_errors=True)
+
+    def test_cai_para_o_cache_quando_o_projeto_nao_tem_o_gguf(self):
+        interpretador = self._powershell()
+
+        if not interpretador:
+            self.skipTest("PowerShell nao disponivel para executar a copia")
+
+        pasta = RAIZ / "build" / "_tmp_gguf_cache"
+        projeto = pasta / "projeto"
+        cache = pasta / "hf_cache"
+        pacote = pasta / "pacote"
+
+        try:
+            (projeto / "models").mkdir(parents=True, exist_ok=True)
+            cache.mkdir(parents=True, exist_ok=True)
+            pacote.mkdir(parents=True, exist_ok=True)
+
+            origem = cache / self.NOME
+            origem.write_bytes(b"GGUF" + b"\0" * 1021)
+
+            resultado = self._executar_copia(
+                interpretador, projeto, cache, pacote
+            )
+
+            self.assertEqual(resultado.returncode, 0, resultado.stderr)
+            self.assertTrue((pacote / "models" / self.NOME).is_file())
+        finally:
+            shutil.rmtree(pasta, ignore_errors=True)
+
+    def test_interrompe_sem_o_gguf_com_mensagem_clara(self):
+        interpretador = self._powershell()
+
+        if not interpretador:
+            self.skipTest("PowerShell nao disponivel para executar a copia")
+
+        pasta = RAIZ / "build" / "_tmp_gguf_ausente"
+        projeto = pasta / "projeto"
+        cache = pasta / "hf_cache"
+        pacote = pasta / "pacote"
+
+        try:
+            (projeto / "models").mkdir(parents=True, exist_ok=True)
+            cache.mkdir(parents=True, exist_ok=True)
+            pacote.mkdir(parents=True, exist_ok=True)
+
+            resultado = self._executar_copia(
+                interpretador, projeto, cache, pacote
+            )
+
+            self.assertNotEqual(resultado.returncode, 0)
+            self.assertIn("GGUF", resultado.stderr)
+            self.assertIn("-IncludeCustomGGUF", resultado.stderr)
+            self.assertFalse((pacote / "models" / self.NOME).exists())
+        finally:
+            shutil.rmtree(pasta, ignore_errors=True)
+
+
 class TestCertificadosTls(unittest.TestCase):
     """Bug 1: o ``certifi/cacert.pem`` precisa existir e ser usado.
 
@@ -1811,7 +2748,7 @@ class TestCertificadosTls(unittest.TestCase):
         posicao_certificado = self.launcher.index(
             "CAMINHO_CERTIFICADOS = configurar_certificados()"
         )
-        posicao_config = self.launcher.index("import config  # noqa: E402")
+        posicao_config = self.launcher.index("\nimport config\n")
 
         self.assertLess(
             posicao_certificado,
@@ -2177,22 +3114,29 @@ class TestBotaoEncerrarServidor(unittest.TestCase):
 
     def setUp(self):
         self.app = ler(RAIZ / "app.py")
+        # A D1 moveu a ação para ui/sidebar.py; o app.py apenas delega.
+        self.sidebar = ler(RAIZ / "ui" / "sidebar.py")
         self.i18n = ler(RAIZ / "utils" / "i18n.py")
 
     def test_app_tem_acao_de_encerrar(self):
+        self.assertIn(
+            "ui_sidebar.renderizar_botao_encerramento()",
+            self.app,
+        )
+
         for trecho in (
-            "_encerrar_servidor_streamlit",
-            "Runtime.instance().stop()",
             't("encerrar_servidor")',
             't("ajuda_encerrar_servidor")',
             't("aviso_encerrando_servidor")',
             "st.stop()",
         ):
-            self.assertIn(trecho, self.app)
+            self.assertIn(trecho, self.sidebar)
 
         # O botão fica dentro da barra lateral, depois do rodapé.
         posicao_sidebar = self.app.index("with st.sidebar:")
-        posicao_botao = self.app.index('t("encerrar_servidor")')
+        posicao_botao = self.app.index(
+            "ui_sidebar.renderizar_botao_encerramento()"
+        )
 
         self.assertLess(posicao_sidebar, posicao_botao)
 
@@ -2209,156 +3153,646 @@ class TestBotaoEncerrarServidor(unittest.TestCase):
             self.assertNotEqual(t(chave, "pt"), t(chave, "en"))
 
     def test_encerrar_streamlit_usa_a_api_do_runtime(self):
-        # A função vive no app.py (script executado pelo Streamlit), então
-        # o contrato é verificado pelo texto: usa a API pública do
-        # Runtime e tem rede de segurança por Timer + os._exit.
-        self.assertIn("Runtime.instance().stop()", self.app)
-        self.assertIn("threading.Timer", self.app)
-        self.assertIn("os._exit(0)", self.app)
+        # A função vive em ui/sidebar.py, então o contrato é verificado
+        # pelo texto: finaliza os subprocessos iniciados pelo app, usa a
+        # API pública do Runtime e tem rede de segurança Timer + os._exit.
+        self.assertIn("Runtime.instance().stop()", self.sidebar)
+        self.assertIn("encerrar_processos_iniciados", self.sidebar)
+        self.assertIn("threading.Timer", self.sidebar)
+        self.assertIn("os._exit(0)", self.sidebar)
 
 
-class EntradaFalsa:
-    """Substitui o ``input()`` do seletor de terminal nos testes."""
+class TestCicloDeVidaDesktop(unittest.TestCase):
+    """Bug: navegador garantido, auto-shutdown e --encerrar."""
 
-    def __init__(self, respostas):
-        self.respostas = list(respostas)
-        self.prompts = []
-
-    def __call__(self, prompt=""):
-        self.prompts.append(prompt)
-
-        if not self.respostas:
-            raise EOFError
-
-        return self.respostas.pop(0)
-
-
-class TestFallbackCliSetupLlm(unittest.TestCase):
-    """O ``setup_llm.py`` configura o modelo sem Tkinter (entrada 1, 2, 3)."""
-
-    def test_interpretar_escolha_enter_usa_recomendacao(self):
-        self.assertEqual(
-            setup_llm.interpretar_escolha_cli("", ["qwen3:4b"]),
-            ["qwen3:4b"],
-        )
-
-    def test_interpretar_escolha_aceita_varias_opcoes(self):
-        self.assertEqual(
-            setup_llm.interpretar_escolha_cli("1,3"),
-            ["qwen3:4b", "qwen2.5:3b"],
-        )
-        self.assertEqual(
-            setup_llm.interpretar_escolha_cli("2 3"),
-            ["qwen3:14b", "qwen2.5:3b"],
-        )
-        self.assertEqual(
-            setup_llm.interpretar_escolha_cli("1;1"),
-            ["qwen3:4b"],
-        )
-
-    def test_interpretar_escolha_recusa_entrada_invalida(self):
-        for valor in ("0", "4", "x", "1,x", "-1"):
-            with self.subTest(valor=valor):
-                self.assertIsNone(
-                    setup_llm.interpretar_escolha_cli(valor)
+    def test_url_nunca_usa_o_endereco_de_escuta(self):
+        for porta in (8501, 8502, 9999):
+            with self.subTest(porta=porta):
+                self.assertNotIn(
+                    "0.0.0.0",
+                    launcher_desktop.url_aplicativo(porta),
                 )
 
-    def _executar(self, respostas, ram=16.0, servico_ativo=True):
-        entrada = EntradaFalsa(respostas)
-        saida = io.StringIO()
-        chamadas = {"download": [], "persistencia": []}
+        self.assertEqual(
+            launcher_desktop.normalizar_url_navegador(
+                "http://0.0.0.0:8501"
+            ),
+            "http://localhost:8501",
+        )
+        self.assertEqual(
+            launcher_desktop.normalizar_url_navegador(
+                "http://0.0.0.0:8502/rota?x=1#topo"
+            ),
+            "http://localhost:8502/rota?x=1#topo",
+        )
+        self.assertEqual(
+            launcher_desktop.normalizar_url_navegador("http://[::]:8503"),
+            "http://localhost:8503",
+        )
 
-        def baixar(selecionados, ao_progresso=None, idioma=None):
-            chamadas["download"].append(list(selecionados))
-            return {
-                "tipo": "fim",
-                "instalados": list(selecionados),
-                "falhas": {},
-                "modelo_padrao": setup_llm.modelo_padrao(selecionados),
-            }
+        # URLs já navegáveis (ou relativas) não são reescritas.
+        self.assertEqual(
+            launcher_desktop.normalizar_url_navegador(
+                "http://127.0.0.1:8501"
+            ),
+            "http://127.0.0.1:8501",
+        )
+        self.assertEqual(
+            launcher_desktop.normalizar_url_navegador("sem/host"),
+            "sem/host",
+        )
 
-        def persistir(instalados, caminho=None):
-            chamadas["persistencia"].append(list(instalados))
-            return {"modelo_padrao": setup_llm.modelo_padrao(instalados)}
-
+    def test_us_startfile_recebe_url_normalizada_com_com(self):
         with mock.patch.object(
-            setup_llm, "memoria_total_gb", return_value=ram
+            launcher_desktop.os, "name", "nt"
         ), mock.patch.object(
-            setup_llm,
-            "garantir_servico_ollama",
-            return_value={"ativo": servico_ativo},
-        ), mock.patch.object(
-            setup_llm, "baixar_modelos", side_effect=baixar
-        ), mock.patch.object(
-            setup_llm, "persistir_selecao", side_effect=persistir
-        ), redirect_stdout(saida):
-            codigo = setup_llm.executar_seletor_cli(
-                entrada=entrada,
-                idioma="pt",
+            launcher_desktop.os, "startfile", create=True
+        ) as startfile, mock.patch.object(
+            launcher_desktop.ctypes, "windll", create=True
+        ) as windll, mock.patch.object(
+            launcher_desktop.subprocess, "Popen"
+        ) as popen, mock.patch.object(
+            launcher_desktop.webbrowser, "open"
+        ) as navegador, mock.patch.object(
+            launcher_desktop, "registrar_log_launcher"
+        ) as log:
+            self.assertTrue(
+                launcher_desktop.abrir_navegador_url(
+                    "http://0.0.0.0:8501"
+                )
             )
 
-        return codigo, entrada, saida.getvalue(), chamadas
-
-    def test_enter_baixa_o_recomendado_por_ram(self):
-        codigo, entrada, saida, chamadas = self._executar([""], ram=8.0)
-
-        self.assertEqual(codigo, 0)
-        self.assertEqual(chamadas["download"], [["qwen2.5:3b"]])
-        self.assertEqual(chamadas["persistencia"], [["qwen2.5:3b"]])
-        self.assertEqual(len(entrada.prompts), 1)
-        self.assertIn("ENTER", entrada.prompts[0])
-
-        # A tabela numerada com as tres opcoes foi exibida.
-        for numero in ("1)", "2)", "3)"):
-            self.assertIn(numero, saida)
-
-        self.assertIn("Configuração gravada", saida)
-
-    def test_opcao_invalida_repete_e_aceita_escolha(self):
-        codigo, _, saida, chamadas = self._executar(["9", "1,3"])
-
-        self.assertEqual(codigo, 0)
-        self.assertIn("Opção inválida", saida)
-        self.assertEqual(
-            chamadas["download"],
-            [["qwen3:4b", "qwen2.5:3b"]],
+        startfile.assert_called_once_with("http://localhost:8501")
+        windll.ole32.CoInitialize.assert_called_once_with(None)
+        windll.ole32.CoUninitialize.assert_called_once()
+        popen.assert_not_called()
+        navegador.assert_not_called()
+        self.assertTrue(
+            any("os.startfile" in str(chamada)
+                for chamada in log.call_args_list)
         )
 
-    def test_ollama_inativo_nao_baixa(self):
-        codigo, _, saida, chamadas = self._executar(
-            ["1"],
-            servico_ativo=False,
-        )
-
-        self.assertEqual(codigo, 1)
-        self.assertEqual(chamadas["download"], [])
-        self.assertIn("Ollama não está acessível", saida)
-
-    def test_entrada_cancelada_nao_grava(self):
-        codigo, _, _, chamadas = self._executar([])
-
-        self.assertEqual(codigo, 1)
-        self.assertEqual(chamadas["download"], [])
-        self.assertEqual(chamadas["persistencia"], [])
-
-    def test_principal_cai_para_cli_sem_tkinter(self):
+    def test_abrir_navegador_url_cai_para_cmd_start(self):
         with mock.patch.object(
-            setup_llm, "precisa_configurar", return_value=True
+            launcher_desktop.os, "name", "nt"
+        ), mock.patch.object(
+            launcher_desktop.os,
+            "startfile",
+            create=True,
+            side_effect=OSError("sem shell"),
+        ), mock.patch.object(
+            launcher_desktop.ctypes, "windll", create=True
+        ) as windll, mock.patch.object(
+            launcher_desktop.subprocess, "Popen"
+        ) as popen, mock.patch.object(
+            launcher_desktop.webbrowser, "open"
+        ) as navegador, mock.patch.object(
+            launcher_desktop, "registrar_log_launcher"
+        ):
+            windll.ole32.CoInitialize.side_effect = OSError("sem COM")
+
+            self.assertTrue(
+                launcher_desktop.abrir_navegador_url(
+                    "http://localhost:8501"
+                )
+            )
+
+        popen.assert_called_once()
+        self.assertEqual(
+            popen.call_args.args[0],
+            ["cmd.exe", "/c", "start", "", "http://localhost:8501"],
+        )
+        self.assertEqual(
+            popen.call_args.kwargs["creationflags"],
+            getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        navegador.assert_not_called()
+
+    def test_abrir_navegador_url_cai_para_webbrowser(self):
+        with mock.patch.object(
+            launcher_desktop.os, "name", "nt"
+        ), mock.patch.object(
+            launcher_desktop.os,
+            "startfile",
+            create=True,
+            side_effect=OSError("sem shell"),
+        ), mock.patch.object(
+            launcher_desktop.subprocess,
+            "Popen",
+            side_effect=OSError("sem cmd"),
+        ), mock.patch.object(
+            launcher_desktop.webbrowser, "open", return_value=True
+        ) as navegador, mock.patch.object(
+            launcher_desktop, "registrar_log_launcher"
+        ):
+            self.assertTrue(
+                launcher_desktop.abrir_navegador_url(
+                    "http://localhost:8501"
+                )
+            )
+
+        navegador.assert_called_once_with(
+            "http://localhost:8501",
+            new=2,
+        )
+
+    def test_abrir_navegador_url_sem_metodo_devolve_false(self):
+        with mock.patch.object(
+            launcher_desktop.os, "name", "nt"
+        ), mock.patch.object(
+            launcher_desktop.os,
+            "startfile",
+            create=True,
+            side_effect=OSError("sem shell"),
+        ), mock.patch.object(
+            launcher_desktop.subprocess,
+            "Popen",
+            side_effect=OSError("sem cmd"),
+        ), mock.patch.object(
+            launcher_desktop.webbrowser, "open", return_value=False
+        ), mock.patch.object(
+            launcher_desktop, "registrar_log_launcher"
+        ) as log:
+            self.assertFalse(
+                launcher_desktop.abrir_navegador_url(
+                    "http://localhost:8501"
+                )
+            )
+
+        self.assertTrue(
+            any("nenhum método abriu" in str(chamada)
+                for chamada in log.call_args_list)
+        )
+
+    def test_abrir_navegador_url_ignora_url_vazia(self):
+        with mock.patch.object(
+            launcher_desktop, "registrar_log_launcher"
+        ):
+            self.assertFalse(launcher_desktop.abrir_navegador_url(""))
+
+    def test_log_do_launcher_registra_healthcheck_e_encerramento(self):
+        pasta = RAIZ / "build" / "_tmp_log_launcher"
+        shutil.rmtree(pasta, ignore_errors=True)
+        pasta.mkdir(parents=True, exist_ok=True)
+
+        try:
+            with mock.patch.object(
+                launcher_desktop, "DIRETORIO_DADOS", pasta
+            ), mock.patch.object(
+                launcher_desktop,
+                "aplicacao_respondendo",
+                return_value=True,
+            ), mock.patch.object(
+                launcher_desktop,
+                "abrir_navegador_url",
+                return_value=True,
+            ):
+                self.assertTrue(
+                    launcher_desktop.abrir_navegador_quando_pronto(
+                        tentativas=1,
+                        intervalo=0,
+                    )
+                )
+                launcher_desktop.encerrar_por_inatividade(
+                    "inatividade de teste",
+                    sair=mock.Mock(),
+                )
+
+                caminho = launcher_desktop.caminho_log_launcher()
+
+            self.assertEqual(caminho, pasta / "launcher.log")
+
+            conteudo = caminho.read_text(encoding="utf-8")
+
+            self.assertIn("healthcheck", conteudo)
+            self.assertIn("http://localhost:8501", conteudo)
+            self.assertIn("inatividade de teste", conteudo)
+        finally:
+            shutil.rmtree(pasta, ignore_errors=True)
+
+    def test_abertura_apos_healthcheck_usa_o_abridor_do_windows(self):
+        with mock.patch.object(
+            launcher_desktop,
+            "aplicacao_respondendo",
+            return_value=True,
+        ), mock.patch.object(
+            launcher_desktop,
+            "abrir_navegador_url",
+            return_value=True,
+        ) as abrir:
+            resultado = launcher_desktop.abrir_navegador_quando_pronto(
+                tentativas=1,
+                intervalo=0,
+            )
+
+        self.assertTrue(resultado)
+        abrir.assert_called_once_with("http://localhost:8501")
+
+    def test_instancia_existente_usa_o_mesmo_abridor(self):
+        with mock.patch.object(
+            launcher_desktop,
+            "abrir_navegador_url",
+            return_value=True,
+        ) as abrir:
+            self.assertTrue(
+                launcher_desktop.abrir_instancia_existente(8504)
+            )
+
+        abrir.assert_called_once_with("http://localhost:8504")
+
+    def test_contagem_nativa_le_as_sessoes_do_runtime(self):
+        """A contagem vem de Runtime.instance()._session_mgr."""
+
+        runtime = mock.Mock()
+        runtime._session_mgr.list_active_sessions.return_value = [
+            mock.Mock(),
+            mock.Mock(),
+        ]
+
+        with mock.patch(
+            "streamlit.runtime.Runtime.instance", return_value=runtime
+        ):
+            self.assertEqual(
+                launcher_desktop.contar_sessoes_ativas_streamlit(8501),
+                2,
+            )
+
+        # Aba fechada: o gerenciador de sessões devolve lista vazia.
+        runtime._session_mgr.list_active_sessions.return_value = []
+
+        with mock.patch(
+            "streamlit.runtime.Runtime.instance", return_value=runtime
+        ):
+            self.assertEqual(
+                launcher_desktop.contar_sessoes_ativas_streamlit(8501),
+                0,
+            )
+
+        # A porta é aceita por compatibilidade, mas a contagem é nativa:
+        # o gerenciador de sessões é consultado uma única vez por ciclo.
+        self.assertEqual(
+            runtime._session_mgr.list_active_sessions.call_count, 2
+        )
+
+    def test_contagem_nativa_prefere_num_active_sessions(self):
+        """O método nativo moderno é a primeira opção de contagem."""
+
+        runtime = mock.Mock()
+        runtime._session_mgr.num_active_sessions.return_value = 3
+
+        with mock.patch(
+            "streamlit.runtime.Runtime.instance", return_value=runtime
+        ):
+            self.assertEqual(
+                launcher_desktop.contar_sessoes_ativas_streamlit(8501),
+                3,
+            )
+
+        runtime._session_mgr.num_active_sessions.assert_called_once_with()
+        runtime._session_mgr.list_active_sessions.assert_not_called()
+
+    def test_contagem_nativa_cai_para_list_active_sessions(self):
+        """Sem ``num_active_sessions``, usa ``len(list_active_sessions())``."""
+
+        runtime = mock.Mock()
+        runtime._session_mgr.num_active_sessions.side_effect = (
+            AttributeError("método ausente neste Streamlit")
+        )
+        runtime._session_mgr.list_active_sessions.return_value = [
+            mock.Mock(),
+            mock.Mock(),
+        ]
+
+        with mock.patch(
+            "streamlit.runtime.Runtime.instance", return_value=runtime
+        ):
+            self.assertEqual(
+                launcher_desktop.contar_sessoes_ativas_streamlit(8501),
+                2,
+            )
+
+        runtime._session_mgr.list_active_sessions.assert_called_once_with()
+
+    def test_contagem_nativa_tolera_runtime_indisponivel(self):
+        """Runtime ausente, import quebrado ou falha devolvem 0."""
+
+        with mock.patch(
+            "streamlit.runtime.Runtime.instance",
+            side_effect=RuntimeError("Runtime hasn't been created!"),
+        ):
+            self.assertEqual(
+                launcher_desktop.contar_sessoes_ativas_streamlit(8501),
+                0,
+            )
+
+        # Runtime inicializando, sem gerenciador de sessões: o fallback
+        # get_client sem sessão registrada também devolve 0.
+        runtime_sem_gerenciador = mock.Mock(spec=["get_client"])
+        runtime_sem_gerenciador.get_client.return_value = None
+
+        with mock.patch(
+            "streamlit.runtime.Runtime.instance",
+            return_value=runtime_sem_gerenciador,
+        ):
+            self.assertEqual(
+                launcher_desktop.contar_sessoes_ativas_streamlit(8501),
+                0,
+            )
+
+        runtime_com_falha = mock.Mock()
+        runtime_com_falha._session_mgr.list_active_sessions.side_effect = (
+            RuntimeError("runtime em transição")
+        )
+
+        with mock.patch(
+            "streamlit.runtime.Runtime.instance",
+            return_value=runtime_com_falha,
+        ):
+            self.assertEqual(
+                launcher_desktop.contar_sessoes_ativas_streamlit(8501),
+                0,
+            )
+
+    def test_monitor_encerra_apos_10s_sem_sessoes(self):
+        estado = launcher_desktop.novo_estado_monitor(
+            0.0,
+            janela_inicial=0.0,
+        )
+
+        self.assertFalse(
+            launcher_desktop.avaliar_monitor_sessao(
+                estado, 0.0, 1
+            )
+        )
+        self.assertFalse(
+            launcher_desktop.avaliar_monitor_sessao(
+                estado, 1.0, 0
+            )
+        )
+        self.assertFalse(
+            launcher_desktop.avaliar_monitor_sessao(
+                estado, 10.9, 0
+            )
+        )
+        self.assertTrue(
+            launcher_desktop.avaliar_monitor_sessao(
+                estado, 11.0, 0
+            )
+        )
+
+    def test_monitor_respeita_a_janela_inicial_de_25s(self):
+        self.assertEqual(launcher_desktop.JANELA_INICIAL_SESSAO, 25.0)
+
+        estado = launcher_desktop.novo_estado_monitor(0.0)
+        self.assertEqual(estado["janela_inicial"], 25.0)
+
+        # Sem sessões e antes dos 25 s: a sessão ainda não começou.
+        self.assertFalse(
+            launcher_desktop.avaliar_monitor_sessao(
+                estado, 12.0, 0
+            )
+        )
+        self.assertFalse(
+            launcher_desktop.avaliar_monitor_sessao(
+                estado, 24.9, 0
+            )
+        )
+        # Aos 25 s a janela expira: começa a contagem de inatividade.
+        self.assertFalse(
+            launcher_desktop.avaliar_monitor_sessao(
+                estado, 25.0, 0
+            )
+        )
+        self.assertFalse(
+            launcher_desktop.avaliar_monitor_sessao(
+                estado, 34.9, 0
+            )
+        )
+        self.assertTrue(
+            launcher_desktop.avaliar_monitor_sessao(
+                estado, 35.0, 0
+            )
+        )
+
+    def test_loop_do_monitor_encerra_quando_as_sessoes_zeram(self):
+        pasta = RAIZ / "build" / "_tmp_monitor_sessoes"
+        shutil.rmtree(pasta, ignore_errors=True)
+        pasta.mkdir(parents=True, exist_ok=True)
+
+        try:
+            with mock.patch.object(
+                launcher_desktop, "DIRETORIO_DADOS", pasta
+            ), mock.patch.object(
+                launcher_desktop, "_limpar_servidor"
+            ) as limpar:
+                registro = pasta / launcher_desktop.NOME_ARQUIVO_INSTANCIA
+                registro.write_text(
+                    json.dumps({"porta": 8501, "pid": 4321}),
+                    encoding="utf-8",
+                )
+
+                # Uma aba conectada e, em seguida, o WebSocket cai.
+                leituras = iter([1] + [0] * 20)
+                tempos = iter(
+                    [0.0] + [float(indice) for indice in range(1, 40)]
+                )
+                sair = mock.Mock()
+                registros = []
+
+                launcher_desktop.monitorar_sessoes_ativas(
+                    porta=8501,
+                    intervalo=0,
+                    janela_inicial=launcher_desktop.JANELA_INICIAL_SESSAO,
+                    limite_inatividade=(
+                        launcher_desktop.LIMITE_INATIVIDADE_SESSAO
+                    ),
+                    contador=lambda porta: next(leituras),
+                    encerrar=lambda: launcher_desktop.encerrar_por_inatividade(
+                        sair=sair
+                    ),
+                    dormir=lambda _: None,
+                    relogio=lambda: next(tempos),
+                    registrar=registros.append,
+                )
+
+                self.assertFalse(registro.exists())
+                self.assertEqual(
+                    registros,
+                    [
+                        "primeira sessão ativa detectada",
+                        "0 sessões ativas; iniciando contagem de inatividade",
+                    ],
+                )
+
+            limpar.assert_called_once_with()
+            sair.assert_called_once_with(0)
+        finally:
+            shutil.rmtree(pasta, ignore_errors=True)
+    def test_encerrar_por_inatividade_limpa_e_sai(self):
+        with mock.patch.object(
+            launcher_desktop, "_limpar_servidor"
+        ) as limpar, mock.patch.object(
+            launcher_desktop, "_remover_registro_instancia"
+        ) as remover:
+            sair = mock.Mock()
+            launcher_desktop.encerrar_por_inatividade(sair=sair)
+
+        limpar.assert_called_once_with()
+        remover.assert_called_once_with()
+        sair.assert_called_once_with(0)
+
+    def test_flag_encerrar_e_reconhecida(self):
+        self.assertEqual(
+            launcher_desktop.ARG_ENCERRAR,
+            "--encerrar",
+        )
+
+        with mock.patch.object(
+            launcher_desktop,
+            "encerrar_instancia_ativa",
+            return_value=True,
+        ) as encerrar:
+            codigo = launcher_desktop.main(["--encerrar"])
+
+        self.assertEqual(codigo, 0)
+        encerrar.assert_called_once_with()
+
+    def test_encerrar_instancia_mata_o_pid_e_remove_o_registro(self):
+        with mock.patch.object(
+            launcher_desktop,
+            "_ler_dados_registro_instancia",
+            return_value={"porta": 8501, "pid": 4321},
+        ), mock.patch.object(
+            launcher_desktop,
+            "encerrar_arvore_processos",
+            return_value=True,
+        ) as matar, mock.patch.object(
+            launcher_desktop, "_remover_registro_instancia"
+        ) as remover:
+            self.assertTrue(
+                launcher_desktop.encerrar_instancia_ativa()
+            )
+
+        matar.assert_called_once_with(pid=4321)
+        remover.assert_called_once_with()
+
+    def test_encerrar_bat_acompanha_o_build(self):
+        codigo = ler(PACKAGING / "build_portatil.ps1")
+        self.assertIn("encerrar.bat", codigo)
+        self.assertIn("--encerrar", codigo)
+
+        encerrar = ler(RAIZ / "encerrar.bat")
+        self.assertIn("iniciar.bat", encerrar)
+        self.assertIn("--encerrar", encerrar)
+
+    def test_iniciar_bat_mantem_o_vinculo_com_o_console(self):
+        codigo = ler(RAIZ / "iniciar.bat")
+
+        # O executavel roda em paralelo (start /B), mas no MESMO console:
+        # sem janela separada, ele herda o console e recebe
+        # CTRL_CLOSE_EVENT quando a janela do CMD e fechada. O start sem
+        # /B (que abriria uma janela nova) continua proibido.
+        self.assertIn('start "" /B "%EXE_PATH%" %*', codigo)
+        self.assertNotIn('start "" /MIN', codigo)
+        self.assertNotIn('start "" "%~dp0NexusGeoIA.exe"', codigo)
+
+        # Os modos de diagnostico continuam sincronos e devolvem o
+        # codigo de saida do executavel.
+        self.assertIn('"%~dp0NexusGeoIA.exe" %*', codigo)
+        self.assertIn(":executavel_sincrono", codigo)
+        self.assertIn('set "CODIGO_SAIDA=%ERRORLEVEL%"', codigo)
+
+        self.assertIn(":encerrar", codigo)
+        self.assertIn("--encerrar", codigo)
+
+
+class TestFluxoUnicoSetupLlm(unittest.TestCase):
+    """O setup_llm.py da v1.0.0 configura um único modelo oficial."""
+
+    def test_modulo_nao_tem_catalogo_antigo(self):
+        for atributo in (
+            "CATALOGO_MODELOS",
+            "modelos_iniciais",
+            "interpretar_escolha_cli",
+            "executar_seletor_cli",
+            "persistir_selecao",
+        ):
+            with self.subTest(atributo=atributo):
+                self.assertFalse(hasattr(setup_llm, atributo))
+
+        codigo = inspect.getsource(setup_llm)
+
+        for proibido in (
+            "qwen3:14b",
+            "qwen2.5:3b",
+            "três modelos",
+            "Checkbutton",
+            "Perfil de Hardware",
+        ):
+            with self.subTest(proibido=proibido):
+                self.assertNotIn(proibido, codigo)
+
+        self.assertIn(setup_llm.NOME_MODELO_LOCAL, codigo)
+        self.assertEqual(setup_llm.MODELO_TECNICO_FALLBACK, "qwen3:4b")
+
+    def test_cli_grava_modelo_oficial(self):
+        saida = io.StringIO()
+
+        with mock.patch.object(
+            setup_llm,
+            "garantir_modelo_oficial",
+            return_value={
+                "modelo": setup_llm.NOME_MODELO_LOCAL,
+                "origem": "registrado",
+                "caminho_config": "C:\\dados\\config_local.json",
+            },
+        ) as garantir, redirect_stdout(saida):
+            codigo = setup_llm.executar_fluxo_cli(idioma="pt")
+
+        self.assertEqual(codigo, 0)
+        garantir.assert_called_once_with(
+            forcar=False,
+            idioma="pt",
+            ao_progresso=mock.ANY,
+        )
+        self.assertIn("config_local.json", saida.getvalue())
+        self.assertIn(setup_llm.NOME_MODELO_LOCAL, saida.getvalue())
+
+    def test_cli_falha_retorna_1(self):
+        saida = io.StringIO()
+
+        with mock.patch.object(
+            setup_llm,
+            "garantir_modelo_oficial",
+            side_effect=setup_llm.ErroDownload("sem rede"),
+        ), redirect_stdout(saida):
+            codigo = setup_llm.executar_fluxo_cli()
+
+        self.assertEqual(codigo, 1)
+        self.assertIn("sem rede", saida.getvalue())
+
+    def test_principal_sem_tkinter_cai_para_cli(self):
+        with mock.patch.object(
+            setup_llm, "modelo_local_registrado", return_value=False
+        ), mock.patch.object(
+            setup_llm, "caminho_gguf_local", return_value=None
         ), mock.patch.object(
             setup_llm, "tkinter_disponivel", return_value=False
         ), mock.patch.object(
-            setup_llm, "executar_seletor_cli", return_value=0
+            setup_llm, "executar_fluxo_cli", return_value=0
         ) as cli, mock.patch.object(
             setup_llm, "abrir_interface"
         ) as gui:
             self.assertEqual(setup_llm.principal([]), 0)
 
-        cli.assert_called_once_with()
+        cli.assert_called_once_with(forcar=False)
         gui.assert_not_called()
 
     def test_principal_cai_para_cli_quando_import_falha(self):
         with mock.patch.object(
-            setup_llm, "precisa_configurar", return_value=True
+            setup_llm, "modelo_local_registrado", return_value=False
+        ), mock.patch.object(
+            setup_llm, "caminho_gguf_local", return_value=None
         ), mock.patch.object(
             setup_llm, "tkinter_disponivel", return_value=True
         ), mock.patch.object(
@@ -2366,11 +3800,11 @@ class TestFallbackCliSetupLlm(unittest.TestCase):
             "abrir_interface",
             side_effect=ImportError("No module named 'tkinter'"),
         ), mock.patch.object(
-            setup_llm, "executar_seletor_cli", return_value=0
+            setup_llm, "executar_fluxo_cli", return_value=0
         ) as cli:
             self.assertEqual(setup_llm.principal([]), 0)
 
-        cli.assert_called_once_with()
+        cli.assert_called_once_with(forcar=False)
 
     def test_principal_cai_para_cli_quando_tcl_falha(self):
         if not setup_llm.tkinter_disponivel():
@@ -2379,7 +3813,9 @@ class TestFallbackCliSetupLlm(unittest.TestCase):
         import tkinter
 
         with mock.patch.object(
-            setup_llm, "precisa_configurar", return_value=True
+            setup_llm, "modelo_local_registrado", return_value=False
+        ), mock.patch.object(
+            setup_llm, "caminho_gguf_local", return_value=None
         ), mock.patch.object(
             setup_llm, "tkinter_disponivel", return_value=True
         ), mock.patch.object(
@@ -2387,15 +3823,17 @@ class TestFallbackCliSetupLlm(unittest.TestCase):
             "abrir_interface",
             side_effect=tkinter.TclError("no display"),
         ), mock.patch.object(
-            setup_llm, "executar_seletor_cli", return_value=0
+            setup_llm, "executar_fluxo_cli", return_value=0
         ) as cli:
             self.assertEqual(setup_llm.principal([]), 0)
 
-        cli.assert_called_once_with()
+        cli.assert_called_once_with(forcar=False)
 
     def test_principal_mantem_erro_generico_sem_cli(self):
         with mock.patch.object(
-            setup_llm, "precisa_configurar", return_value=True
+            setup_llm, "modelo_local_registrado", return_value=False
+        ), mock.patch.object(
+            setup_llm, "caminho_gguf_local", return_value=None
         ), mock.patch.object(
             setup_llm, "tkinter_disponivel", return_value=True
         ), mock.patch.object(
@@ -2403,7 +3841,7 @@ class TestFallbackCliSetupLlm(unittest.TestCase):
             "abrir_interface",
             side_effect=RuntimeError("sem display"),
         ), mock.patch.object(
-            setup_llm, "executar_seletor_cli"
+            setup_llm, "executar_fluxo_cli"
         ) as cli:
             self.assertEqual(setup_llm.principal([]), 1)
 

@@ -11,22 +11,33 @@ as diferenças entre a pasta portátil e a instalação em ``Program Files``:
    **antes** de importar ``config`` (a pasta de instalação é somente
    leitura; histórico, banco, documentos e ``config_local.json`` precisam
    ir para o perfil do usuário);
-3. executa o assistente de modelos (``setup_llm.py``) quando o
+3. executa o configurador do modelo local (``setup_llm.py``) quando o
    ``config_local.json`` ainda não existe ou quando recebe
-   ``--setup-modelo`` (atalho *Gerenciar Modelos LLM* do instalador);
+   ``--setup-modelo`` (atalho *Gerenciar Modelo Local* do instalador);
 4. antes de subir um servidor novo, verifica se já existe uma instância
    saudável do aplicativo respondendo na faixa de portas do launcher
-   (8501..8510). Se existir, apenas abre a aba e encerra o launcher
-   secundário — é isso que evita as instâncias duplicadas e os processos
-   órfãos;
+   (8501..8510). Se existir, abre a aba com ``abrir_navegador_url`` e
+   encerra o launcher secundário — é isso que evita as instâncias
+   duplicadas e os processos órfãos;
 5. sobe o Streamlit em um **subprocesso** associado a um Windows Job
    Object com ``JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE``. Quando o launcher
    termina — inclusive ao fechar o terminal/``iniciar.bat`` ou por
    ``taskkill`` — o Job Object mata a árvore de processos filha. Além
    disso, ``SetConsoleCtrlHandler`` e ``atexit`` executam
    ``taskkill /F /T /PID`` imediatamente no encerramento normal;
-6. aguarda o healthcheck HTTP local responder e só então executa
-   ``webbrowser.open(f"http://localhost:{porta}")``.
+6. aguarda o healthcheck HTTP e abre o navegador com
+   ``abrir_navegador_url``, que normaliza a URL (nunca ``0.0.0.0``) e
+   tenta, em sequência: ``os.startfile`` com a thread inicializada em COM
+   (``CoInitialize``/``CoUninitialize``), ``cmd.exe /c start`` sem janela e
+   ``webbrowser.open`` como último recurso. Cada etapa vai para
+   ``<DATA_DIR>/launcher.log``, junto com a porta escolhida, o instante
+   do healthcheck e o motivo de encerramento;
+7. monitora as sessões WebSocket ativas do próprio runtime do
+   Streamlit (``Runtime.instance()._session_mgr``): depois da primeira
+   aba conectada (ou da janela inicial de 25 s), a ausência de sessões
+   por 10 s remove ``instancia_ativa.json`` e encerra a árvore com
+   ``os._exit(0)``, sem deixar ``NexusGeoIA.exe`` no Gerenciador de
+   Tarefas. A flag ``--encerrar`` faz o encerramento imediato.
 
 Os recursos lidos por caminho (``app.py``, ``prompts/system_base.txt`` e
 ``.streamlit/config.toml``) são sempre resolvidos em
@@ -39,6 +50,7 @@ Uso pelo executável:
 
     NexusGeoIA.exe
     NexusGeoIA.exe --setup-modelo
+    NexusGeoIA.exe --self-test
     NexusGeoIA.exe --autoteste
     NexusGeoIA.exe --verificar-imports
     NexusGeoIA.exe --nova-instancia
@@ -47,6 +59,7 @@ Uso pelo executável:
 from __future__ import annotations
 
 import atexit
+import contextlib
 import ctypes
 import json
 import os
@@ -56,6 +69,7 @@ import sys
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 import webbrowser
 from http.client import HTTPException
@@ -71,8 +85,13 @@ PORTA_PREFERIDA = 8501
 # uma porta que o ``bind`` do servidor recusaria em seguida.
 ENDERECO_LOOPBACK = "127.0.0.1"
 
+# Host que o navegador deve abrir. "0.0.0.0" (endereço de escuta do
+# servidor) é rejeitado pelo ShellExecute/os.startfile do Windows; o
+# navegador sempre recebe o loopback.
+HOST_NAVEGADOR = "localhost"
+
 # Endereço que o navegador deve abrir quando a porta preferida responde.
-URL_APLICATIVO = "http://localhost:8501"
+URL_APLICATIVO = f"http://{HOST_NAVEGADOR}:8501"
 
 # Endpoint de saúde exposto pelo servidor do Streamlit.
 CAMINHO_SAUDE = "/_stcore/health"
@@ -98,6 +117,11 @@ ARG_PORTA = "--porta"
 # Força uma instância nova mesmo quando já existe uma respondendo.
 ARG_NOVA_INSTANCIA = "--nova-instancia"
 
+# Encerra imediatamente a instância registrada (usado pelo encerrar.bat e
+# pelo botão da barra lateral). Lê instancia_ativa.json, mata a árvore de
+# processos do servidor e remove o registro.
+ARG_ENCERRAR = "--encerrar"
+
 # Valida os imports do bundle sem abrir GUI, servidor ou navegador.
 ARG_VERIFICAR_IMPORTS = "--verificar-imports"
 ENV_RELATORIO_IMPORTS = "ASSISTENTE_IMPORTS_REPORT"
@@ -110,6 +134,26 @@ VARIAVEIS_CERTIFICADO = ("SSL_CERT_FILE", "REQUESTS_CA_BUNDLE")
 # pasta de dados gravável, que é a mesma para o pacote portátil e para a
 # instalação em ``%LOCALAPPDATA%``.
 NOME_ARQUIVO_INSTANCIA = "instancia_ativa.json"
+
+# Log diagnóstico do launcher. O executável é compilado com
+# console=False: sem stdout, este arquivo é o único registro da porta
+# escolhida, do healthcheck, do método que abriu o navegador e do motivo
+# de encerramento.
+NOME_ARQUIVO_LOG = "launcher.log"
+
+# Ciclo de vida da sessão: depois da primeira aba conectada (ou da
+# janela inicial de 25 s), o monitor confere a cada 1 s quantas sessões
+# WebSocket o runtime do Streamlit ainda mantém ativas. Zero sessões por
+# 10 s consecutivos encerram a árvore inteira. A janela inicial cobre o
+# cold start do navegador no Windows: o launcher abre a aba e o primeiro
+# WebSocket pode levar dezenas de segundos para aparecer.
+INTERVALO_MONITOR_SESSAO = 1.0
+JANELA_INICIAL_SESSAO = 25.0
+LIMITE_INATIVIDADE_SESSAO = 10.0
+
+# Variável repassada ao subprocesso do Streamlit para ativar o monitor de
+# sessão apenas quando o launcher realmente subiu uma instância nova.
+ENV_MONITOR_SESSAO = "NEXUSGEO_MONITOR_SESSAO"
 
 
 def configurar_certificados():
@@ -267,13 +311,49 @@ def configurar_diretorio_dados():
 # variável no momento em que é importado.
 DIRETORIO_DADOS = configurar_diretorio_dados()
 
+# Serializa as linhas de log: o healthcheck, o navegador e o monitor de
+# sessão rodam em threads distintas e não podem intercalar escritas.
+_LOCK_LOG = threading.Lock()
+
+
+def caminho_log_launcher():
+    """Caminho do log diagnóstico (``<DATA_DIR>/launcher.log``)."""
+
+    return Path(DIRETORIO_DADOS) / NOME_ARQUIVO_LOG
+
+
+def registrar_log_launcher(mensagem):
+    """Anexa uma linha datada ao log do launcher.
+
+    O executável compila com ``console=False`` e não tem ``stdout``:
+    este arquivo é o canal de diagnóstico visível ao usuário. A função
+    nunca levanta exceção — log é observabilidade, não requisito de boot —
+    e achata quebras de linha para manter uma entrada por linha.
+    """
+
+    texto = " ".join(str(mensagem).split())
+    linha = f"{time.strftime('%Y-%m-%d %H:%M:%S')} {texto}\n"
+
+    try:
+        with _LOCK_LOG:
+            caminho = caminho_log_launcher()
+            caminho.parent.mkdir(parents=True, exist_ok=True)
+
+            with open(caminho, "a", encoding="utf-8") as arquivo:
+                arquivo.write(linha)
+    except OSError:
+        pass
+
+    return linha
+
+
 # O Ollama pode ter acabado de ser instalado pelo assistente; o PATH da
 # sessão precisa incluir a pasta antes de chamar o setup e o Streamlit.
 PATH_OLLAMA = adicionar_ollama_ao_path()
 
 # Importado depois de ``ASSISTENTE_DATA_DIR`` estar definido para que o
 # ``config.py`` resolva o mesmo diretório gravável usado pelo launcher.
-import config  # noqa: E402
+import config
 
 
 def diretorio_recursos():
@@ -309,6 +389,25 @@ ARG_AUTOTESTE_ALTERNATIVO = "--smoke-test"
 
 # Variável de ambiente que recebe o caminho do relatório do autoteste.
 ENV_RELATORIO_AUTOTESTE = "ASSISTENTE_SMOKE_REPORT"
+
+# Autodiagnóstico completo do executável (smoke test real do build).
+# Diferente do --autoteste, ele valida a cadeia de inicialização inteira:
+# todos os módulos internos, recursos de runtime, SQLite WAL e o dry-run
+# de app.py, sem abrir navegador nem subir o Streamlit.
+ARG_SELFTEST = "--self-test"
+ARG_SELFTEST_ALTERNATIVO = "--autodiagnostico"
+ENV_RELATORIO_SELFTEST = "ASSISTENTE_SELFTEST_REPORT"
+
+# Pacotes internos cujos .py precisam ser importáveis dentro do bundle.
+PACOTES_INTERNOS_SELFTEST = ("core", "services", "ui", "adapters", "utils")
+
+# Recursos de runtime conferidos além de RECURSOS_OBRIGATORIOS. O tema
+# escuro, os prompts e os templates Modelfile são lidos por caminho.
+DIRETORIOS_RUNTIME_SELFTEST = ("prompts", ".streamlit", "ui", "finetuning")
+
+# Modelo oficial fine-tuned da v1.0.0. A string aparece aqui de propósito:
+# o smoke test do executável falha se o bundle resolver outro modelo.
+MODELO_OFICIAL = "nexusgeo-qwen3-4b-v2-q4"
 
 
 def recursos_ausentes():
@@ -400,14 +499,72 @@ def porta_livre(preferida=PORTA_PREFERIDA, tentativas=TENTATIVAS_PORTA):
 
 
 def url_aplicativo(porta=PORTA_PREFERIDA):
-    """URL local que o navegador deve abrir para a porta informada."""
+    """URL local que o navegador deve abrir para a porta informada.
+
+    O host é sempre o loopback do navegador (``localhost``); o endereço
+    de escuta do servidor nunca vaza para a URL entregue ao Windows.
+    """
 
     porta = int(porta)
 
     if porta == PORTA_PREFERIDA:
         return URL_APLICATIVO
 
-    return f"http://localhost:{porta}"
+    return f"http://{HOST_NAVEGADOR}:{porta}"
+
+
+# Hosts que um navegador não consegue abrir. ``0.0.0.0`` é o endereço de
+# escuta do Streamlit; o ShellExecute (os.startfile) do Windows recusa a
+# URL e a aba nunca abre. ``::`` e ``*`` têm o mesmo problema em IPv6.
+HOSTS_NAO_NAVEGAVEIS = frozenset({"0.0.0.0", "::", "[::]", "*", ""})
+
+
+def normalizar_url_navegador(url):
+    """Troca o host de escuta pelo loopback antes de abrir o navegador.
+
+    Remove ``0.0.0.0`` (e equivalentes IPv6/curinga) preservando
+    esquema, porta, caminho, consulta e fragmento. URLs relativas ou sem
+    host são devolvidas intactas — a função nunca "conserta" o que não
+    reconhece.
+    """
+
+    texto = str(url or "").strip()
+
+    if not texto:
+        return texto
+
+    try:
+        partes = urllib.parse.urlsplit(texto)
+    except ValueError:
+        return texto
+
+    if not partes.scheme:
+        return texto
+
+    if (partes.hostname or "").casefold() not in HOSTS_NAO_NAVEGAVEIS:
+        return texto
+
+    try:
+        porta = f":{partes.port}" if partes.port else ""
+    except ValueError:
+        # Porta inválida: devolve a URL original em vez de mascarar o erro.
+        return texto
+
+    credenciais = ""
+
+    if partes.username:
+        credenciais = partes.username
+
+        if partes.password:
+            credenciais += ":" + partes.password
+
+        credenciais += "@"
+
+    netloc = f"{credenciais}{HOST_NAVEGADOR}{porta}"
+
+    return urllib.parse.urlunsplit(
+        (partes.scheme, netloc, partes.path, partes.query, partes.fragment)
+    )
 
 
 def aplicacao_respondendo(porta=PORTA_PREFERIDA, timeout=1.0):
@@ -432,6 +589,138 @@ def aplicacao_respondendo(porta=PORTA_PREFERIDA, timeout=1.0):
         return False
 
 
+def _abrir_com_shell_windows(url):
+    """Abre ``url`` pelo shell do Windows, com a thread em COM.
+
+    Em thread de background de executável PyInstaller ``console=False``
+    o ``os.startfile`` pode falhar em silêncio: o ShellExecute exige um
+    apartamento COM inicializado na thread que o chama. Por isso o
+    ``CoInitialize``/``CoUninitialize`` envolve a chamada.
+
+    Devolve ``(abriu, detalhe)``: ``detalhe`` é o método usado quando
+    abre e a mensagem de erro quando falha.
+    """
+
+    iniciar = getattr(os, "startfile", None)
+
+    if iniciar is None:
+        return False, "os.startfile indisponível"
+
+    inicializado = False
+
+    try:
+        try:
+            ctypes.windll.ole32.CoInitialize(None)
+            inicializado = True
+        except Exception as erro:  # noqa: BLE001 - COM pode faltar
+            # Sem COM o startfile ainda pode funcionar; segue e registra.
+            registrar_log_launcher(
+                "aviso: CoInitialize falhou "
+                f"({type(erro).__name__}: {erro})"
+            )
+
+        iniciar(url)
+
+        return True, "os.startfile (thread com COM)"
+    except Exception as erro:  # noqa: BLE001 - shell/registro indisponível
+        return False, f"os.startfile: {type(erro).__name__}: {erro}"
+    finally:
+        if inicializado:
+            try:
+                ctypes.windll.ole32.CoUninitialize()
+            except Exception:  # noqa: BLE001, S110 - sem COM na thread
+                pass
+
+
+def _abrir_com_cmd_start(url):
+    """Fallback explícito: ``cmd.exe /c start "" <url>`` sem console.
+
+    ``start`` usa o handler padrão do Windows e não depende de COM nem
+    do registro de navegadores do ``webbrowser``. ``CREATE_NO_WINDOW`
+    evita a janela de console piscando no executável GUI.
+    """
+
+    comando = ["cmd.exe", "/c", "start", "", url]
+
+    try:
+        subprocess.Popen(
+            comando,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except Exception as erro:  # noqa: BLE001 - cmd indisponível
+        return False, f"cmd.exe /c start: {type(erro).__name__}: {erro}"
+
+    return True, "cmd.exe /c start (CREATE_NO_WINDOW)"
+
+
+def _abrir_com_webbrowser(url):
+    """Último recurso: ``webbrowser.open`` (aba nova, sem esperar)."""
+
+    try:
+        abriu = bool(webbrowser.open(url, new=2))
+    except Exception as erro:  # noqa: BLE001 - navegador indisponível
+        return False, f"webbrowser.open: {type(erro).__name__}: {erro}"
+
+    if not abriu:
+        return False, "webbrowser.open devolveu False"
+
+    return True, "webbrowser.open(new=2)"
+
+
+def abrir_navegador_url(url: str) -> bool:
+    """Abre ``url`` no navegador padrão, com fallbacks em sequência.
+
+    A URL é normalizada primeiro (:func:`normalizar_url_navegador`): o
+    navegador nunca recebe ``0.0.0.0``. No Windows as tentativas são:
+
+    1. ``os.startfile`` em uma thread com ``CoInitialize``/``CoUninitialize`
+       — cobre a falha silenciosa do ShellExecute sem COM;
+    2. ``cmd.exe /c start "" <url>`` com ``CREATE_NO_WINDOW``;
+    3. ``webbrowser.open(url, new=2)``.
+
+    Fora do Windows só o terceiro mecanismo se aplica. Cada tentativa e o
+    método vencedor vão para ``<DATA_DIR>/launcher.log``, junto com a
+    exceção quando houver.
+
+    Devolve ``True`` quando algum método disparou a abertura. Nunca
+    levanta exceção: sem navegador o Streamlit continua servindo e o
+    usuário abre a URL manualmente.
+    """
+
+    url = normalizar_url_navegador(url)
+
+    if not url:
+        registrar_log_launcher("navegador: URL vazia; nada a abrir")
+        return False
+
+    metodos = []
+
+    if os.name == "nt":
+        metodos.extend((_abrir_com_shell_windows, _abrir_com_cmd_start))
+
+    metodos.append(_abrir_com_webbrowser)
+
+    for metodo in metodos:
+        abriu, detalhe = metodo(url)
+
+        if abriu:
+            registrar_log_launcher(
+                f"navegador aberto via {detalhe}: {url}"
+            )
+            return True
+
+        registrar_log_launcher(f"navegador: {detalhe}")
+
+    registrar_log_launcher(
+        f"navegador: nenhum método abriu {url}; abra a URL manualmente"
+    )
+
+    return False
+
+
 def abrir_navegador_quando_pronto(
     porta=PORTA_PREFERIDA,
     tentativas=TENTATIVAS_SAUDE,
@@ -441,21 +730,52 @@ def abrir_navegador_quando_pronto(
     """Aguarda o healthcheck e abre o navegador uma única vez.
 
     A função é síncrona para poder ser testada sem threads; em produção
-    ``agendar_abertura_navegador`` a executa em segundo plano.
+    ``agendar_abertura_navegador`` a executa em segundo plano. O
+    ``abrir`` injetável existe para os testes; em produção o padrão é
+    :func:`abrir_navegador_url`.
+
+    O instante em que ``/_stcore/health`` responde OK e o resultado da
+    abertura ficam no log do launcher, com o tempo decorrido desde o
+    início da espera.
     """
 
-    abrir = abrir or webbrowser.open
+    abrir = abrir or abrir_navegador_url
+    inicio = time.monotonic()
 
     for _ in range(max(1, int(tentativas))):
         if aplicacao_respondendo(porta):
+            decorrido = time.monotonic() - inicio
+            registrar_log_launcher(
+                f"healthcheck {CAMINHO_SAUDE} OK em "
+                f"{url_aplicativo(porta)} após {decorrido:.1f} s"
+            )
+
             try:
-                abrir(url_aplicativo(porta))
-            except Exception:  # pragma: no cover - navegador indisponível
+                abriu = abrir(url_aplicativo(porta))
+            except Exception as erro:  # noqa: BLE001 - navegador indisponível
+                # O Streamlit já está no ar; sem navegador o usuário
+                # abre a URL manualmente. O launcher não deve cair.
+                registrar_log_launcher(
+                    "navegador: abridor levantou "
+                    f"{type(erro).__name__}: {erro}"
+                )
+                return False
+
+            if abriu is False:
+                registrar_log_launcher(
+                    "navegador: abridor devolveu False; "
+                    f"abra {url_aplicativo(porta)} manualmente"
+                )
                 return False
 
             return True
 
         time.sleep(float(intervalo))
+
+    registrar_log_launcher(
+        f"healthcheck não respondeu em {url_aplicativo(porta)} após "
+        f"{max(1, int(tentativas))} tentativas"
+    )
 
     return False
 
@@ -485,18 +805,24 @@ def caminho_registro_instancia():
     return Path(DIRETORIO_DADOS) / NOME_ARQUIVO_INSTANCIA
 
 
-def _ler_registro_instancia():
-    """Porta registrada pela instância atual, ou ``None``."""
+def _ler_dados_registro_instancia():
+    """Conteúdo bruto de ``instancia_ativa.json``, ou ``{}``."""
 
     try:
         dados = json.loads(
             caminho_registro_instancia().read_text(encoding="utf-8")
         )
     except (OSError, ValueError):
-        return None
+        return {}
+
+    return dados if isinstance(dados, dict) else {}
+
+
+def _ler_registro_instancia():
+    """Porta registrada pela instância atual, ou ``None``."""
 
     try:
-        porta = int(dados.get("porta"))
+        porta = int(_ler_dados_registro_instancia().get("porta"))
     except (AttributeError, TypeError, ValueError):
         return None
 
@@ -528,6 +854,340 @@ def _remover_registro_instancia():
         caminho_registro_instancia().unlink()
     except OSError:
         pass
+
+
+def encerrar_instancia_ativa():
+    """Encerra a instância registrada e remove ``instancia_ativa.json``.
+
+    Usada pela flag ``--encerrar`` e pelo ``encerrar.bat`. O registro
+    guarda o PID do subprocesso do Streamlit; ``taskkill /F /T`` mata
+    também os filhos dele. Quando o PID já morreu (registro obsoleto), a
+    função apenas limpa o arquivo e devolve ``False``.
+
+    Devolve ``True`` quando algum processo foi encerrado. Nunca levanta
+    exceção: o encerramento precisa ser idempotente.
+    """
+
+    dados = _ler_dados_registro_instancia()
+    pid = dados.get("pid")
+    encerrou = False
+
+    try:
+        pid = int(pid) if pid is not None else None
+    except (TypeError, ValueError):
+        pid = None
+
+    if pid and pid > 0 and pid != os.getpid():
+        try:
+            encerrou = bool(encerrar_arvore_processos(pid=pid))
+        except Exception:  # noqa: BLE001 - encerramento best-effort
+            encerrou = False
+
+    _remover_registro_instancia()
+
+    registrar_log_launcher(
+        "encerramento manual (--encerrar): "
+        + ("processo encerrado" if encerrou else "nenhum processo ativo")
+    )
+
+    return encerrou
+
+
+# ---------------------------------------------------------------------------
+# Monitor de sessão ativa (encerra quando a última aba é fechada)
+# ---------------------------------------------------------------------------
+#
+# O monitor roda DENTRO do processo do Streamlit
+# (``NEXUSGEO_MONITOR_SESSAO=1``), então pode consultar diretamente o
+# runtime da própria aplicação em vez de deduzir clientes por ``netstat``.
+# O ``netstat`` era frágil: no Windows o WebSocket podia permanecer em
+# ``ESTABLISHED`` (TIME_WAIT/CLOSE_WAIT ou conexões do próprio processo)
+# depois de a aba ser fechada, e a contagem nunca zerava — o
+# ``NexusGeoIA.exe`` e o ``instancia_ativa.json`` ficavam presos em
+# segundo plano. O gerenciador de sessões do Streamlit, ao contrário,
+# remove a sessão no instante em que o WebSocket é desconectado, o que
+# faz ``len(sessoes)`` cair imediatamente para zero.
+#
+# O monitor só começa a contar inatividade depois da primeira sessão
+# ativa (ou de JANELA_INICIAL_SESSAO) e encerra a árvore quando o runtime
+# passa LIMITE_INATIVIDADE_SESSAO segundos sem nenhuma sessão — fechar a
+# última aba ou o iniciar.bat não deixa NexusGeoIA.exe órfão no
+# Gerenciador de Tarefas. A janela inicial dá margem ao cold start do
+# navegador no Windows: antes dela, o launcher abriu a aba mas o
+# WebSocket ainda não apareceu.
+
+
+def _sessoes_ativas_do_runtime(runtime):
+    """Extrai a quantidade de sessões ativas de uma instância do runtime.
+
+    A primeira fonte é ``_session_mgr.num_active_sessions()``, o método
+    nativo presente no ``SessionManager`` do Streamlit moderno: ele já
+    devolve a contagem pronta, sem materializar a lista de sessões. Se o
+    método não existir ou falhar durante a inicialização do runtime,
+    recorre a ``len(_session_mgr.list_active_sessions())`` e, por fim, a
+    ``get_client``. Qualquer falha devolve ``0`` — nunca levanta para o
+    loop do monitor.
+    """
+
+    gerenciador = getattr(runtime, "_session_mgr", None)
+
+    # Primeira opção: contagem nativa do SessionManager moderno.
+    contar = getattr(gerenciador, "num_active_sessions", None)
+
+    if callable(contar):
+        try:
+            return max(0, int(contar()))
+        except Exception:  # noqa: BLE001 - método ausente/em transição
+            pass
+
+    # Fallback: lista nativa de sessões ativas.
+    listar = getattr(gerenciador, "list_active_sessions", None)
+
+    if callable(listar):
+        try:
+            return len(listar() or [])
+        except Exception:  # noqa: BLE001 - runtime em transição
+            return 0
+
+    # Runtime ainda inicializando: ``get_client`` só resolve clientes
+    # já registrados. Sem sessão para consultar, a resposta segura é 0.
+    obter_cliente = getattr(runtime, "get_client", None)
+
+    if callable(obter_cliente):
+        try:
+            cliente = obter_cliente()
+        except Exception:  # noqa: BLE001 - assinatura exige session_id
+            return 0
+
+        if cliente is None:
+            return 0
+
+        try:
+            return len(cliente)
+        except TypeError:
+            return 1
+
+    return 0
+
+
+def contar_sessoes_ativas_streamlit(_porta=None):
+    """Conta as sessões WebSocket ativas do runtime do Streamlit.
+
+    Chamada pelo monitor de sessão que roda no próprio subprocesso do
+    Streamlit, portanto enxerga o mesmo objeto de runtime que atende o
+    navegador:
+
+    ```python
+    from streamlit.runtime import Runtime
+    runtime = Runtime.instance()
+    sessoes = runtime._session_mgr.list_active_sessions()
+    ```
+
+    A aba aberta mantém uma sessão ativa (``len(sessoes) >= 1``). Ao
+    fechar a aba, o WebSocket desconecta e a sessão sai do gerenciador
+    imediatamente, fazendo a contagem cair para ``0``.
+
+    ``_porta`` é aceita apenas por compatibilidade com a assinatura
+    anterior (baseada em ``netstat``) e não é usada: a contagem nativa
+    não depende de sockets do sistema operacional. Devolve ``0`` quando
+    o runtime ainda não existe (import indisponível, execução em modo
+    bruto) ou quando a leitura falha.
+    """
+
+    try:
+        from streamlit.runtime import Runtime
+    except Exception:  # noqa: BLE001 - streamlit indisponível no bundle
+        return 0
+
+    try:
+        runtime = Runtime.instance()
+    except Exception:  # noqa: BLE001 - Runtime ainda não criado
+        return 0
+
+    if runtime is None:
+        return 0
+
+    return _sessoes_ativas_do_runtime(runtime)
+
+
+def novo_estado_monitor(agora, janela_inicial=JANELA_INICIAL_SESSAO):
+    """Estado inicial do monitor de sessão ativa."""
+
+    return {
+        "inicio": float(agora),
+        "janela_inicial": float(janela_inicial),
+        "inicio_sem_sessao": None,
+        "sessao_ativa": False,
+        "sessoes": 0,
+    }
+
+
+def avaliar_monitor_sessao(
+    estado,
+    agora,
+    sessoes,
+    limite_inatividade=LIMITE_INATIVIDADE_SESSAO,
+):
+    """Avalia um ciclo do monitor e indica se a árvore deve encerrar.
+
+    A sessão passa a ser considerada ativa quando a primeira aba conecta
+    (``sessoes >= 1``) ou quando a janela inicial expira. A partir daí, a
+    primeira leitura sem sessões inicia a contagem; ``limite_inatividade``
+    segundos consecutivos em zero devolvem ``True``.
+    """
+
+    agora = float(agora)
+    sessoes = int(sessoes)
+
+    if sessoes > 0:
+        estado["sessao_ativa"] = True
+        estado["inicio_sem_sessao"] = None
+        estado["sessoes"] = sessoes
+
+        return False
+
+    estado["sessoes"] = 0
+
+    if not estado.get("sessao_ativa"):
+        if agora - float(estado.get("inicio", agora)) < float(
+            estado.get("janela_inicial", JANELA_INICIAL_SESSAO)
+        ):
+            return False
+
+        estado["sessao_ativa"] = True
+
+    if estado.get("inicio_sem_sessao") is None:
+        estado["inicio_sem_sessao"] = agora
+
+        return False
+
+    return (
+        agora - float(estado["inicio_sem_sessao"])
+        >= float(limite_inatividade)
+    )
+
+
+def encerrar_por_inatividade(motivo="inatividade da sessão", sair=None):
+    """Remove o registro, mata a árvore e sai imediatamente.
+
+    Executa no subprocesso do Streamlit (ou no launcher, quando o monitor
+    é iniciado ali): ``_limpar_servidor`` encerra o que este processo
+    conhece e ``os._exit(0)`` encerra a árvore sem esperar o runtime do
+    Streamlit. O ``atexit`` do launcher pai fecha o Job Object em
+    seguida, o que mata qualquer descendente restante (inclusive o
+    serviço do Ollama iniciado pelo aplicativo).
+
+    ``sair`` é injetável para os testes; em produção é
+    :func:`os._exit`.
+    """
+
+    _imprimir(
+        f"{NOME_APLICATIVO}: encerrando automaticamente por {motivo}."
+    )
+    registrar_log_launcher(f"encerrando automaticamente: {motivo}")
+
+    # O registro precisa sumir antes da saída: uma nova abertura do
+    # atalho não deve encontrar uma instância fantasma.
+    try:
+        _remover_registro_instancia()
+    except Exception:  # noqa: BLE001 - limpeza best-effort
+        pass
+
+    try:
+        _limpar_servidor()
+    except Exception:  # noqa: BLE001 - limpeza best-effort
+        pass
+
+    (sair or os._exit)(0)
+
+
+def monitorar_sessoes_ativas(
+    porta=PORTA_PREFERIDA,
+    intervalo=INTERVALO_MONITOR_SESSAO,
+    janela_inicial=JANELA_INICIAL_SESSAO,
+    limite_inatividade=LIMITE_INATIVIDADE_SESSAO,
+    contador=None,
+    encerrar=None,
+    dormir=None,
+    relogio=None,
+    registrar=None,
+):
+    """Loop do monitor: encerra quando o runtime fica sem sessões ativas.
+
+    As dependências são injetáveis para os testes (``contador``,
+    ``encerrar``, ``dormir``, ``relogio`` e ``registrar``); em
+    produção usa :func:`contar_sessoes_ativas_streamlit`,
+    :func:`encerrar_por_inatividade`, as funções de ``time`` e
+    :func:`registrar_log_launcher`.
+
+    Duas transições vão para o ``launcher.log`` para que o usuário
+    consiga diagnosticar o ciclo de vida sem depender do console (o
+    executável compila sem ``stdout``): a primeira sessão ativa
+    detectada e o instante em que a contagem cai para zero e começa a
+    contagem de inatividade.
+
+    ``porta`` continua sendo repassada ao contador apenas por
+    compatibilidade: a contagem nativa de sessões do Streamlit não
+    depende de sockets do sistema operacional.
+    """
+
+    contador = contador or contar_sessoes_ativas_streamlit
+    encerrar = encerrar or encerrar_por_inatividade
+    dormir = dormir or time.sleep
+    relogio = relogio or time.monotonic
+    registrar = registrar or registrar_log_launcher
+
+    estado = novo_estado_monitor(relogio(), janela_inicial)
+    primeira_sessao_registrada = False
+
+    while True:
+        dormir(float(intervalo))
+
+        try:
+            sessoes = contador(porta)
+        except Exception:  # noqa: BLE001 - leitura do runtime best-effort
+            continue
+
+        if sessoes > 0 and not primeira_sessao_registrada:
+            primeira_sessao_registrada = True
+            registrar("primeira sessão ativa detectada")
+
+        # ``inicio_sem_sessao`` ainda é ``None``: a contagem de
+        # inatividade começa neste ciclo (se houver zero sessões).
+        iniciando_contagem = estado.get("inicio_sem_sessao") is None
+
+        if avaliar_monitor_sessao(
+            estado,
+            relogio(),
+            sessoes,
+            limite_inatividade=limite_inatividade,
+        ):
+            encerrar()
+
+            return
+
+        if (
+            sessoes == 0
+            and iniciando_contagem
+            and estado.get("inicio_sem_sessao") is not None
+        ):
+            registrar(
+                "0 sessões ativas; iniciando contagem de inatividade"
+            )
+
+
+def agendar_monitor_sessao(porta=PORTA_PREFERIDA):
+    """Dispara o monitor de sessão em uma thread daemon."""
+
+    thread = threading.Thread(
+        target=monitorar_sessoes_ativas,
+        kwargs={"porta": porta},
+        name="nexusgeo-monitor-sessao",
+        daemon=True,
+    )
+    thread.start()
+
+    return thread
 
 
 def pagina_do_aplicativo(porta=PORTA_PREFERIDA, timeout=1.0):
@@ -603,12 +1263,15 @@ def instancia_ativa(portas=None, verificar_pagina=True):
 
 
 def abrir_instancia_existente(porta):
-    """Abre a aba de uma instância que já está respondendo."""
+    """Abre a aba de uma instância que já está respondendo.
 
-    try:
-        return bool(webbrowser.open(url_aplicativo(porta)))
-    except Exception:  # noqa: BLE001 - navegador indisponível
-        return False
+    Usa :func:`abrir_navegador_url`, que tenta ``os.startfile`` com COM,
+    ``cmd.exe /c start`` e ``webbrowser.open`` para que a segunda
+    abertura do atalho sempre traga a aba para a frente, mesmo quando o
+    ``webbrowser`` do bundle não localiza o navegador padrão.
+    """
+
+    return abrir_navegador_url(url_aplicativo(porta))
 
 
 # ---------------------------------------------------------------------------
@@ -983,7 +1646,9 @@ def _mostrar_erro(titulo, mensagem):
         raiz.withdraw()
         messagebox.showerror(titulo, mensagem, parent=raiz)
         raiz.destroy()
-    except Exception:  # pragma: no cover - sem interface disponível
+    except Exception:  # noqa: BLE001, S110  # pragma: no cover - Tk
+        # Sem Tk disponível (executável sem console, sessão remota),
+        # o erro já foi impresso pelo chamador. Não há o que recuperar.
         pass
 
 
@@ -1017,7 +1682,7 @@ def preparar_ambiente():
 
 
 def executar_setup(forcar=False):
-    """Executa o assistente de modelos no próprio processo.
+    """Executa o configurador do modelo local no próprio processo.
 
     Rodar como função (em vez de subprocesso) mantém o ``tkinter``
     empacotado e o diretório de dados já resolvido.
@@ -1074,7 +1739,7 @@ def comando_servidor(porta):
     No pacote congelado o ``sys.executable`` é o próprio
     ``NexusGeoIA.exe``; no código-fonte é o interpretador atual rodando
     este arquivo. O argumento interno ``--servidor-streamlit`` evita que
-    o subprocesso repita o assistente de modelos e a detecção de
+    o subprocesso repita o configurador do modelo local e a detecção de
     instância.
     """
 
@@ -1112,6 +1777,34 @@ def executar_servidor_streamlit(porta, argumentos_extra=None):
         # O CLI do Streamlit lê ``sys.argv``; os argumentos do launcher
         # não podem vazar para ele.
         sys.argv = argumentos_streamlit(porta, argumentos_extra)
+
+        # O monitor só é ativado pelo launcher pai (env definido em
+        # iniciar_streamlit) para não encerrar o processo em testes ou em
+        # execuções manuais do modo interno.
+        #
+        # O agendamento acontece DEPOIS do import do CLI e imediatamente
+        # antes de ``cli_streamlit.main()``: importar o Streamlit de uma
+        # thread concorrente enquanto a thread principal ainda carregava
+        # ``streamlit.web.cli`` podia deixar a thread daemon presa no
+        # import, sem nunca consultar o runtime — o processo ficava
+        # aberto para sempre, mesmo após fechar a aba. O mesmo caminho é
+        # usado no executável congelado (``sys.frozen``) e no modo de
+        # desenvolvimento, pois ambos reexecutam este launcher com
+        # ``--servidor-streamlit``.
+        if os.environ.get(ENV_MONITOR_SESSAO) == "1":
+            try:
+                agendar_monitor_sessao(porta)
+            except Exception as erro:  # noqa: BLE001 - servidor deve subir
+                registrar_log_launcher(
+                    "falha ao iniciar o monitor de sessões: "
+                    f"{type(erro).__name__}: {erro}"
+                )
+            else:
+                registrar_log_launcher(
+                    "monitor de sessões iniciado "
+                    f"(janela={JANELA_INICIAL_SESSAO:.1f}s, "
+                    f"inatividade={LIMITE_INATIVIDADE_SESSAO:.1f}s)"
+                )
 
         try:
             cli_streamlit.main()
@@ -1152,8 +1845,19 @@ def iniciar_streamlit(porta, argumentos_extra=None):
             "Aviso: Job Object indisponível "
             f"({job.motivo}); o encerramento usará taskkill/atexit."
         )
+        registrar_log_launcher(
+            f"Job Object indisponível: {job.motivo}"
+        )
 
-    processo = subprocess.Popen(comando_servidor(porta))
+    # O monitor de sessão roda no subprocesso do Streamlit: ele enxerga
+    # o runtime real (e as sessões WebSocket ativas) e pode chamar
+    # os._exit(0) sem derrubar o launcher antes da limpeza do Job
+    # Object. A variável só é propagada aqui, nunca em execuções manuais
+    # do modo interno.
+    ambiente = os.environ.copy()
+    ambiente[ENV_MONITOR_SESSAO] = "1"
+
+    processo = subprocess.Popen(comando_servidor(porta), env=ambiente)
 
     _SERVIDOR["processo"] = processo
     _SERVIDOR["job"] = job
@@ -1164,12 +1868,24 @@ def iniciar_streamlit(porta, argumentos_extra=None):
             "o encerramento usará taskkill/atexit."
         )
 
+    registrar_log_launcher(
+        f"servidor Streamlit iniciado na porta {int(porta)} "
+        f"(pid {getattr(processo, 'pid', '?')})"
+    )
+
     # O navegador só é aberto quando a porta responde de fato.
     agendar_abertura_navegador(porta)
 
     try:
-        return int(processo.wait())
+        codigo = int(processo.wait())
+        registrar_log_launcher(
+            f"servidor Streamlit encerrou com código {codigo}"
+        )
+
+        return codigo
     except KeyboardInterrupt:  # pragma: no cover - Ctrl+C no console
+        registrar_log_launcher("encerrando por Ctrl+C no console")
+
         return 0
     finally:
         _limpar_servidor()
@@ -1334,6 +2050,589 @@ def executar_verificacao_imports(relatorio=None):
             pass
 
     return resultado
+
+
+@contextlib.contextmanager
+def ambiente_autoteste_isolado():
+    """Diretório de dados descartável para o import de ``app``.
+
+    O autoteste roda dentro do projeto e também no executável instalado.
+    Importar ``app`` executa o topo do Streamlit, que abre o banco do
+    histórico. Sem esta barreira, rodar a suíte de testes (ou o smoke
+    test do build) contra o código-fonte poderia criar, migrar ou
+    atualizar o ``data/nexusgeoia.db`` real do projeto.
+
+    As variáveis são restauradas ao final, mesmo quando o import falha.
+    """
+
+    import shutil
+    import tempfile
+
+    chaves = (
+        "ASSISTENTE_DATA_DIR",
+        "NEXUSGEO_DB_PATH",
+        "NEXUSGEO_TEST_MODE",
+    )
+    anterior = {chave: os.environ.get(chave) for chave in chaves}
+
+    # O %TEMP% do Windows pode ser somente leitura (sandbox, política de
+    # grupo). Nesse caso, usa uma pasta descartável dentro do projeto.
+    candidato = None
+
+    try:
+        candidato = Path(tempfile.mkdtemp(prefix="nexusgeo_autoteste_"))
+        (candidato / "data").mkdir(parents=True, exist_ok=True)
+    except OSError:
+        if candidato is not None:
+            shutil.rmtree(candidato, ignore_errors=True)
+
+        candidato = (
+            Path(__file__).resolve().parent
+            / "build"
+            / f"_tmp_autoteste_dados_{os.getpid()}_{time.time_ns()}"
+        )
+        (candidato / "data").mkdir(parents=True, exist_ok=True)
+
+    pasta = str(candidato)
+    dados = candidato
+    banco = dados / "data" / "nexusgeoia.db"
+
+    os.environ["ASSISTENTE_DATA_DIR"] = str(dados)
+    os.environ["NEXUSGEO_DB_PATH"] = str(banco)
+    # Impede a migração do histórico JSON legado no banco temporário.
+    os.environ["NEXUSGEO_TEST_MODE"] = "1"
+
+    try:
+        yield dados
+    finally:
+        for chave, valor in anterior.items():
+            if valor is None:
+                os.environ.pop(chave, None)
+            else:
+                os.environ[chave] = valor
+
+        # O schema temporário já foi descartado: nenhuma chamada
+        # posterior deve reutilizar o caminho em cache. O módulo pode
+        # ainda não ter sido importado; nesse caso não há cache a limpar.
+        history_db = sys.modules.get("services.history_db")
+
+        if history_db is not None:
+            history_db._INICIALIZADOS.discard(str(banco.resolve()))
+
+        # O sandbox do Windows pode negar a remoção de temporários; a
+        # guarda do banco real não depende dessa limpeza.
+        shutil.rmtree(pasta, ignore_errors=True)
+
+
+@contextlib.contextmanager
+def ambiente_modulo_app_isolado():
+    """Isola o módulo ``app`` em ``sys.modules`` durante o autoteste.
+
+    Importar ``app`` cria um módulo global que guarda handlers e o
+    ``session_state`` do Streamlit. Se essa referência sobrevive ao
+    autoteste, a interface real (ou uma segunda execução do autoteste)
+    reaproveita o módulo antigo, apontando para o diretório temporário
+    já removido. O bloco remove ``app`` e seus submódulos antes do
+    import e restaura exatamente o estado anterior ao sair — inclusive
+    quando nada existia, caso típico do ``--onedir``, em que o
+    autoteste roda em um processo limpo.
+    """
+
+    anteriores = {
+        nome: modulo
+        for nome, modulo in list(sys.modules.items())
+        if nome == "app" or nome.startswith("app.")
+    }
+
+    for nome in anteriores:
+        sys.modules.pop(nome, None)
+
+    try:
+        yield
+    finally:
+        # Remove o que o bloco importou antes de devolver o estado
+        # original; sem isso, o ``app`` temporário continuaria vivo.
+        carregados = [
+            nome
+            for nome in list(sys.modules)
+            if nome == "app" or nome.startswith("app.")
+        ]
+
+        for nome in carregados:
+            sys.modules.pop(nome, None)
+
+        sys.modules.update(anteriores)
+
+
+def modulos_internos_do_projeto(base=None):
+    """Lista, em ordem, todos os módulos internos importáveis do projeto.
+
+    A descoberta combina três fontes para funcionar no código-fonte e no
+    bundle congelado:
+
+    1. a árvore .py de core, services, ui, adapters e utils, quando ela
+       existe (desenvolvimento e pasta portátil);
+    2. o manifesto modulos_internos.json gerado pelo build (que viaja em
+       _internal), com um hiddenimport explícito por arquivo;
+    3. pkgutil.walk_packages sobre o pacote congelado, quando a árvore
+       .py não está disponível dentro do executável.
+    """
+
+    import pkgutil
+
+    base = Path(base or diretorio_recursos()).resolve()
+    modulos = {"config", "setup_llm"}
+
+    candidatos_manifesto = [
+        base / "modulos_internos.json",
+        Path(__file__).resolve().parent / "build" / "modulos_internos.json",
+    ]
+
+    for manifesto in candidatos_manifesto:
+        try:
+            if not manifesto.is_file():
+                continue
+
+            dados = json.loads(manifesto.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+
+        modulos.update(
+            str(nome)
+            for nome in dados.get("modulos") or []
+            if str(nome).strip()
+        )
+        break
+
+    for pacote in PACOTES_INTERNOS_SELFTEST:
+        pasta = base / pacote
+
+        if pasta.is_dir():
+            for arquivo in pasta.rglob("*.py"):
+                if "__pycache__" in arquivo.parts:
+                    continue
+
+                partes = list(
+                    arquivo.relative_to(base).with_suffix("").parts
+                )
+
+                if partes and partes[-1] == "__init__":
+                    partes.pop()
+
+                if partes:
+                    modulos.add(".".join(partes))
+
+            continue
+
+        try:
+            import importlib
+
+            pacote_importado = importlib.import_module(pacote)
+            caminhos = getattr(pacote_importado, "__path__", [])
+
+            for informacao in pkgutil.walk_packages(caminhos, pacote + "."):
+                modulos.add(informacao.name)
+        except Exception:  # noqa: BLE001 - pacote congelado sem walk
+            continue
+
+    return sorted(modulos)
+
+
+def verificar_modulos_internos(base=None):
+    """Importa CADA módulo interno e devolve as falhas encontradas."""
+
+    import importlib
+
+    nomes = modulos_internos_do_projeto(base)
+    falhas = []
+
+    for nome in nomes:
+        try:
+            importlib.import_module(nome)
+        except Exception as erro:  # noqa: BLE001 - qualquer falha reprova
+            falhas.append(f"{nome} ({type(erro).__name__}: {erro})")
+
+    if falhas:
+        raise ImportError("; ".join(falhas))
+
+    return {
+        "quantidade": len(nomes),
+        "modulos": nomes,
+    }
+
+
+def verificar_recursos_runtime(base=None):
+    """Confere .streamlit, prompts/, ui/ e finetuning/ no bundle.
+
+    O launcher faz chdir para _MEIPASS e o setup resolve o Modelfile por
+    config.diretorio_do_projeto(); por isso as quatro pastas precisam
+    existir tanto em desenvolvimento quanto dentro do executável.
+    """
+
+    base = Path(base or diretorio_recursos()).resolve()
+    problemas = []
+
+    config_toml = base / ".streamlit" / "config.toml"
+
+    if not config_toml.is_file():
+        problemas.append(f".streamlit/config.toml ausente: {config_toml}")
+
+    prompt_base = base / "prompts" / "system_base.txt"
+
+    if not prompt_base.is_file():
+        problemas.append(f"prompts/system_base.txt ausente: {prompt_base}")
+
+    pasta_ui = base / "ui"
+
+    if not pasta_ui.is_dir():
+        problemas.append(f"pasta ui/ ausente: {pasta_ui}")
+
+    pasta_finetuning = base / "finetuning"
+    modelfile_principal = (
+        pasta_finetuning / "Modelfile.nexusgeo-qwen3-4b-v2"
+    )
+
+    if not modelfile_principal.is_file():
+        problemas.append(
+            f"finetuning/Modelfile.nexusgeo-qwen3-4b-v2 ausente: "
+            f"{modelfile_principal}"
+        )
+
+    modelfiles = (
+        sorted(pasta_finetuning.glob("Modelfile.*"))
+        if pasta_finetuning.is_dir()
+        else []
+    )
+
+    if not modelfiles:
+        problemas.append(
+            f"nenhum template Modelfile.* em {pasta_finetuning}"
+        )
+
+    if problemas:
+        raise FileNotFoundError("; ".join(problemas))
+
+    return {
+        "base": str(base),
+        "streamlit_config": str(config_toml),
+        "prompts": str(base / "prompts"),
+        "ui": str(pasta_ui),
+        "finetuning": str(pasta_finetuning),
+        "modelfiles": [caminho.name for caminho in modelfiles],
+    }
+
+
+def verificar_banco_sqlite_wal():
+    """Inicializa o banco do app em pasta temporária e valida o modo WAL.
+
+    Usa services.db_service e services.history_db de verdade, mas com
+    ASSISTENTE_DATA_DIR/NEXUSGEO_DB_PATH apontando para um diretório
+    descartável: o banco real do usuário nunca é aberto nem migrado.
+    """
+
+    with ambiente_autoteste_isolado() as pasta:
+        import services.db_service as db_service
+        import services.history_db as history_db
+
+        caminho = Path(db_service.inicializar_banco())
+        caminho_historico = Path(history_db.inicializar())
+
+        conexao_sqlite = db_service.conectar()
+
+        try:
+            modo = conexao_sqlite.execute(
+                "PRAGMA journal_mode"
+            ).fetchone()[0]
+            foreign_keys = conexao_sqlite.execute(
+                "PRAGMA foreign_keys"
+            ).fetchone()[0]
+            busy_timeout = conexao_sqlite.execute(
+                "PRAGMA busy_timeout"
+            ).fetchone()[0]
+        finally:
+            conexao_sqlite.close()
+
+        if str(modo).lower() != "wal":
+            raise AssertionError(f"journal_mode inesperado: {modo!r}")
+
+        if int(foreign_keys) != 1:
+            raise AssertionError(
+                f"foreign_keys desligado: {foreign_keys!r}"
+            )
+
+        if int(busy_timeout) <= 0:
+            raise AssertionError(
+                f"busy_timeout inválido: {busy_timeout!r}"
+            )
+
+        if not caminho.is_file():
+            raise FileNotFoundError(f"banco não criado: {caminho}")
+
+        if caminho_historico.resolve() != caminho.resolve():
+            raise AssertionError(
+                "history_db e db_service resolveram bancos diferentes: "
+                f"{caminho_historico} x {caminho}"
+            )
+
+        return {
+            "temporario": str(pasta),
+            "banco": str(caminho),
+            "journal_mode": str(modo).lower(),
+            "foreign_keys": int(foreign_keys),
+            "busy_timeout": int(busy_timeout),
+        }
+
+
+def verificar_modelo_oficial():
+    """Valida a resolução do modelo oficial nexusgeo-qwen3-4b-v2-q4."""
+
+    import setup_llm
+    from services import llm_service
+
+    if setup_llm.NOME_MODELO_LOCAL != MODELO_OFICIAL:
+        raise AssertionError(
+            "setup_llm.NOME_MODELO_LOCAL divergente: "
+            f"{setup_llm.NOME_MODELO_LOCAL!r}"
+        )
+
+    if MODELO_OFICIAL not in llm_service.PREFERRED_LOCAL_MODELS:
+        raise AssertionError(
+            f"{MODELO_OFICIAL} ausente de PREFERRED_LOCAL_MODELS"
+        )
+
+    resolvido_config = config.resolver_modelo_inicial(
+        {"modelo_padrao": MODELO_OFICIAL},
+        {},
+    )
+
+    if resolvido_config != MODELO_OFICIAL:
+        raise AssertionError(
+            "config.resolver_modelo_inicial devolveu "
+            f"{resolvido_config!r}"
+        )
+
+    # configured_model explícito não consulta o Ollama: valida a regra de
+    # precedência sem depender de servidor nem de rede.
+    resolvido_servico = llm_service.resolve_default_ollama_model(
+        MODELO_OFICIAL
+    )
+
+    if resolvido_servico != MODELO_OFICIAL:
+        raise AssertionError(
+            "services.llm_service.resolve_default_ollama_model devolveu "
+            f"{resolvido_servico!r}"
+        )
+
+    modelfile = Path(setup_llm.caminho_modelfile_local())
+
+    if not modelfile.is_file():
+        raise FileNotFoundError(
+            f"Modelfile do modelo oficial ausente: {modelfile}"
+        )
+
+    return {
+        "modelo": MODELO_OFICIAL,
+        "modelfile": str(modelfile),
+        "config_local": str(config.caminho_config_local()),
+    }
+
+
+def _imports_de_topo_do_app(caminho):
+    """Extrai os imports de topo de app.py com ast, sem executá-lo."""
+
+    import ast
+
+    caminho = Path(caminho)
+    fonte = caminho.read_text(encoding="utf-8")
+
+    # compile() valida a sintaxe antes de qualquer import.
+    compile(fonte, str(caminho), "exec")
+    arvore = ast.parse(fonte, filename=str(caminho))
+    importados = set()
+
+    for no in arvore.body:
+        if isinstance(no, ast.Import):
+            for alias in no.names:
+                importados.add(alias.name)
+        elif isinstance(no, ast.ImportFrom):
+            if no.level:
+                continue
+
+            base = no.module or ""
+
+            if not base or base == "__future__":
+                continue
+
+            importados.add(base)
+
+            for alias in no.names:
+                if alias.name != "*":
+                    importados.add(f"{base}.{alias.name}")
+
+    return sorted(importados)
+
+
+def verificar_app_py_dry_run():
+    """Faz o dry-run de app.py: sintaxe + imports de topo, sem navegador.
+
+    Importar o módulo app executaria o topo do Streamlit e abriria o
+    banco do histórico. Aqui só compilamos o arquivo e importamos cada
+    módulo citado nos imports de topo; um ModuleNotFoundError no bundle
+    aparece antes de o servidor subir.
+    """
+
+    import importlib
+
+    caminho = caminho_app()
+
+    if not caminho.is_file():
+        raise FileNotFoundError(f"app.py ausente: {caminho}")
+
+    candidatos = _imports_de_topo_do_app(caminho)
+    falhas = []
+    importados = []
+
+    for nome in candidatos:
+        try:
+            importlib.import_module(nome)
+        except ModuleNotFoundError as erro:
+            # "from pacote import funcao" gera pacote.funcao; quando o
+            # nome ausente é exatamente o atributo, ele não é um módulo.
+            if erro.name == nome:
+                continue
+
+            falhas.append(f"{nome} ({type(erro).__name__}: {erro})")
+        except Exception as erro:  # noqa: BLE001 - qualquer falha reprova
+            falhas.append(f"{nome} ({type(erro).__name__}: {erro})")
+        else:
+            importados.append(nome)
+
+    if falhas:
+        raise ImportError("; ".join(falhas))
+
+    return {
+        "arquivo": str(caminho),
+        "imports_de_topo": len(candidatos),
+        "modulos_importados": len(importados),
+    }
+
+
+def autodiagnostico(relatorio=None):
+    """Smoke test real da cadeia de inicialização do executável.
+
+    Executa, sem abrir janela, servidor ou navegador:
+
+    1. recursos de runtime (.streamlit/config.toml, prompts/, ui/ e
+       finetuning/Modelfile.*);
+    2. import de TODOS os módulos de config, setup_llm, core.*,
+       services.*, ui.*, adapters.* e utils.*;
+    3. banco SQLite em pasta temporária com journal_mode=wal,
+       foreign_keys=ON e busy_timeout;
+    4. resolução do modelo oficial nexusgeo-qwen3-4b-v2-q4;
+    5. dry-run de app.py (sintaxe e imports de topo);
+    6. certificados TLS da cadeia ollama/httpx.
+
+    Devolve o relatório com ok e falhas. Quando relatorio é informado,
+    grava o JSON nesse caminho antes de devolver (o executável sem
+    console usa o arquivo como canal de saída).
+    """
+
+    verificacoes = []
+    falhas = []
+
+    def _gravar_progresso(concluido=False):
+        if not relatorio:
+            return
+
+        parcial = {
+            "ok": bool(concluido and not falhas),
+            "congelado": bool(getattr(sys, "frozen", False)),
+            "base_recursos": str(diretorio_recursos()),
+            "verificacoes": verificacoes,
+            "falhas": falhas,
+            "concluido": concluido,
+        }
+
+        try:
+            Path(relatorio).write_text(
+                json.dumps(parcial, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+        except OSError:
+            pass
+
+    def registrar(nome, executar):
+        _gravar_progresso()
+
+        try:
+            detalhe = executar()
+        except Exception as erro:  # noqa: BLE001 - qualquer falha reprova
+            falhas.append(f"{nome}: {type(erro).__name__}: {erro}")
+            verificacoes.append(
+                {"nome": nome, "ok": False, "erro": str(erro)}
+            )
+            _gravar_progresso()
+            return None
+
+        verificacoes.append(
+            {"nome": nome, "ok": True, "detalhe": detalhe}
+        )
+        _gravar_progresso()
+        return detalhe
+
+    registrar("recursos_runtime", verificar_recursos_runtime)
+    registrar("modulos_internos", verificar_modulos_internos)
+    registrar("banco_sqlite_wal", verificar_banco_sqlite_wal)
+    registrar("modelo_oficial", verificar_modelo_oficial)
+    registrar("app_py_dry_run", verificar_app_py_dry_run)
+    registrar("certificados", verificar_certificados)
+
+    resultado = {
+        "ok": not falhas,
+        "congelado": bool(getattr(sys, "frozen", False)),
+        "base_recursos": str(diretorio_recursos()),
+        "verificacoes": verificacoes,
+        "falhas": falhas,
+        "concluido": True,
+    }
+
+    _gravar_progresso(concluido=True)
+
+    return resultado
+
+
+def executar_autodiagnostico(relatorio=None):
+    """Roda autodiagnostico sem nunca abrir diálogo na tela."""
+
+    try:
+        return autodiagnostico(relatorio=relatorio)
+    except BaseException as erro:  # noqa: BLE001 - inclusive SystemExit
+        import traceback
+
+        relatorio_erro = {
+            "ok": False,
+            "congelado": bool(getattr(sys, "frozen", False)),
+            "base_recursos": str(diretorio_recursos()),
+            "verificacoes": [],
+            "falhas": [
+                f"erro fatal no self-test: {type(erro).__name__}: {erro}"
+            ],
+            "concluido": False,
+            "traceback": traceback.format_exc(),
+        }
+
+        _imprimir(relatorio_erro["traceback"])
+
+        if relatorio:
+            try:
+                Path(relatorio).write_text(
+                    json.dumps(relatorio_erro, ensure_ascii=False, indent=2),
+                    encoding="utf-8",
+                )
+            except OSError:
+                pass
+
+        return relatorio_erro
 
 
 def autoteste(relatorio=None):
@@ -1515,15 +2814,26 @@ def autoteste(relatorio=None):
     def _app_empacotado():
         import importlib
 
-        modulo = importlib.import_module("app")
-        caminho = getattr(modulo, "__file__", "")
+        # O import de ``app`` executa o topo do Streamlit e abre o banco
+        # do histórico. Ele acontece em um diretório descartável e com
+        # ``sys.modules['app']`` isolado: nada do módulo temporário
+        # sobrevive para a interface real nem para um novo autoteste.
+        with (
+            ambiente_autoteste_isolado() as pasta,
+            ambiente_modulo_app_isolado(),
+        ):
+            modulo = importlib.import_module("app")
+            caminho = getattr(modulo, "__file__", "")
 
-        if caminho and not Path(caminho).is_file():
-            raise FileNotFoundError(
-                f"app importado de caminho inválido: {caminho}"
-            )
+            if caminho and not Path(caminho).is_file():
+                raise FileNotFoundError(
+                    f"app importado de caminho inválido: {caminho}"
+                )
 
-        return {"arquivo": caminho}
+            return {
+                "arquivo": caminho,
+                "dados_isolados": str(pasta),
+            }
 
     registrar("app_empacotado", _app_empacotado)
 
@@ -1618,6 +2928,23 @@ def main(argv=None):
     if ARG_SERVIDOR in argumentos:
         return executar_servidor_streamlit(porta_do_argumento(argumentos))
 
+    # Encerramento manual imediato (encerrar.bat e botão da barra
+    # lateral). Lê o PID de instancia_ativa.json, mata a árvore e limpa o
+    # registro; não sobe setup, servidor nem navegador.
+    if ARG_ENCERRAR in argumentos:
+        encerrou = encerrar_instancia_ativa()
+
+        _imprimir(
+            f"{NOME_APLICATIVO}: "
+            + (
+                "instância encerrada."
+                if encerrou
+                else "nenhuma instância ativa registrada."
+            )
+        )
+
+        return 0
+
     # Validação de imports do bundle, sem GUI/servidor/navegador.
     if ARG_VERIFICAR_IMPORTS in argumentos:
         resultado = executar_verificacao_imports(
@@ -1634,8 +2961,26 @@ def main(argv=None):
 
         return 0 if resultado["ok"] else 1
 
+    # Autodiagnóstico completo (--self-test): valida a cadeia inteira de
+    # inicialização e sai, sem configurador, porta, navegador ou diálogo.
+    # É o gancho obrigatório do build_portatil.ps1.
+    if ARG_SELFTEST in argumentos or ARG_SELFTEST_ALTERNATIVO in argumentos:
+        resultado = executar_autodiagnostico(
+            relatorio=os.getenv(ENV_RELATORIO_SELFTEST)
+        )
+
+        for verificacao in resultado["verificacoes"]:
+            estado = "OK" if verificacao["ok"] else "FALHA"
+
+            _imprimir(f"[self-test] {estado}: {verificacao['nome']}")
+
+        for falha in resultado["falhas"]:
+            _imprimir(f"[self-test] {falha}")
+
+        return 0 if resultado["ok"] else 1
+
     # Autoteste tem prioridade absoluta: valida o bundle e sai, sem
-    # assistente de modelos, sem porta, sem navegador e sem diálogo. É o
+    # configurador do modelo local, sem porta, sem navegador e sem diálogo. É o
     # gancho usado pelo smoke test automatizado do build.
     if ARG_AUTOTESTE in argumentos or ARG_AUTOTESTE_ALTERNATIVO in argumentos:
         resultado = executar_autoteste(
@@ -1663,6 +3008,10 @@ def main(argv=None):
                 f"{NOME_APLICATIVO} já está em execução em "
                 f"{url_aplicativo(porta_existente)}; abrindo essa janela."
             )
+            registrar_log_launcher(
+                f"instância já ativa na porta {int(porta_existente)}; "
+                "abrindo a aba existente"
+            )
 
             abrir_instancia_existente(porta_existente)
 
@@ -1679,7 +3028,7 @@ def main(argv=None):
 
             if codigo != 0:
                 _imprimir(
-                    "Aviso: o assistente de modelos terminou com "
+                    "Aviso: o configurador do modelo local terminou com "
                     f"código {codigo}. O aplicativo continuará abrindo."
                 )
 
@@ -1689,9 +3038,13 @@ def main(argv=None):
             f"{config.APP_NAME} v{config.APP_VERSION} em "
             f"{url_aplicativo(porta)} (dados em {DIRETORIO_DADOS})"
         )
+        registrar_log_launcher(
+            f"porta escolhida: {int(porta)} "
+            f"(preferida {PORTA_PREFERIDA}, faixa de {TENTATIVAS_PORTA})"
+        )
 
         return iniciar_streamlit(porta)
-    except Exception as erro:  # erro fatal: mostra de forma legível
+    except Exception as erro:  # noqa: BLE001 - erro fatal exibido na GUI
         _mostrar_erro(
             f"{config.APP_NAME} v{config.APP_VERSION}",
             f"Não foi possível iniciar o aplicativo.\n\n"

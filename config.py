@@ -10,7 +10,7 @@ O módulo resolve três coisas:
    A variável de ambiente ``ASSISTENTE_DATA_DIR`` manda em ambos os
    casos e é o que o ``launcher_desktop.py`` define antes de importar
    este módulo.
-2. **Configuração local do assistente de modelos.** O
+2. **Configuração local do modelo oficial.** O
    ``config_local.json`` (gravado por ``setup_llm.py``) guarda
    ``modelos_instalados`` e ``modelo_padrao``. O modelo padrão do
    ``config_local.json`` tem prioridade sobre ``OLLAMA_MODEL`` do
@@ -37,7 +37,7 @@ from pathlib import Path
 # que precise exibir a identidade do produto deve importar estas
 # constantes em vez de repetir literais.
 APP_NAME = "NexusGeo IA"
-APP_VERSION = "0.9.0"
+APP_VERSION = "1.0.0"
 APP_DISPLAY_NAME = f"{APP_NAME} v{APP_VERSION}"
 
 # Nome sem espaços usado em ``%LOCALAPPDATA%`` e nos atalhos do instalador.
@@ -45,13 +45,16 @@ APP_DISPLAY_NAME = f"{APP_NAME} v{APP_VERSION}"
 NOME_APLICATIVO = "NexusGeoIA"
 
 # Modelo usado quando não há ``config_local.json`` nem ``OLLAMA_MODEL``.
+# É o fallback técnico único da v1.0.0: só entra quando o modelo oficial
+# fine-tuned não está registrado no Ollama.
 MODELO_FALLBACK = "qwen3:4b"
 
 # Ordem de prioridade do modelo padrão gravado em ``config_local.json``.
+# v1.0.0: o único modelo oficial é o fine-tuned nexusgeo-qwen3-4b-v2-q4;
+# qwen3:4b permanece apenas como fallback técnico único.
 PRIORIDADE_MODELOS_PADRAO = (
-    "qwen3:14b",
+    "nexusgeo-qwen3-4b-v2-q4",
     "qwen3:4b",
-    "qwen2.5:3b"
 )
 
 VERSAO_CONFIG_LOCAL = 1
@@ -167,7 +170,7 @@ def garantir_diretorios():
 
 
 # ---------------------------------------------------------------------------
-# config_local.json (assistente de modelos LLM)
+# config_local.json (modelo local oficial)
 # ---------------------------------------------------------------------------
 
 def normalizar_lista_modelos(valor):
@@ -272,15 +275,19 @@ def modelo_padrao_do_config(dados):
     """Escolhe o modelo padrão a partir do conteúdo do ``config_local.json``.
 
     Vale primeiro o campo ``modelo_padrao``; quando ele está ausente ou
-    vazio, aplica a prioridade ``qwen3:14b`` > ``qwen3:4b`` >
-    ``qwen2.5:3b`` sobre ``modelos_instalados``. Sem nenhum modelo
-    conhecido, tenta o primeiro item da lista.
+    vazio, usa ``modelo_ollama`` (gravado pelo ``setup_llm.py`` da
+    v1.0.0) e, por fim, aplica a prioridade do modelo oficial
+    ``nexusgeo-qwen3-4b-v2-q4`` > ``qwen3:4b`` sobre
+    ``modelos_instalados``. Sem nenhum modelo conhecido, tenta o
+    primeiro item da lista.
     """
 
     if not isinstance(dados, dict):
         return ""
 
-    padrao = str(dados.get("modelo_padrao") or "").strip()
+    padrao = str(
+        dados.get("modelo_padrao") or dados.get("modelo_ollama") or ""
+    ).strip()
 
     if padrao:
         return padrao
@@ -325,11 +332,11 @@ def resolver_modelo_inicial(config_local=None, ambiente=None):
 
 # Modelo padrão do Ollama.
 #
-# Precedência: ``config_local.json`` (escolha feita no assistente de
-# modelos, gravada por ``setup_llm.py``) > variável de ambiente
-# ``OLLAMA_MODEL`` > ``qwen3:4b`` (padrão do instalador offline). A
-# interface continua permitindo trocar para qualquer modelo instalado na
-# barra lateral, sem reiniciar a aplicação.
+# Precedência: ``config_local.json`` (modelo único oficial gravado por
+# ``setup_llm.py``) > variável de ambiente ``OLLAMA_MODEL`` >
+# ``nexusgeo-qwen3-4b-v2-q4`` quando registrado > ``qwen3:4b`` como
+# fallback técnico único. A interface continua permitindo trocar para
+# qualquer modelo instalado na barra lateral, sem reiniciar o app.
 _CONFIG_LOCAL_INICIAL = carregar_config_local()
 
 MODELOS_INSTALADOS = normalizar_lista_modelos(

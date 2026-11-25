@@ -8,7 +8,7 @@
     e valida o pacote como se fosse a primeira execucao em uma maquina
     limpa:
 
-    1. localiza dist\NexusGeoIA_v0.9.0_Portatil.zip (ou o .zip mais
+    1. localiza dist\NexusGeoIA_v0.10.5_Portatil.zip (ou o .zip mais
        recente em dist\);
     2. extrai em %TEMP%\NexusGeoIA_CleanRoom_Test e remove qualquer
        referencia a .venv ou a uma instalacao local de Python do PATH,
@@ -50,7 +50,7 @@
     powershell -ExecutionPolicy Bypass -File packaging\auditoria_clean_room.ps1
 
 .EXAMPLE
-    powershell -ExecutionPolicy Bypass -File packaging\auditoria_clean_room.ps1 -ZipPath dist\NexusGeoIA_v0.9.0_Portatil.zip
+    powershell -ExecutionPolicy Bypass -File packaging\auditoria_clean_room.ps1 -ZipPath dist\NexusGeoIA_v0.10.5_Portatil.zip
 #>
 
 [CmdletBinding()]
@@ -290,7 +290,7 @@ Add-Verificacao "Pasta temporaria isolada criada fora do repositorio" $true $Tem
 Write-Secao "Localizando o pacote portatil"
 
 $zipFinal = $null
-$zipPreferido = Join-Path $Dist "NexusGeoIA_v0.9.0_Portatil.zip"
+$zipPreferido = Join-Path $Dist "NexusGeoIA_v0.10.5_Portatil.zip"
 
 try {
     if ($ZipPath) {

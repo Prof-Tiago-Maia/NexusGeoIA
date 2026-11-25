@@ -1,48 +1,51 @@
-"""Assistente gráfico de seleção e download dos modelos LLM do Ollama.
+"""Assistente de configuração do modelo LLM local do NexusGeo IA v1.0.0.
 
-Este script roda **antes da primeira abertura** do NexusGeo IA. Ele:
+Este script roda **antes da primeira abertura** do aplicativo e mantém o
+fluxo único da release v1.0.0: o único modelo oficial é
+``nexusgeo-qwen3-4b-v2-q4`` (``nexusgeo-qwen3-4b-v2-Q4_K_M.gguf``).
 
-1. verifica se o Ollama está instalado e acessível em ``/api/tags``.
-   Quando o executável não existe, baixa o ``OllamaSetup.exe`` oficial
-   para uma pasta temporária única (com progresso em MB/percentual na
-   janela ou no terminal), exige assinatura Authenticode válida do
-   fornecedor Ollama e só então o instala em silêncio com
-   ``/VERYSILENT /NORESTART``;
-   em seguida inclui ``%LOCALAPPDATA%\\Programs\\Ollama`` no ``PATH`` da
-   sessão e sobe ``ollama serve`` em segundo plano, sem janela, quando o
-   serviço ainda não está respondendo;
-2. detecta a RAM total da máquina (``psutil`` quando disponível, senão
-   ``ctypes`` no Windows) e pré-marca o modelo mais adequado;
-3. apresenta **exatamente três modelos**, com checkboxes
-   (``tk.Checkbutton``) para selecionar um, dois ou todos, com perfil de
-   hardware, RAM ocupada e comportamento esperado em PT-BR ou EN;
-4. baixa os modelos marcados em sequência, consumindo
-   ``POST /api/pull`` em streaming e mostrando ``completed``/``total``
-   na barra de progresso;
-5. grava ``modelos_instalados`` e ``modelo_padrao`` no
-   ``config_local.json`` do diretório de dados do aplicativo.
+1. Garante o Ollama instalado e respondendo em ``/api/tags``; quando o
+   executável não existe, baixa o ``OllamaSetup.exe`` oficial, exige
+   assinatura Authenticode válida e instala em silêncio
+   (``/VERYSILENT /NORESTART``). Em seguida inclui
+   ``%LOCALAPPDATA%\\Programs\\Ollama`` no ``PATH`` da sessão e sobe
+   ``ollama serve`` em segundo plano quando necessário.
+2. Aplica o fluxo automático do modelo oficial:
+   a. se ``nexusgeo-qwen3-4b-v2-q4`` (ou ``:latest``) já está
+      registrado no Ollama, grava o ``config_local.json`` e encerra com
+      código ``0`` sem abrir janela (salvo ``--forcar``);
+   b. se o GGUF local existe em ``models\\`` ou no cache
+      ``D:\\hf_cache``, registra via
+      ``ollama create nexusgeo-qwen3-4b-v2-q4 -f <Modelfile>``,
+      grava o ``config_local.json`` e conclui;
+   c. se o GGUF não existe (pacote portátil leve), abre uma janela
+      minimalista de progresso (PT-BR/EN) que baixa o GGUF oficial dos
+      GitHub Releases para ``models\\`` e o registra no Ollama;
+   d. em falha de rede/download, aplica o fallback técnico único
+      ``ollama pull qwen3:4b``.
+3. Grava ``modelo_ollama``, ``modelo_padrao`` e
+   ``modelos_instalados`` no ``config_local.json`` do diretório de
+   dados do aplicativo.
 
-Não há campo de texto livre nem catálogo além dos três modelos
-suportados pelo instalador. A dependência de interface é apenas o
-``tkinter`` que acompanha o Python; quando ele não está disponível
-(Embeddable sem Tcl/Tk), o assistente cai para um seletor numérico no
-próprio terminal. O download usa ``requests`` e cai para ``urllib``
-quando o pacote não está instalado.
+Não existe catálogo de múltiplos modelos, detecção de RAM nem
+checkboxes de seleção. A dependência de interface é apenas o
+``tkinter`` que acompanha o Python; sem ele o mesmo fluxo roda no
+terminal. O download usa ``requests`` e cai para ``urllib`` quando o
+pacote não está instalado.
 
 Uso:
 
     python setup_llm.py
     python setup_llm.py --forcar
 
-``--forcar`` reabre o seletor mesmo quando o ``config_local.json`` já
-existe, permitindo baixar modelos adicionais a qualquer momento (é o que
-o atalho *Gerenciar Modelos LLM* do instalador executa).
+``--forcar`` reexecuta a verificação e o registro mesmo quando o
+modelo já está configurado (é o que o atalho *Gerenciar Modelo Local*
+do instalador executa).
 """
 
 from __future__ import annotations
 
 import argparse
-import ctypes
 import json
 import os
 import queue
@@ -54,7 +57,6 @@ import threading
 import time
 import urllib.error
 import urllib.request
-from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -144,138 +146,39 @@ IDIOMAS = ("pt", "en")
 
 
 # ---------------------------------------------------------------------------
-# Catálogo dos três modelos suportados
+# Modelo fine-tuned local (GGUF Q4_K_M)
 # ---------------------------------------------------------------------------
 
-@dataclass(frozen=True)
-class ModeloLLM:
-    """Um modelo do catálogo, com os textos nos dois idiomas."""
+# Nome com que o modelo fine-tuned validado é registrado no Ollama.
+# O GGUF fica fora do pacote (centenas de MB) e é referenciado pelo
+# Modelfile temporário gerado a partir do template versionado.
+NOME_MODELO_LOCAL = "nexusgeo-qwen3-4b-v2-q4"
+ARQUIVO_GGUF_LOCAL = "nexusgeo-qwen3-4b-v2-Q4_K_M.gguf"
+PASTA_GGUF_LOCAL = "models"
+MODELFILE_LOCAL = Path("finetuning") / f"Modelfile.{NOME_MODELO_LOCAL}"
+GGUF_CACHE_PADRAO = Path(r"D:\hf_cache") / ARQUIVO_GGUF_LOCAL
 
-    identificador: str
-    ram_gb: float
-    perfil_pt: str
-    perfil_en: str
-    comportamento_pt: str
-    comportamento_en: str
-
-    def perfil(self, idioma=IDIOMA_PADRAO):
-        """Perfil de hardware no idioma pedido (PT-BR como fallback)."""
-
-        return self.perfil_pt if idioma == "pt" else self.perfil_en
-
-    def comportamento(self, idioma=IDIOMA_PADRAO):
-        """Comportamento esperado no idioma pedido."""
-
-        return (
-            self.comportamento_pt
-            if idioma == "pt"
-            else self.comportamento_en
-        )
-
-    def ram_formatada(self, idioma=IDIOMA_PADRAO):
-        """RAM ocupada aproximada, com vírgula decimal em PT-BR."""
-
-        return formatar_ram(self.ram_gb, idioma)
+# Tempo máximo do ``ollama create`` (importação do GGUF e escrita das
+# camadas no armazenamento local do Ollama).
+TEMPO_LIMITE_CRIACAO_MODELO = 900.0
 
 
-CATALOGO_MODELOS = (
-    ModeloLLM(
-        identificador="qwen3:4b",
-        ram_gb=2.6,
-        perfil_pt=(
-            "Sem GPU dedicada + 16 GB RAM "
-            "(Padrão do Instalador Offline)"
-        ),
-        perfil_en=(
-            "No dedicated GPU + 16 GB RAM "
-            "(Offline Installer Default)"
-        ),
-        comportamento_pt=(
-            "Roteamento JSON rápido, síntese RAG fluida "
-            "(18–28 tok/s) sem travar o sistema."
-        ),
-        comportamento_en=(
-            "Fast JSON routing, fluid RAG synthesis "
-            "(18–28 tok/s) without freezing the system."
-        ),
-    ),
-    ModeloLLM(
-        identificador="qwen3:14b",
-        ram_gb=9.0,
-        perfil_pt=(
-            "Workstation / GPU dedicada "
-            "(≥ 8 GB VRAM ou 32+ GB RAM)"
-        ),
-        perfil_en=(
-            "Workstation / dedicated GPU "
-            "(≥ 8 GB VRAM or 32+ GB RAM)"
-        ),
-        comportamento_pt=(
-            "Máxima profundidade analítica para cruzamento de "
-            "múltiplos relatórios."
-        ),
-        comportamento_en=(
-            "Maximum analytical depth for cross-referencing "
-            "multiple reports."
-        ),
-    ),
-    ModeloLLM(
-        identificador="qwen2.5:3b",
-        ram_gb=1.9,
-        perfil_pt="Notebooks antigos (8 GB RAM)",
-        perfil_en="Older laptops (8 GB RAM)",
-        comportamento_pt=(
-            "Operação ultraleve para resumos objetivos e "
-            "consultas rápidas."
-        ),
-        comportamento_en=(
-            "Ultra-light operation for objective summaries and "
-            "quick queries."
-        ),
-    ),
+
+# ---------------------------------------------------------------------------
+# Modelo oficial único da v1.0.0
+# ---------------------------------------------------------------------------
+
+# GGUF oficial publicado nos GitHub Releases da release v1.0.0. É a única
+# origem de download do modelo fine-tuned; o pacote portátil leve não o
+# embute.
+URL_GGUF_OFICIAL = (
+    "https://github.com/Prof-Tiago-Maia/NexusGeoIA/releases/download/"
+    "v1.0.0/nexusgeo-qwen3-4b-v2-Q4_K_M.gguf"
 )
 
-
-def identificadores_modelos():
-    """IDs dos três modelos, na ordem exibida na interface."""
-
-    return [modelo.identificador for modelo in CATALOGO_MODELOS]
-
-
-def obter_modelo(identificador):
-    """Devolve o ``ModeloLLM`` do catálogo ou ``None``."""
-
-    for modelo in CATALOGO_MODELOS:
-        if modelo.identificador == identificador:
-            return modelo
-
-    return None
-
-
-def normalizar_modelos(selecionados):
-    """Filtra uma seleção, mantendo só IDs do catálogo e sem repetição."""
-
-    selecionados = config.normalizar_lista_modelos(selecionados)
-
-    return [
-        identificador
-        for identificador in selecionados
-        if obter_modelo(identificador) is not None
-    ]
-
-
-def formatar_ram(valor_gb, idioma=IDIOMA_PADRAO):
-    """Formata a RAM em GB com uma casa decimal (vírgula em PT-BR)."""
-
-    try:
-        texto = f"{float(valor_gb):.1f}"
-    except (TypeError, ValueError):
-        return "—"
-
-    if idioma == "pt":
-        texto = texto.replace(".", ",")
-
-    return f"~{texto} GB"
+# Fallback técnico único quando o download do GGUF oficial falha por rede
+# ou quando o ``ollama create`` não consegue registrar o modelo local.
+MODELO_TECNICO_FALLBACK = "qwen3:4b"
 
 
 def formatar_mb(valor_bytes, idioma=IDIOMA_PADRAO):
@@ -294,141 +197,41 @@ def formatar_mb(valor_bytes, idioma=IDIOMA_PADRAO):
     return f"{texto} MB"
 
 
-def estimar_ram_gb(selecionados):
-    """RAM total aproximada dos modelos marcados, em GB."""
+def nome_base_modelo(nome):
+    """Nome do modelo sem a tag (``modelo:latest`` -> ``modelo``)."""
 
-    total = 0.0
-
-    for identificador in normalizar_modelos(selecionados):
-        modelo = obter_modelo(identificador)
-
-        if modelo is not None:
-            total += modelo.ram_gb
-
-    return round(total, 1)
+    return str(nome or "").strip().split(":")[0]
 
 
-def modelo_padrao(selecionados):
-    """Modelo padrão do ``config_local.json`` segundo a prioridade do app.
+def caminho_gguf_destino():
+    """Destino oficial do GGUF dentro do pacote (``models\\...``)."""
 
-    ``qwen3:14b`` > ``qwen3:4b`` > ``qwen2.5:3b``; sem nenhum modelo
-    conhecido devolve string vazia.
+    return (
+        Path(config.diretorio_do_projeto())
+        / PASTA_GGUF_LOCAL
+        / ARQUIVO_GGUF_LOCAL
+    )
+
+
+def modelo_local_registrado(host=HOST_OLLAMA_PADRAO):
+    """Diz se o modelo oficial já está registrado no Ollama.
+
+    Aceita a tag exata (``nexusgeo-qwen3-4b-v2-q4``) e a variante
+    ``:latest``, comparando o nome sem a tag. Falha de rede devolve
+    ``False`` para o fluxo continuar pelo GGUF local.
     """
 
-    selecionados = normalizar_modelos(selecionados)
-
-    for preferido in config.PRIORIDADE_MODELOS_PADRAO:
-        if preferido in selecionados:
-            return preferido
-
-    return selecionados[0] if selecionados else ""
-
-
-# ---------------------------------------------------------------------------
-# Memória RAM da máquina
-# ---------------------------------------------------------------------------
-
-class _EstadoMemoriaWindows(ctypes.Structure):
-    """Estrutura ``MEMORYSTATUSEX`` usada pela API do Windows."""
-
-    _fields_ = [
-        ("dwLength", ctypes.c_ulong),
-        ("dwMemoryLoad", ctypes.c_ulong),
-        ("ullTotalPhys", ctypes.c_ulonglong),
-        ("ullAvailPhys", ctypes.c_ulonglong),
-        ("ullTotalPageFile", ctypes.c_ulonglong),
-        ("ullAvailPageFile", ctypes.c_ulonglong),
-        ("ullTotalVirtual", ctypes.c_ulonglong),
-        ("ullAvailVirtual", ctypes.c_ulonglong),
-        ("ullAvailExtendedVirtual", ctypes.c_ulonglong),
-    ]
-
-
-def _ram_psutil():
-    """RAM total via ``psutil`` quando o pacote está instalado."""
-
     try:
-        import psutil
-    except ImportError:
-        return None
+        instalados = modelos_instalados(host)
+    except (OSError, RuntimeError, ValueError):
+        return False
 
-    try:
-        return float(psutil.virtual_memory().total) / (1024 ** 3)
-    except (AttributeError, OSError, ValueError):
-        return None
+    base_oficial = nome_base_modelo(NOME_MODELO_LOCAL)
 
+    return any(
+        nome_base_modelo(nome) == base_oficial for nome in instalados
+    )
 
-def _ram_windows():
-    """RAM total via ``GlobalMemoryStatusEx`` (sem dependências)."""
-
-    if os.name != "nt":
-        return None
-
-    try:
-        estado = _EstadoMemoriaWindows()
-        estado.dwLength = ctypes.sizeof(_EstadoMemoriaWindows)
-
-        if not ctypes.windll.kernel32.GlobalMemoryStatusEx(
-            ctypes.byref(estado)
-        ):
-            return None
-
-        return float(estado.ullTotalPhys) / (1024 ** 3)
-    except (AttributeError, OSError, ValueError):
-        return None
-
-
-def _ram_posix():
-    """RAM total via ``sysconf`` em Linux/macOS."""
-
-    if not hasattr(os, "sysconf"):
-        return None
-
-    try:
-        paginas = os.sysconf("SC_PHYS_PAGES")
-        tamanho = os.sysconf("SC_PAGE_SIZE")
-    except (OSError, ValueError):
-        return None
-
-    if paginas <= 0 or tamanho <= 0:
-        return None
-
-    return float(paginas * tamanho) / (1024 ** 3)
-
-
-def memoria_total_gb():
-    """RAM total detectada em GB (arredondada) ou ``None``."""
-
-    for detector in (_ram_psutil, _ram_windows, _ram_posix):
-        valor = detector()
-
-        if valor and valor > 0:
-            return round(valor, 1)
-
-    return None
-
-
-def modelos_iniciais(ram_gb=None):
-    """Seleção pré-marcada conforme a RAM disponível.
-
-    - 8 GB ou menos: ``qwen2.5:3b``;
-    - 32 GB ou mais: ``qwen3:14b``;
-    - faixa intermediária (o padrão do instalador): ``qwen3:4b``.
-
-    Sem leitura de RAM, mantém o padrão ``qwen3:4b``.
-    """
-
-    if ram_gb is None:
-        ram_gb = memoria_total_gb()
-
-    if ram_gb is not None:
-        if ram_gb >= 31.0:
-            return ["qwen3:14b"]
-
-        if ram_gb < 12.0:
-            return ["qwen2.5:3b"]
-
-    return ["qwen3:4b"]
 
 
 # ---------------------------------------------------------------------------
@@ -1308,6 +1111,7 @@ def garantir_servico_ollama(
     }
 
 
+
 # ---------------------------------------------------------------------------
 # Diagnóstico de permissão na pasta de modelos
 # ---------------------------------------------------------------------------
@@ -1408,6 +1212,7 @@ def _detalhe_resposta(resposta):
         )[:500]
 
     return ""
+
 
 
 # ---------------------------------------------------------------------------
@@ -1531,6 +1336,7 @@ def baixar_modelo(
     return True
 
 
+
 def _inteiro(valor):
     """Converte ``completed``/``total`` em ``int`` ou ``None``."""
 
@@ -1541,34 +1347,27 @@ def _inteiro(valor):
 
 
 def baixar_modelos(
-    selecionados,
+    modelos,
     host=HOST_OLLAMA_PADRAO,
     ao_progresso=None,
     sessao=None,
     idioma=IDIOMA_PADRAO,
 ):
-    """Baixa os modelos marcados em sequência.
+    """Baixa os modelos pedidos em sequência pelo ``/api/pull``.
 
-    Emite eventos para a interface:
-
-    - ``inicio`` (com ``indice``/``total``/``modelo`` e o texto pronto);
-    - ``progresso`` (``completed``/``total``/``percentual``);
-    - ``concluido`` e ``erro`` por modelo;
-    - ``fim`` com ``instalados`` e ``falhas``.
-
-    Uma falha em um modelo não interrompe os seguintes. Falhas de
-    permissão na pasta de modelos recebem a orientação bilíngue de
-    :func:`orientacao_permissao` no texto do evento e em ``falhas``.
-    Devolve o dicionário do evento ``fim``.
+    Usado pelo fallback técnico (``qwen3:4b``) e por diagnósticos. Não
+    existe catálogo: qualquer identificador válido do Ollama é aceito.
+    Uma falha não interrompe os seguintes; falhas de permissão recebem a
+    orientação bilíngue de :func:`orientacao_permissao`.
     """
 
-    selecionados = normalizar_modelos(selecionados)
+    modelos = config.normalizar_lista_modelos(modelos)
 
-    if not selecionados:
-        raise ValueError("Selecione pelo menos um modelo para baixar")
+    if not modelos:
+        raise ValueError("Informe pelo menos um modelo para baixar")
 
     sessao = sessao or _criar_sessao()
-    total = len(selecionados)
+    total = len(modelos)
     instalados = []
     falhas = {}
 
@@ -1576,7 +1375,7 @@ def baixar_modelos(
         if ao_progresso is not None:
             ao_progresso(evento)
 
-    for indice, identificador in enumerate(selecionados, start=1):
+    for indice, identificador in enumerate(modelos, start=1):
         emitir(
             {
                 "tipo": "inicio",
@@ -1598,21 +1397,9 @@ def baixar_modelos(
                 ao_progresso=ao_progresso,
                 sessao=sessao,
             )
-        except ErroDownload as erro:
-            falhas[identificador] = mensagem_de_download(str(erro), idioma)
-            emitir(
-                {
-                    "tipo": "erro",
-                    "indice": indice,
-                    "total": total,
-                    "modelo": identificador,
-                    "mensagem": falhas[identificador],
-                }
-            )
-            continue
-        except Exception as erro:  # rede inesperada: segue para o próximo
+        except Exception as erro:
             falhas[identificador] = mensagem_de_download(
-                f"{type(erro).__name__}: {erro}",
+                str(erro) or f"{type(erro).__name__}",
                 idioma,
             )
             emitir(
@@ -1640,7 +1427,7 @@ def baixar_modelos(
         "tipo": "fim",
         "instalados": instalados,
         "falhas": falhas,
-        "modelo_padrao": modelo_padrao(instalados),
+        "modelo": instalados[0] if instalados else "",
     }
 
     emitir(resultado)
@@ -1649,15 +1436,257 @@ def baixar_modelos(
 
 
 # ---------------------------------------------------------------------------
+# Registro do modelo fine-tuned local (GGUF)
+# ---------------------------------------------------------------------------
+
+def caminho_gguf_local():
+    r"""Caminho do GGUF fine-tuned disponível, ou None.
+
+    A busca segue a ordem models/nexusgeo-qwen3-4b-v2-Q4_K_M.gguf
+    (relativa à raiz do projeto) e o cache do ambiente de treino em
+    D:\hf_cache. Nenhum caminho é criado: apenas verificado.
+    """
+
+    raiz = Path(config.diretorio_do_projeto())
+    candidatos = (
+        raiz / PASTA_GGUF_LOCAL / ARQUIVO_GGUF_LOCAL,
+        GGUF_CACHE_PADRAO,
+    )
+
+    for candidato in candidatos:
+        try:
+            if candidato.is_file():
+                return candidato
+        except OSError:
+            continue
+
+    return None
+
+
+def caminho_modelfile_local():
+    """Caminho do template Modelfile do modelo fine-tuned."""
+
+    return Path(config.diretorio_do_projeto()) / MODELFILE_LOCAL
+
+
+def _modelfile_com_gguf(caminho_modelfile, caminho_gguf):
+    """Devolve o template com apenas a linha FROM apontando o GGUF."""
+
+    # utf-8-sig remove o BOM que o template versionado carrega; sem
+    # isso a primeira linha não casaria com FROM.
+    texto = Path(caminho_modelfile).read_text(encoding="utf-8-sig")
+    linhas = texto.splitlines(keepends=True)
+
+    for indice, linha in enumerate(linhas):
+        if linha.lstrip().upper().startswith("FROM "):
+            final = "\r\n" if linha.endswith("\r\n") else "\n"
+            linhas[indice] = f"FROM {Path(caminho_gguf).resolve()}{final}"
+            return "".join(linhas)
+
+    raise ValueError("O Modelfile não possui uma linha FROM")
+
+
+def registrar_modelo_local(
+    host=HOST_OLLAMA_PADRAO,
+    ao_progresso=None,
+    gguf=None,
+    modelfile=None,
+    executavel=None,
+):
+    """Registra o GGUF fine-tuned no Ollama via ollama create.
+
+    Só age quando o GGUF e o template existem; sem eles devolve None
+    e o fluxo normal de ollama pull continua. O Modelfile enviado é
+    temporário (apenas a linha FROM trocada pelo caminho absoluto do
+    GGUF) e é removido ao final, com sucesso ou falha. Devolve o nome
+    registrado ou None quando não foi possível concluir.
+    """
+
+    caminho_gguf = Path(gguf) if gguf else caminho_gguf_local()
+    caminho_template = (
+        Path(modelfile) if modelfile else caminho_modelfile_local()
+    )
+
+    if caminho_gguf is None or not caminho_gguf.is_file():
+        return None
+
+    if not caminho_template.is_file():
+        return None
+
+    executavel = executavel or localizar_ollama()
+
+    if not executavel:
+        return None
+
+    try:
+        conteudo = _modelfile_com_gguf(caminho_template, caminho_gguf)
+    except (OSError, ValueError) as erro:
+        _emitir_progresso(
+            ao_progresso,
+            {
+                "tipo": "modelo_local",
+                "etapa": "erro",
+                "modelo": NOME_MODELO_LOCAL,
+                "mensagem": f"{type(erro).__name__}: {erro}",
+            },
+        )
+        return None
+
+    _emitir_progresso(
+        ao_progresso,
+        {
+            "tipo": "modelo_local",
+            "etapa": "registrando",
+            "modelo": NOME_MODELO_LOCAL,
+        },
+    )
+
+    pasta = Path(tempfile.mkdtemp(prefix="nexusgeo_modelfile_"))
+    modelfile_temporario = pasta / "Modelfile"
+
+    try:
+        modelfile_temporario.write_text(conteudo, encoding="utf-8")
+
+        ambiente = os.environ.copy()
+        servidor = str(host or HOST_OLLAMA_PADRAO).strip()
+        servidor = servidor.split("://")[-1].rstrip("/")
+        ambiente.setdefault("OLLAMA_HOST", servidor)
+
+        resultado = subprocess.run(
+            [
+                str(executavel),
+                "create",
+                NOME_MODELO_LOCAL,
+                "-f",
+                str(modelfile_temporario),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=TEMPO_LIMITE_CRIACAO_MODELO,
+            env=ambiente,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError) as erro:
+        _emitir_progresso(
+            ao_progresso,
+            {
+                "tipo": "modelo_local",
+                "etapa": "erro",
+                "modelo": NOME_MODELO_LOCAL,
+                "mensagem": f"{type(erro).__name__}: {erro}",
+            },
+        )
+        return None
+    finally:
+        shutil.rmtree(pasta, ignore_errors=True)
+
+    if resultado.returncode != 0:
+        detalhe = (resultado.stderr or resultado.stdout or "").strip()
+        _emitir_progresso(
+            ao_progresso,
+            {
+                "tipo": "modelo_local",
+                "etapa": "erro",
+                "modelo": NOME_MODELO_LOCAL,
+                "mensagem": detalhe[:500] or "ollama create falhou",
+            },
+        )
+        return None
+
+    _emitir_progresso(
+        ao_progresso,
+        {
+            "tipo": "modelo_local",
+            "etapa": "registrado",
+            "modelo": NOME_MODELO_LOCAL,
+        },
+    )
+
+    return NOME_MODELO_LOCAL
+
+
+
+# ---------------------------------------------------------------------------
+# Download do GGUF oficial (GitHub Releases)
+# ---------------------------------------------------------------------------
+
+def baixar_gguf_oficial(
+    url=URL_GGUF_OFICIAL,
+    destino=None,
+    ao_progresso=None,
+    abrir=None,
+    timeout=TIMEOUT_DOWNLOAD_OLLAMA,
+):
+    """Baixa o GGUF oficial para ``models\\`` com progresso em MB.
+
+    A gravação é atômica: os bytes vão para ``.part`` e só substituem o
+    destino final depois do download completo. Qualquer falha de rede ou
+    disco remove o parcial e levanta :class:`ErroDownload`.
+    """
+
+    destino = Path(destino) if destino is not None else caminho_gguf_destino()
+    parcial = destino.with_name(destino.name + ".part")
+    abrir = abrir or (lambda endereco: _abrir_url(endereco, timeout=timeout))
+
+    baixado = 0
+
+    try:
+        destino.parent.mkdir(parents=True, exist_ok=True)
+
+        with abrir(url) as resposta:
+            total = _tamanho_download(resposta)
+
+            with open(parcial, "wb") as arquivo:
+                while True:
+                    bloco = resposta.read(TAMANHO_BLOCO_DOWNLOAD)
+
+                    if not bloco:
+                        break
+
+                    arquivo.write(bloco)
+                    baixado += len(bloco)
+
+                    _emitir_progresso(
+                        ao_progresso,
+                        {
+                            "tipo": "progresso",
+                            "baixado_bytes": baixado,
+                            "total_bytes": total,
+                            "percentual": calcular_percentual(
+                                baixado,
+                                total,
+                            ),
+                        },
+                    )
+
+        if baixado <= 0:
+            raise ErroDownload("O download do GGUF retornou vazio")
+
+        os.replace(parcial, destino)
+    except ErroDownload:
+        try:
+            parcial.unlink()
+        except OSError:
+            pass
+        raise
+    except Exception as erro:
+        try:
+            parcial.unlink()
+        except OSError:
+            pass
+        raise ErroDownload(
+            f"Falha ao baixar o GGUF oficial: {type(erro).__name__}: {erro}"
+        ) from erro
+
+    return destino
+
+
+# ---------------------------------------------------------------------------
 # Persistência no config_local.json
 # ---------------------------------------------------------------------------
 
 def precisa_configurar(caminho=None):
-    """Indica se o assistente ainda precisa ser executado.
-
-    Verdadeiro quando o ``config_local.json`` não existe ou não define
-    um ``modelo_padrao`` utilizável.
-    """
+    """Indica se o assistente ainda precisa ser executado."""
 
     dados = config.carregar_config_local(caminho)
 
@@ -1672,17 +1701,17 @@ def modelos_ja_instalados(caminho=None):
     return config.normalizar_lista_modelos(dados.get("modelos_instalados"))
 
 
-def persistir_selecao(modelos_baixados, caminho=None):
-    """Grava ``modelos_instalados`` e ``modelo_padrao`` no config local.
+def persistir_modelo(modelo=NOME_MODELO_LOCAL, caminho=None):
+    """Grava o modelo único da v1.0.0 no ``config_local.json``.
 
-    A lista acumula o que já estava gravado (o ``--forcar`` pode baixar
-    modelos adicionais) e o padrão segue a prioridade
-    ``qwen3:14b`` > ``qwen3:4b`` > ``qwen2.5:3b``.
+    Escreve ``modelo_ollama``, ``modelo_padrao`` e
+    ``modelos_instalados``. A lista acumula o que já estava gravado,
+    sempre com o modelo configurado nesta execução na primeira posição.
     """
 
-    novos = normalizar_modelos(modelos_baixados)
+    modelo = str(modelo or "").strip()
 
-    if not novos:
+    if not modelo:
         raise ValueError("Nenhum modelo válido para gravar")
 
     destino = (
@@ -1691,18 +1720,18 @@ def persistir_selecao(modelos_baixados, caminho=None):
 
     dados = config.carregar_config_local(destino)
 
-    acumulados = config.normalizar_lista_modelos(
-        config.normalizar_lista_modelos(dados.get("modelos_instalados"))
-        + novos
+    anteriores = config.normalizar_lista_modelos(
+        dados.get("modelos_instalados")
     )
+
+    acumulados = config.normalizar_lista_modelos([modelo] + anteriores)
 
     dados.update(
         {
             "versao_config": config.VERSAO_CONFIG_LOCAL,
+            "modelo_ollama": modelo,
             "modelos_instalados": acumulados,
-            # O padrão segue os modelos marcados nesta execução; a lista
-            # acumulada guarda tudo o que já foi baixado pelo assistente.
-            "modelo_padrao": modelo_padrao(novos),
+            "modelo_padrao": modelo,
             "atualizado_em": datetime.now(timezone.utc)
             .replace(microsecond=0)
             .isoformat(),
@@ -1715,36 +1744,214 @@ def persistir_selecao(modelos_baixados, caminho=None):
 
 
 # ---------------------------------------------------------------------------
+# Fluxo único do modelo oficial
+# ---------------------------------------------------------------------------
+
+def _resultado_fluxo(modelo, origem, dados):
+    """Monta o dicionário de resultado do fluxo único."""
+
+    return {
+        "modelo": modelo,
+        "origem": origem,
+        "config": dados,
+        "caminho_config": str(config.caminho_config_local()),
+    }
+
+
+def _aplicar_fallback_tecnico(
+    motivo,
+    host=HOST_OLLAMA_PADRAO,
+    idioma=IDIOMA_PADRAO,
+    emitir=None,
+):
+    """Fallback técnico único: ``ollama pull qwen3:4b``."""
+
+    emitir = emitir or (lambda _evento: None)
+
+    emitir(
+        {
+            "tipo": "status",
+            "etapa": "fallback",
+            "modelo": MODELO_TECNICO_FALLBACK,
+            "mensagem": str(motivo or ""),
+        }
+    )
+
+    def _progresso(evento):
+        tipo = evento.get("tipo")
+
+        if tipo == "inicio":
+            emitir(
+                {
+                    "tipo": "status",
+                    "etapa": "fallback_andamento",
+                    "modelo": MODELO_TECNICO_FALLBACK,
+                }
+            )
+        elif tipo == "progresso":
+            emitir(evento)
+
+    try:
+        baixar_modelo(
+            MODELO_TECNICO_FALLBACK,
+            host=host,
+            ao_progresso=_progresso,
+        )
+    except Exception as erro:
+        raise ErroDownload(
+            "Falha no fallback técnico "
+            f"({MODELO_TECNICO_FALLBACK}): {type(erro).__name__}: {erro}"
+        ) from erro
+
+    dados = persistir_modelo(MODELO_TECNICO_FALLBACK)
+    resultado = _resultado_fluxo(
+        MODELO_TECNICO_FALLBACK,
+        "fallback",
+        dados,
+    )
+
+    emitir({"tipo": "finalizado", "resultado": resultado})
+
+    return resultado
+
+
+def garantir_modelo_oficial(
+    forcar=False,
+    host=HOST_OLLAMA_PADRAO,
+    idioma=IDIOMA_PADRAO,
+    ao_progresso=None,
+):
+    """Executa o fluxo único do modelo oficial e devolve o resultado.
+
+    Ordem: modelo já registrado -> GGUF local -> download do GGUF oficial
+    -> fallback técnico ``qwen3:4b``. ``forcar=True`` ignora o atalho
+    do modelo já registrado e refaz o registro/download.
+    """
+
+    def emitir(evento):
+        _emitir_progresso(ao_progresso, evento)
+
+    if not forcar and modelo_local_registrado(host):
+        dados = persistir_modelo(NOME_MODELO_LOCAL)
+        resultado = _resultado_fluxo(
+            NOME_MODELO_LOCAL,
+            "registrado",
+            dados,
+        )
+        emitir({"tipo": "finalizado", "resultado": resultado})
+        return resultado
+
+    emitir({"tipo": "status", "etapa": "verificando"})
+
+    # Garante o Ollama instalado e respondendo antes de registrar ou
+    # baixar qualquer coisa. Sem isso o fluxo falharia no primeiro uso
+    # de uma máquina que ainda não tem o serviço.
+    servico = garantir_servico_ollama(
+        host,
+        callback_progresso=ao_progresso,
+    )
+
+    if not servico.get("ativo"):
+        raise ErroDownload(
+            "Ollama indisponível: "
+            f"{servico.get('mensagem') or 'serviço não respondeu'}"
+        )
+
+    gguf = caminho_gguf_local()
+
+    if gguf is None:
+        emitir({"tipo": "status", "etapa": "baixando_gguf"})
+
+        try:
+            gguf = baixar_gguf_oficial(ao_progresso=ao_progresso)
+        except ErroDownload as erro:
+            return _aplicar_fallback_tecnico(
+                erro,
+                host=host,
+                idioma=idioma,
+                emitir=emitir,
+            )
+
+    emitir({"tipo": "status", "etapa": "registrando"})
+
+    registrado = registrar_modelo_local(
+        host=host,
+        ao_progresso=ao_progresso,
+        gguf=gguf,
+    )
+
+    if registrado:
+        dados = persistir_modelo(NOME_MODELO_LOCAL)
+        resultado = _resultado_fluxo(
+            NOME_MODELO_LOCAL,
+            "gguf",
+            dados,
+        )
+        emitir({"tipo": "finalizado", "resultado": resultado})
+        return resultado
+
+    return _aplicar_fallback_tecnico(
+        "ollama create não registrou o GGUF local",
+        host=host,
+        idioma=idioma,
+        emitir=emitir,
+    )
+
+
+
+# ---------------------------------------------------------------------------
 # Textos da interface (PT-BR / EN)
 # ---------------------------------------------------------------------------
 
 TEXTOS = {
     "pt": {
         "titulo": (
-            f"{config.APP_NAME} v{config.APP_VERSION} — Configuração de Modelos Locais (Ollama)"
+            f"{config.APP_NAME} v{config.APP_VERSION} — Modelo Local"
         ),
         "subtitulo": (
-            "Escolha um, dois ou os três modelos abaixo. Eles serão "
-            "baixados pelo Ollama; a primeira execução pode levar alguns "
-            "minutos, dependendo da conexão."
+            "Configuração do modelo oficial nexusgeo-qwen3-4b-v2-q4 "
+            "(GGUF Q4_K_M). O download pode levar alguns minutos."
         ),
         "idioma": "Idioma / Language:",
-        "verificando": "Verificando o serviço Ollama...",
-        "aguardando_ollama": (
-            "Aguardando o Ollama responder em {host} "
-            "(até 5 segundos)..."
+        "status_iniciando": "Preparando a configuração do modelo oficial...",
+        "status_verificando": "Verificando o modelo oficial no Ollama...",
+        "status_baixando_gguf": (
+            "Baixando o modelo oficial ({baixado} de {total})..."
         ),
-        "servico_ativo": "Ollama ativo em {host}",
-        "servico_iniciado": "Ollama iniciado em {host}",
-        "servico_inativo": (
-            "Ollama não encontrado. Instale o Ollama para baixar os "
-            "modelos e abra este assistente novamente."
+        "status_baixando_gguf_sem_total": (
+            "Baixando o modelo oficial: {baixado}..."
         ),
-        "servico_inativo_detalhe": (
-            "Ollama indisponível em {host}: {mensagem}"
+        "status_registrando": "Registrando o modelo oficial no Ollama...",
+        "status_fallback": (
+            "Download indisponível; aplicando o fallback técnico "
+            "{modelo}..."
         ),
-        "verificar": "Verificar novamente",
-        "baixar_ollama": "Baixar o Ollama",
+        "status_fallback_andamento": (
+            "Baixando o fallback técnico {modelo} pelo Ollama..."
+        ),
+        "status_concluido": "Modelo configurado: {modelo}",
+        "sucesso_titulo": "Modelo pronto",
+        "sucesso_mensagem": (
+            "Modelo configurado: {modelo}\n\n"
+            "Configuração gravada em:\n{config}"
+        ),
+        "falha_titulo": "Falha na configuração",
+        "falha_mensagem": (
+            "Não foi possível configurar o modelo local:\n{mensagem}"
+        ),
+        "cancelar": "Cancelar",
+        "fechar_titulo": "Fechar assistente",
+        "fechar_baixando": (
+            "O download está em andamento. Deseja realmente fechar?"
+        ),
+        "ja_configurado": (
+            "Modelo oficial já configurado. Use --forcar para refazer "
+            "a verificação e o registro."
+        ),
+        "sem_interface": (
+            "Não foi possível abrir a interface gráfica (Tkinter). "
+            "Executando o mesmo fluxo no terminal."
+        ),
         "ollama_ausente": (
             "O Ollama não foi encontrado. Iniciando a instalação "
             "automática e silenciosa..."
@@ -1767,57 +1974,6 @@ TEXTOS = {
             "Não foi possível instalar o Ollama automaticamente: "
             "{mensagem}"
         ),
-        "ram_total": "Memória RAM detectada: {ram}",
-        "ram_indisponivel": "Memória RAM não detectada",
-        "recomendado": "Sugestão para esta máquina: {modelos}",
-        "tag_recomendado": "[Recomendado]",
-        "coluna_modelo": "Modelo",
-        "coluna_perfil": "Perfil de Hardware",
-        "coluna_ram": "RAM Ocupada",
-        "coluna_comportamento": "Comportamento Esperado",
-        "memoria_selecionada": "Espaço/RAM estimado dos modelos marcados: {ram}",
-        "memoria_nenhuma": (
-            "Marque pelo menos um modelo para continuar."
-        ),
-        "selecione_ao_menos": (
-            "Selecione pelo menos um dos três modelos para continuar."
-        ),
-        "baixar_continuar": "Baixar selecionados e continuar",
-        "cancelar": "Cancelar",
-        "preparando": "Preparando o download...",
-        "baixando": "Baixando {indice}/{total}: {modelo}...",
-        "concluido_modelo": "Concluído: {modelo}",
-        "falha_modelo": "Falha em {modelo}: {mensagem}",
-        "sucesso_titulo": "Modelos prontos",
-        "sucesso_mensagem": (
-            "Modelos instalados: {modelos}\n\n"
-            "Modelo padrão: {padrao}\n\n"
-            "Configuração gravada em:\n{config}"
-        ),
-        "falhas_titulo": "Alguns modelos não foram baixados",
-        "falhas_mensagem": (
-            "Instalados: {instalados}\n\n"
-            "Falhas:\n{falhas}\n\n"
-            "A configuração dos modelos instalados foi gravada e você "
-            "pode tentar novamente com --forcar."
-        ),
-        "falha_geral_titulo": "Falha no download",
-        "falha_geral_mensagem": (
-            "Não foi possível concluir o download:\n{mensagem}"
-        ),
-        "falha_config_titulo": "Configuração não gravada",
-        "falha_config_mensagem": (
-            "Os modelos foram baixados, mas o config_local.json não pôde "
-            "ser gravado:\n{mensagem}\n\n"
-            "Os modelos continuam disponíveis no Ollama; selecione-os "
-            "pela barra lateral do assistente."
-        ),
-        "sem_ollama_titulo": "Ollama indisponível",
-        "sem_ollama_mensagem": (
-            "O Ollama não está acessível em {host}.\n\n"
-            "Instale pelo site oficial, abra o Ollama e clique em "
-            "“Verificar novamente”."
-        ),
         "permissao_modelos_titulo": (
             "Permissão negada na pasta de modelos do Ollama"
         ),
@@ -1837,82 +1993,68 @@ TEXTOS = {
             "Depois feche e reabra o NexusGeo IA e o Ollama.\n\n"
             "Erro original: {mensagem}"
         ),
-        "ollama_inicio_falhou": (
-            "Não foi possível iniciar o Ollama automaticamente. "
-            "Abra o aplicativo do Ollama e tente de novo."
-        ),
-        "fechar_baixando": (
-            "O download está em andamento. Deseja realmente fechar?"
-        ),
-        "fechar_titulo": "Fechar assistente",
-        "instalados": "Já instalados: {modelos}",
-        "nenhum_instalado": "Nenhum modelo do catálogo está instalado ainda.",
-        "ja_configurado": (
-            "A configuração dos modelos já existe. Use --forcar para "
-            "reabrir o seletor."
-        ),
-        "sem_interface": (
-            "Não foi possível abrir a interface gráfica (Tkinter). "
-            "Abrindo o seletor de modelos no terminal."
-        ),
         "cli_titulo": (
-            "=== Seletor de modelos no terminal ==="
+            "=== Configuração do modelo local "
+            f"({config.APP_NAME} v{config.APP_VERSION}) ==="
         ),
-        "cli_prompt": (
-            "Escolha com 1, 2 ou 3 (vários com vírgula, ex.: 1,3); "
-            "ENTER vazio usa a sugestão para esta máquina: "
+        "cli_sucesso": (
+            "Configuração gravada em:\n{config}\nModelo: {modelo}"
         ),
-        "cli_invalido": (
-            "Opção inválida. Digite 1, 2 ou 3 (ex.: 1,3) ou ENTER "
-            "para a sugestão."
+        "cli_falha": (
+            "Não foi possível configurar o modelo local: {mensagem}"
         ),
         "cli_cancelado": (
             "Operação cancelada; nenhum modelo foi configurado."
         ),
-        "cli_ollama_inativo": (
-            "O Ollama não está acessível em {host}. Instale/abra o "
-            "Ollama e execute novamente:\n"
-            "    python\\python.exe setup_llm.py --forcar"
-        ),
-        "cli_sucesso": (
-            "Configuração gravada em:\n{config}\n"
-            "Modelo padrão: {padrao}"
-        ),
-        "cli_falha_config": (
-            "Os modelos foram baixados, mas o config_local.json não "
-            "pôde ser gravado: {mensagem}"
-        ),
-        "cli_sem_instalados": (
-            "Nenhum modelo foi baixado. Verifique o Ollama e tente "
-            "novamente."
-        ),
     },
     "en": {
         "titulo": (
-            f"{config.APP_NAME} v{config.APP_VERSION} — Local Model Configuration (Ollama)"
+            f"{config.APP_NAME} v{config.APP_VERSION} — Local Model"
         ),
         "subtitulo": (
-            "Pick one, two, or all three models below. They will be "
-            "downloaded by Ollama; the first run may take a few minutes "
-            "depending on your connection."
+            "Configuration of the official nexusgeo-qwen3-4b-v2-q4 model "
+            "(Q4_K_M GGUF). The download may take a few minutes."
         ),
         "idioma": "Language / Idioma:",
-        "verificando": "Checking the Ollama service...",
-        "aguardando_ollama": (
-            "Waiting for Ollama to answer at {host} "
-            "(up to 5 seconds)..."
+        "status_iniciando": "Preparing the official model configuration...",
+        "status_verificando": "Checking the official model in Ollama...",
+        "status_baixando_gguf": (
+            "Downloading the official model ({baixado} of {total})..."
         ),
-        "servico_ativo": "Ollama is up at {host}",
-        "servico_iniciado": "Ollama started at {host}",
-        "servico_inativo": (
-            "Ollama was not found. Install Ollama to download the "
-            "models, then open this assistant again."
+        "status_baixando_gguf_sem_total": (
+            "Downloading the official model: {baixado}..."
         ),
-        "servico_inativo_detalhe": (
-            "Ollama is unavailable at {host}: {mensagem}"
+        "status_registrando": "Registering the official model in Ollama...",
+        "status_fallback": (
+            "Download unavailable; applying the technical fallback "
+            "{modelo}..."
         ),
-        "verificar": "Check again",
-        "baixar_ollama": "Download Ollama",
+        "status_fallback_andamento": (
+            "Downloading the technical fallback {modelo} through Ollama..."
+        ),
+        "status_concluido": "Model configured: {modelo}",
+        "sucesso_titulo": "Model ready",
+        "sucesso_mensagem": (
+            "Model configured: {modelo}\n\n"
+            "Configuration written to:\n{config}"
+        ),
+        "falha_titulo": "Configuration failed",
+        "falha_mensagem": (
+            "The local model could not be configured:\n{mensagem}"
+        ),
+        "cancelar": "Cancel",
+        "fechar_titulo": "Close assistant",
+        "fechar_baixando": (
+            "A download is in progress. Do you really want to close?"
+        ),
+        "ja_configurado": (
+            "The official model is already configured. Use --forcar to "
+            "rerun the check and registration."
+        ),
+        "sem_interface": (
+            "The graphical interface (Tkinter) could not be opened. "
+            "Running the same flow in the terminal."
+        ),
         "ollama_ausente": (
             "Ollama was not found. Starting the automatic silent "
             "installation..."
@@ -1934,55 +2076,6 @@ TEXTOS = {
         "ollama_instalacao_falhou": (
             "Ollama could not be installed automatically: {mensagem}"
         ),
-        "ram_total": "Detected RAM: {ram}",
-        "ram_indisponivel": "RAM could not be detected",
-        "recomendado": "Suggested for this machine: {modelos}",
-        "tag_recomendado": "[Recommended]",
-        "coluna_modelo": "Model",
-        "coluna_perfil": "Hardware Profile",
-        "coluna_ram": "RAM Usage",
-        "coluna_comportamento": "Expected Behavior",
-        "memoria_selecionada": "Estimated RAM for the selected models: {ram}",
-        "memoria_nenhuma": "Select at least one model to continue.",
-        "selecione_ao_menos": (
-            "Select at least one of the three models to continue."
-        ),
-        "baixar_continuar": "Download selected and continue",
-        "cancelar": "Cancel",
-        "preparando": "Preparing the download...",
-        "baixando": "Downloading {indice}/{total}: {modelo}...",
-        "concluido_modelo": "Completed: {modelo}",
-        "falha_modelo": "Failed on {modelo}: {mensagem}",
-        "sucesso_titulo": "Models ready",
-        "sucesso_mensagem": (
-            "Installed models: {modelos}\n\n"
-            "Default model: {padrao}\n\n"
-            "Configuration written to:\n{config}"
-        ),
-        "falhas_titulo": "Some models were not downloaded",
-        "falhas_mensagem": (
-            "Installed: {instalados}\n\n"
-            "Failures:\n{falhas}\n\n"
-            "The installed models were saved and you can try again "
-            "with --forcar."
-        ),
-        "falha_geral_titulo": "Download failed",
-        "falha_geral_mensagem": (
-            "The download could not be completed:\n{mensagem}"
-        ),
-        "falha_config_titulo": "Configuration not saved",
-        "falha_config_mensagem": (
-            "The models were downloaded, but config_local.json could not "
-            "be written:\n{mensagem}\n\n"
-            "The models remain available in Ollama; choose them in the "
-            "assistant sidebar."
-        ),
-        "sem_ollama_titulo": "Ollama unavailable",
-        "sem_ollama_mensagem": (
-            "Ollama is not reachable at {host}.\n\n"
-            "Install it from the official site, start Ollama and click "
-            "“Check again”."
-        ),
         "permissao_modelos_titulo": (
             "Access denied in the Ollama models folder"
         ),
@@ -2003,53 +2096,18 @@ TEXTOS = {
             "Then close and reopen NexusGeo IA and Ollama.\n\n"
             "Original error: {mensagem}"
         ),
-        "ollama_inicio_falhou": (
-            "Ollama could not be started automatically. Open the Ollama "
-            "app and try again."
-        ),
-        "fechar_baixando": (
-            "A download is in progress. Do you really want to close?"
-        ),
-        "fechar_titulo": "Close assistant",
-        "instalados": "Already installed: {modelos}",
-        "nenhum_instalado": "No catalog model is installed yet.",
-        "ja_configurado": (
-            "The model configuration already exists. Use --forcar to "
-            "reopen the selector."
-        ),
-        "sem_interface": (
-            "The graphical interface (Tkinter) could not be opened. "
-            "Falling back to the terminal model selector."
-        ),
         "cli_titulo": (
-            "=== Terminal model selector ==="
+            "=== Local model configuration "
+            f"({config.APP_NAME} v{config.APP_VERSION}) ==="
         ),
-        "cli_prompt": (
-            "Choose 1, 2 or 3 (several with commas, e.g. 1,3); "
-            "an empty ENTER uses this machine's suggestion: "
+        "cli_sucesso": (
+            "Configuration written to:\n{config}\nModel: {modelo}"
         ),
-        "cli_invalido": (
-            "Invalid option. Type 1, 2 or 3 (e.g. 1,3) or press ENTER "
-            "for the suggestion."
+        "cli_falha": (
+            "The local model could not be configured: {mensagem}"
         ),
         "cli_cancelado": (
             "Operation cancelled; no model was configured."
-        ),
-        "cli_ollama_inativo": (
-            "Ollama is not reachable at {host}. Install/start Ollama "
-            "and run again:\n"
-            "    python\\python.exe setup_llm.py --forcar"
-        ),
-        "cli_sucesso": (
-            "Configuration written to:\n{config}\n"
-            "Default model: {padrao}"
-        ),
-        "cli_falha_config": (
-            "The models were downloaded, but config_local.json could "
-            "not be written: {mensagem}"
-        ),
-        "cli_sem_instalados": (
-            "No model was downloaded. Check Ollama and try again."
         ),
     },
 }
@@ -2070,234 +2128,45 @@ def texto(chave, idioma=IDIOMA_PADRAO, **valores):
     return mensagem
 
 
+
 # ---------------------------------------------------------------------------
-# Interface gráfica
+# Interface gráfica minimalista (progresso do fluxo único)
 # ---------------------------------------------------------------------------
 
-# Geometria da tabela de modelos. Cada coluna tem uma largura mínima
-# (``minsize``) e um peso de expansão; a última coluna absorve o espaço
-# restante da janela. O mesmo ``padx`` é usado no cabeçalho e em todas as
-# células para que o título "RAM Ocupada" fique exatamente sobre os
-# valores ``~2,6 GB``, ``~9,0 GB`` e ``~1,9 GB``.
-COLUNAS_TABELA_MODELOS = (
-    ("coluna_modelo", 135, 0),
-    ("coluna_perfil", 250, 0),
-    ("coluna_ram", 105, 0),
-    ("coluna_comportamento", 390, 1),
-)
-
-PADX_COLUNA_TABELA = 8
-WRAPLENGTH_PERFIL = 235
-WRAPLENGTH_COMPORTAMENTO = 375
-
-# Altura inicial da janela e do Canvas da lista: os três cartões cabem
-# sem a faixa branca que sobrava com a janela de 760 px. A altura final
-# é calculada a partir do conteúdo já montado (ver
-# ``_ajustar_altura_inicial``), o que também acomoda fontes maiores.
-LARGURA_INICIAL_JANELA = 1040
-ALTURA_INICIAL_JANELA = 560
-ALTURA_MINIMA_JANELA = 500
-ALTURA_CANVAS_MODELOS = 260
-
-
-def configurar_grade_tabela(contêiner):
-    """Aplica ``minsize`` e ``weight`` às quatro colunas da tabela."""
-
-    for indice, (_chave, largura, peso) in enumerate(
-        COLUNAS_TABELA_MODELOS
-    ):
-        contêiner.columnconfigure(
-            indice,
-            minsize=largura,
-            weight=peso,
-        )
-
-
-def texto_tag_recomendado(idioma=IDIOMA_PADRAO):
-    """Rótulo discreto do modelo sugerido para o hardware detectado."""
-
-    return texto("tag_recomendado", idioma)
-
-
-def montar_tabela_modelos(
-    contêiner,
-    idioma=IDIOMA_PADRAO,
-    variaveis=None,
-    ao_marcar=None,
-    recomendados=(),
-):
-    """Monta cabeçalho e linhas na mesma grade ``grid`` de 4 colunas.
-
-    Cabeçalho e linhas compartilham as larguras mínimas, o ``padx`` e o
-    alinhamento à esquerda, garantindo que cada valor fique abaixo do
-    seu título. Devolve a lista de tuplas ``(check, perfil, ram,
-    comportamento)`` na ordem de ``CATALOGO_MODELOS``.
-    """
-
-    from tkinter import ttk
-
-    variaveis = variaveis or {}
-    recomendados = set(recomendados or ())
-
-    for filho in contêiner.winfo_children():
-        filho.destroy()
-
-    configurar_grade_tabela(contêiner)
-
-    for coluna, (chave, *_resto) in enumerate(COLUNAS_TABELA_MODELOS):
-        ttk.Label(
-            contêiner,
-            text=texto(chave, idioma),
-            style="Cabecalho.TLabel",
-        ).grid(
-            row=0,
-            column=coluna,
-            sticky="w",
-            padx=PADX_COLUNA_TABELA,
-            pady=(4, 8),
-        )
-
-    linhas = []
-
-    for indice, modelo in enumerate(CATALOGO_MODELOS):
-        # Uma linha de conteúdo e outra de separador; o separador dá o
-        # aspecto de cartão sem quebrar o alinhamento das colunas.
-        linha = 1 + indice * 2
-
-        caixa = ttk.Frame(contêiner)
-        caixa.grid(
-            row=linha,
-            column=0,
-            sticky="nw",
-            padx=PADX_COLUNA_TABELA,
-            pady=(10, 6),
-        )
-
-        check = ttk.Checkbutton(
-            caixa,
-            variable=variaveis.get(modelo.identificador),
-            command=ao_marcar,
-        )
-        check.grid(row=0, column=0, sticky="nw")
-
-        ttk.Label(
-            caixa,
-            text=modelo.identificador,
-            font=("Segoe UI", 10, "bold"),
-            anchor="w",
-        ).grid(row=0, column=1, sticky="w", padx=(6, 0))
-
-        if modelo.identificador in recomendados:
-            ttk.Label(
-                caixa,
-                text=texto_tag_recomendado(idioma),
-                foreground="#1b5e20",
-                font=("Segoe UI", 8),
-                anchor="w",
-            ).grid(row=1, column=1, sticky="w", padx=(6, 0))
-
-        perfil = ttk.Label(
-            contêiner,
-            text=modelo.perfil(idioma),
-            wraplength=WRAPLENGTH_PERFIL,
-            justify="left",
-            anchor="w",
-        )
-        perfil.grid(
-            row=linha,
-            column=1,
-            sticky="nw",
-            padx=PADX_COLUNA_TABELA,
-            pady=(10, 6),
-        )
-
-        ram = ttk.Label(
-            contêiner,
-            text=modelo.ram_formatada(idioma),
-            anchor="w",
-        )
-        ram.grid(
-            row=linha,
-            column=2,
-            sticky="nw",
-            padx=PADX_COLUNA_TABELA,
-            pady=(10, 6),
-        )
-
-        comportamento = ttk.Label(
-            contêiner,
-            text=modelo.comportamento(idioma),
-            wraplength=WRAPLENGTH_COMPORTAMENTO,
-            justify="left",
-            anchor="w",
-        )
-        comportamento.grid(
-            row=linha,
-            column=3,
-            sticky="nw",
-            padx=PADX_COLUNA_TABELA,
-            pady=(10, 6),
-        )
-
-        ttk.Separator(contêiner, orient="horizontal").grid(
-            row=linha + 1,
-            column=0,
-            columnspan=len(COLUNAS_TABELA_MODELOS),
-            sticky="ew",
-            pady=(0, 2),
-        )
-
-        linhas.append((check, perfil, ram, comportamento))
-
-    return linhas
+LARGURA_JANELA = 640
+ALTURA_JANELA = 300
 
 
 def abrir_interface(forcar=False, oculta=False):
-    """Abre a janela do assistente e só retorna quando ela fecha.
+    """Abre a janela de progresso do fluxo único e só retorna ao fechar.
 
-    O ``tkinter`` é importado aqui dentro para que este módulo possa ser
-    importado (e testado) em ambientes sem interface gráfica.
-    ``oculta`` mantém a janela fora da tela, útil no teste de fumaça
-    offline que valida a montagem da tabela.
+    Sem tabela, sem checkboxes e sem sugestão por RAM: a janela apenas
+    acompanha o download/registro do modelo oficial, com troca de
+    idioma PT-BR/EN. O ``tkinter`` é importado aqui dentro para o
+    módulo continuar testável em ambientes sem interface.
     """
 
     import tkinter as tk
     from tkinter import messagebox, ttk
 
-    host = HOST_OLLAMA_PADRAO
-
-    ram_total = memoria_total_gb()
-
     estado = {
         "idioma": IDIOMA_PADRAO,
-        "baixando": False,
-        "verificando": False,
-        "servico_ativo": None,
+        "em_andamento": False,
+        "baixado_bytes": 0,
+        "total_bytes": None,
         "fila": queue.Queue(),
-        "vars": {},
-        "instalados": [
-            identificador
-            for identificador in modelos_ja_instalados()
-            if obter_modelo(identificador) is not None
-        ],
     }
-
-    iniciais = estado["instalados"] or modelos_iniciais(ram_total)
 
     raiz = tk.Tk()
     raiz.title(texto("titulo"))
-    raiz.geometry(f"{LARGURA_INICIAL_JANELA}x{ALTURA_INICIAL_JANELA}")
-    raiz.minsize(1000, ALTURA_MINIMA_JANELA)
+    raiz.geometry(f"{LARGURA_JANELA}x{ALTURA_JANELA}")
+    raiz.minsize(560, 280)
 
     if oculta:
         raiz.withdraw()
 
     try:
         raiz.columnconfigure(0, weight=1)
-        # A lista mantém a altura fixa de ``ALTURA_CANVAS_MODELOS``; o
-        # peso fica em 0 para a janela não esticar o Canvas e recriar a
-        # faixa branca abaixo das três linhas.
-        raiz.rowconfigure(2, weight=0)
     except tk.TclError:  # pragma: no cover - janela exótica
         pass
 
@@ -2308,38 +2177,33 @@ def abrir_interface(forcar=False, oculta=False):
     except tk.TclError:  # pragma: no cover - tema indisponível
         pass
 
-    estilo.configure("Titulo.TLabel", font=("Segoe UI", 16, "bold"))
+    estilo.configure("Titulo.TLabel", font=("Segoe UI", 15, "bold"))
     estilo.configure("Subtitulo.TLabel", foreground="#4a4a4a")
-    estilo.configure("Cabecalho.TLabel", font=("Segoe UI", 10, "bold"))
     estilo.configure("Destaque.TLabel", font=("Segoe UI", 10, "bold"))
-    estilo.configure("Cartao.TFrame", relief="solid", borderwidth=1)
-    estilo.configure("Barra.TFrame")
-    estilo.configure("Accent.TButton", font=("Segoe UI", 10, "bold"))
 
-    # -- Cabeçalho ------------------------------------------------------
-    cabecalho = ttk.Frame(raiz, padding=(18, 14, 18, 6))
-    cabecalho.grid(row=0, column=0, sticky="ew")
-    cabecalho.columnconfigure(0, weight=1)
+    quadro = ttk.Frame(raiz, padding=(18, 16, 18, 14))
+    quadro.grid(row=0, column=0, sticky="nsew")
+    quadro.columnconfigure(0, weight=1)
 
     rotulo_titulo = ttk.Label(
-        cabecalho,
+        quadro,
         text=texto("titulo"),
         style="Titulo.TLabel",
     )
     rotulo_titulo.grid(row=0, column=0, sticky="w")
 
     rotulo_subtitulo = ttk.Label(
-        cabecalho,
+        quadro,
         text=texto("subtitulo"),
         style="Subtitulo.TLabel",
-        wraplength=720,
+        wraplength=560,
         justify="left",
     )
-    rotulo_subtitulo.grid(row=1, column=0, sticky="w", pady=(4, 0))
+    rotulo_subtitulo.grid(row=1, column=0, sticky="w", pady=(4, 12))
 
     idioma_var = tk.StringVar(master=raiz, value=estado["idioma"])
 
-    seletor_idioma = ttk.Frame(cabecalho)
+    seletor_idioma = ttk.Frame(quadro)
     seletor_idioma.grid(row=0, column=1, rowspan=2, sticky="ne", padx=(12, 0))
 
     rotulo_idioma = ttk.Label(seletor_idioma, text=texto("idioma"))
@@ -2367,397 +2231,86 @@ def abrir_interface(forcar=False, oculta=False):
     )
     radio_en.grid(row=1, column=1, sticky="e", padx=(8, 0))
 
-    # -- Status do Ollama e da RAM -------------------------------------
-    faixa_status = ttk.Frame(raiz, padding=(18, 0, 18, 8))
-    faixa_status.grid(row=1, column=0, sticky="ew")
-    faixa_status.columnconfigure(0, weight=1)
-
-    status_var = tk.StringVar(master=raiz, value=texto("verificando"))
+    status_var = tk.StringVar(master=raiz, value=texto("status_iniciando"))
     rotulo_status = ttk.Label(
-        faixa_status,
+        quadro,
         textvariable=status_var,
         style="Destaque.TLabel",
-    )
-    rotulo_status.grid(row=0, column=0, sticky="w")
-
-    ram_texto = (
-        texto("ram_total", ram=formatar_ram(ram_total, estado["idioma"]))
-        if ram_total is not None
-        else texto("ram_indisponivel")
-    )
-
-    ram_var = tk.StringVar(master=raiz, value=ram_texto)
-    rotulo_ram = ttk.Label(faixa_status, textvariable=ram_var)
-    rotulo_ram.grid(row=1, column=0, sticky="w", pady=(2, 0))
-
-    sugestao = ", ".join(modelos_iniciais(ram_total))
-    rotulo_sugestao = ttk.Label(
-        faixa_status,
-        text=texto("recomendado", modelos=sugestao),
-        style="Subtitulo.TLabel",
-    )
-    rotulo_sugestao.grid(row=2, column=0, sticky="w", pady=(2, 0))
-
-    botoes_status = ttk.Frame(faixa_status)
-    botoes_status.grid(row=0, column=1, rowspan=3, sticky="e")
-
-    botao_baixar_ollama = ttk.Button(
-        botoes_status,
-        text=texto("baixar_ollama"),
-        command=lambda: _abrir_site_ollama(),
-    )
-    botao_verificar = ttk.Button(
-        botoes_status,
-        text=texto("verificar"),
-        command=lambda: _iniciar_verificacao(),
-    )
-    botao_verificar.grid(row=0, column=0, padx=(0, 6))
-
-    # -- Tabela rolável de modelos --------------------------------------
-    area_modelos = ttk.Frame(raiz, padding=(18, 0, 18, 0))
-    area_modelos.grid(row=2, column=0, sticky="nsew")
-    area_modelos.columnconfigure(0, weight=1)
-    area_modelos.rowconfigure(0, weight=1)
-
-    canvas = tk.Canvas(
-        area_modelos,
-        highlightthickness=0,
-        borderwidth=0,
-        height=ALTURA_CANVAS_MODELOS,
-    )
-    canvas.grid(row=0, column=0, sticky="nsew")
-
-    barra_rolagem = ttk.Scrollbar(
-        area_modelos,
-        orient="vertical",
-        command=canvas.yview,
-    )
-    barra_rolagem.grid(row=0, column=1, sticky="ns")
-
-    canvas.configure(yscrollcommand=barra_rolagem.set)
-
-    interior = ttk.Frame(canvas)
-    janela = canvas.create_window((0, 0), window=interior, anchor="nw")
-
-    def _ajustar_rolagem(_evento=None):
-        try:
-            canvas.configure(scrollregion=canvas.bbox("all"))
-        except tk.TclError:  # pragma: no cover
-            pass
-
-    def _ajustar_largura(evento):
-        try:
-            canvas.itemconfigure(janela, width=evento.width)
-        except tk.TclError:  # pragma: no cover
-            pass
-
-    interior.bind("<Configure>", _ajustar_rolagem)
-    canvas.bind("<Configure>", _ajustar_largura)
-
-    def _rolar(evento):
-        try:
-            canvas.yview_scroll(int(-1 * (evento.delta / 120)), "units")
-        except tk.TclError:  # pragma: no cover
-            pass
-
-    canvas.bind_all("<MouseWheel>", _rolar)
-
-    for modelo in CATALOGO_MODELOS:
-        estado["vars"][modelo.identificador] = tk.BooleanVar(
-            master=raiz,
-            value=modelo.identificador in iniciais,
-        )
-
-    linhas_modelos = []
-
-    def _selecionados():
-        return [
-            modelo.identificador
-            for modelo in CATALOGO_MODELOS
-            if estado["vars"][modelo.identificador].get()
-        ]
-
-    def _atualizar_resumo(*_):
-        selecionados = _selecionados()
-
-        if selecionados:
-            resumo_var.set(
-                texto(
-                    "memoria_selecionada",
-                    ram=formatar_ram(
-                        estimar_ram_gb(selecionados),
-                        estado["idioma"],
-                    ),
-                )
-            )
-
-            # Enquanto a verificação/início do Ollama está em andamento
-            # (ou um download já roda), confirmar abriria o falso alerta
-            # de "Ollama indisponível": o botão fica bloqueado até o
-            # serviço responder de fato.
-            if estado["verificando"] or estado["baixando"]:
-                botao_confirmar.state(["disabled"])
-            else:
-                botao_confirmar.state(["!disabled"])
-        else:
-            resumo_var.set(texto("memoria_nenhuma"))
-            botao_confirmar.state(["disabled"])
-
-    def _montar_modelos():
-        """Recria a tabela na grade única, preservando as variáveis."""
-
-        recomendados = modelos_iniciais(ram_total)
-
-        linhas_modelos.clear()
-        linhas_modelos.extend(
-            montar_tabela_modelos(
-                interior,
-                idioma=estado["idioma"],
-                variaveis=estado["vars"],
-                ao_marcar=_atualizar_resumo,
-                recomendados=recomendados,
-            )
-        )
-
-        _ajustar_rolagem()
-
-    # -- Rodapé: resumo, progresso e ações ------------------------------
-    rodape = ttk.Frame(raiz, padding=(18, 10, 18, 14))
-    rodape.grid(row=3, column=0, sticky="ew")
-    rodape.columnconfigure(0, weight=1)
-
-    resumo_var = tk.StringVar(master=raiz, value="")
-
-    ttk.Label(
-        rodape,
-        textvariable=resumo_var,
-        style="Destaque.TLabel",
-    ).grid(row=0, column=0, sticky="w")
-
-    progresso_var = tk.StringVar(master=raiz, value="")
-
-    rotulo_progresso = ttk.Label(
-        rodape,
-        textvariable=progresso_var,
-        wraplength=720,
+        wraplength=560,
         justify="left",
     )
-    rotulo_progresso.grid(row=1, column=0, sticky="w", pady=(6, 4))
+    rotulo_status.grid(row=2, column=0, columnspan=2, sticky="w")
 
     barra_progresso = ttk.Progressbar(
-        rodape,
+        quadro,
         orient="horizontal",
         mode="determinate",
         maximum=100.0,
-        length=680,
     )
-    barra_progresso.grid(row=2, column=0, sticky="ew")
-
-    acoes = ttk.Frame(rodape)
-    acoes.grid(row=0, column=1, rowspan=3, sticky="e", padx=(12, 0))
-
-    botao_confirmar = ttk.Button(
-        acoes,
-        text=texto("baixar_continuar"),
-        style="Accent.TButton",
+    barra_progresso.grid(
+        row=3,
+        column=0,
+        columnspan=2,
+        sticky="ew",
+        pady=(10, 12),
     )
-    botao_confirmar.grid(row=0, column=0, padx=(0, 8))
+
+    acoes = ttk.Frame(quadro)
+    acoes.grid(row=4, column=0, columnspan=2, sticky="e")
 
     botao_cancelar = ttk.Button(
         acoes,
         text=texto("cancelar"),
-        command=lambda: _fechar(confirmar=False),
+        command=lambda: _fechar(confirmar=True),
     )
-    botao_cancelar.grid(row=0, column=1)
-
-    # -- Operações ------------------------------------------------------
-
-    def _abrir_site_ollama():
-        import webbrowser
-
-        try:
-            webbrowser.open(URL_DOWNLOAD_OLLAMA)
-        except Exception:  # pragma: no cover - sem navegador
-            pass
+    botao_cancelar.grid(row=0, column=0)
 
     def _aplicar_idioma():
         idioma = estado["idioma"]
 
         raiz.title(texto("titulo", idioma))
-
         rotulo_titulo.configure(text=texto("titulo", idioma))
         rotulo_subtitulo.configure(text=texto("subtitulo", idioma))
         rotulo_idioma.configure(text=texto("idioma", idioma))
-
-        if ram_total is not None:
-            ram_var.set(
-                texto(
-                    "ram_total",
-                    idioma,
-                    ram=formatar_ram(ram_total, idioma),
-                )
-            )
-        else:
-            ram_var.set(texto("ram_indisponivel", idioma))
-
-        rotulo_sugestao.configure(
-            text=texto(
-                "recomendado",
-                idioma,
-                modelos=", ".join(modelos_iniciais(ram_total)),
-            )
-        )
-
-        botao_baixar_ollama.configure(text=texto("baixar_ollama", idioma))
-        botao_verificar.configure(text=texto("verificar", idioma))
-        botao_confirmar.configure(text=texto("baixar_continuar", idioma))
         botao_cancelar.configure(text=texto("cancelar", idioma))
-        rotulo_progresso.configure(wraplength=720)
 
-        if estado["servico_ativo"] is False:
-            status_var.set(texto("servico_inativo", idioma))
-
-        if not estado["baixando"]:
-            if estado["instalados"]:
-                progresso_var.set(
-                    texto(
-                        "instalados",
-                        idioma,
-                        modelos=", ".join(estado["instalados"]),
-                    )
+        if not estado["em_andamento"]:
+            status_var.set(texto("status_iniciando", idioma))
+        elif estado["total_bytes"]:
+            status_var.set(
+                texto(
+                    "status_baixando_gguf",
+                    idioma,
+                    baixado=formatar_mb(estado["baixado_bytes"], idioma),
+                    total=formatar_mb(estado["total_bytes"], idioma),
                 )
-            else:
-                progresso_var.set(texto("nenhum_instalado", idioma))
-
-        _montar_modelos()
-        _atualizar_resumo()
-
-    def _iniciar_verificacao():
-        estado["verificando"] = True
-        status_var.set(texto("verificando", estado["idioma"]))
-        botao_verificar.state(["disabled"])
-        # A verificação pode baixar e instalar o Ollama; não deixe o
-        # usuário iniciar o download dos modelos no meio da instalação.
-        botao_confirmar.state(["disabled"])
-        threading.Thread(target=_verificar_servico, daemon=True).start()
-
-    def _verificar_servico():
-        try:
-            resultado = garantir_servico_ollama(
-                host,
-                callback_progresso=estado["fila"].put,
-            )
-        except Exception as erro:  # pragma: no cover - falha inesperada
-            resultado = {
-                "ativo": False,
-                "iniciado": False,
-                "instalado": False,
-                "mensagem": str(erro),
-            }
-
-        estado["fila"].put({"tipo": "servico", **resultado})
-
-    def _iniciar_download():
-        selecionados = _selecionados()
-
-        if not selecionados:
-            messagebox.showwarning(
-                texto("titulo", estado["idioma"]),
-                texto("selecione_ao_menos", estado["idioma"]),
-                parent=raiz,
-            )
-            return
-
-        if estado["servico_ativo"] is not True:
-            # Nada de aviso modal imediato: o ``ollama serve`` iniciado
-            # pelo aplicativo pode ainda estar abrindo a porta 11434.
-            # Aguardamos a janela de tolerância em segundo plano e só
-            # alertamos se o serviço continuar fora do ar.
-            _aguardar_servico_para_download(selecionados)
-            return
-
-        estado["baixando"] = True
-
-        botao_confirmar.state(["disabled"])
-        botao_verificar.state(["disabled"])
-        botao_cancelar.state(["disabled"])
-        barra_progresso["value"] = 0.0
-        progresso_var.set(texto("preparando", estado["idioma"]))
-
-        threading.Thread(
-            target=_trabalhar_download,
-            args=(selecionados,),
-            daemon=True,
-        ).start()
-
-    def _aguardar_servico_para_download(selecionados):
-        """Espera o Ollama responder antes de qualquer aviso modal.
-
-        A consulta a ``/api/tags`` roda em thread para a janela não
-        congelar; o resultado volta pela fila como ``servico_aguardando``
-        e só então a interface decide entre seguir com o download ou
-        mostrar o alerta de indisponibilidade.
-        """
-
-        status_var.set(
-            texto("aguardando_ollama", estado["idioma"], host=host)
-        )
-        botao_confirmar.state(["disabled"])
-        botao_verificar.state(["disabled"])
-
-        def _trabalhar():
-            try:
-                ativo = aguardar_ollama(host)
-            except (OSError, RuntimeError, ValueError):
-                ativo = False
-
-            estado["fila"].put(
-                {
-                    "tipo": "servico_aguardando",
-                    "ativo": ativo,
-                    "selecionados": list(selecionados),
-                }
             )
 
+    def _iniciar():
+        estado["em_andamento"] = True
+        status_var.set(texto("status_verificando", estado["idioma"]))
         threading.Thread(target=_trabalhar, daemon=True).start()
 
-    def _trabalhar_download(selecionados):
+    def _trabalhar():
         try:
-            resultado = baixar_modelos(
-                selecionados,
-                host=host,
+            resultado = garantir_modelo_oficial(
+                forcar=forcar,
                 ao_progresso=estado["fila"].put,
-                idioma=estado["idioma"],
             )
         except Exception as erro:
             estado["fila"].put(
                 {
-                    "tipo": "falha_geral",
+                    "tipo": "erro",
                     "mensagem": f"{type(erro).__name__}: {erro}",
                 }
             )
             return
 
-        dados = None
-        erro_config = None
-
-        if resultado["instalados"]:
-            try:
-                dados = persistir_selecao(resultado["instalados"])
-            except Exception as erro:  # gravação local pode falhar
-                erro_config = f"{type(erro).__name__}: {erro}"
-
-        estado["fila"].put(
-            {
-                "tipo": "finalizado",
-                "resultado": resultado,
-                "config": dados,
-                "erro_config": erro_config,
-            }
-        )
+        estado["fila"].put({"tipo": "finalizado", "resultado": resultado})
 
     def _tratar_evento(evento):
         tipo = evento.get("tipo")
+        idioma = estado["idioma"]
 
         if tipo == "ollama":
             etapa = evento.get("etapa")
@@ -2770,17 +2323,19 @@ def abrir_interface(forcar=False, oculta=False):
                     evento.get("baixado_bytes") or 0,
                     idioma,
                 )
-                total_bytes = evento.get("total_bytes")
                 percentual = evento.get("percentual")
 
-                if percentual is not None and total_bytes:
+                if percentual is not None and evento.get("total_bytes"):
                     status_var.set(
                         texto(
                             "ollama_baixando",
                             idioma,
                             percentual=f"{float(percentual):.0f}",
                             baixado=baixado,
-                            total=formatar_mb(total_bytes, idioma),
+                            total=formatar_mb(
+                                evento.get("total_bytes"),
+                                idioma,
+                            ),
                         )
                     )
                     barra_progresso["value"] = float(percentual)
@@ -2807,11 +2362,9 @@ def abrir_interface(forcar=False, oculta=False):
                     texto(
                         "ollama_iniciando",
                         idioma,
-                        host=evento.get("host") or host,
+                        host=evento.get("host") or HOST_OLLAMA_PADRAO,
                     )
                 )
-            elif etapa == "servico_indisponivel":
-                status_var.set(texto("ollama_inicio_falhou", idioma))
             elif etapa == "erro":
                 status_var.set(
                     texto(
@@ -2822,100 +2375,42 @@ def abrir_interface(forcar=False, oculta=False):
                 )
             return
 
-        if tipo == "servico":
-            ativo = bool(evento.get("ativo"))
-            estado["servico_ativo"] = ativo
-            estado["verificando"] = False
-            botao_verificar.state(["!disabled"])
+        if tipo == "status":
+            etapa = evento.get("etapa")
 
-            if ativo:
-                botao_baixar_ollama.grid_remove()
-                mensagem = (
-                    "servico_iniciado"
-                    if evento.get("iniciado")
-                    else "servico_ativo"
-                )
+            if etapa == "verificando":
+                status_var.set(texto("status_verificando", idioma))
+            elif etapa == "baixando_gguf":
+                barra_progresso["value"] = 0.0
                 status_var.set(
-                    texto(mensagem, estado["idioma"], host=host)
-                )
-            else:
-                botao_baixar_ollama.grid(
-                    row=0,
-                    column=1,
-                    padx=(6, 0),
-                )
-                detalhe = str(evento.get("mensagem") or "").strip()
-
-                if detalhe:
-                    status_var.set(
-                        texto(
-                            "servico_inativo_detalhe",
-                            estado["idioma"],
-                            host=host,
-                            mensagem=detalhe,
-                        )
+                    texto(
+                        "status_baixando_gguf_sem_total",
+                        idioma,
+                        baixado=formatar_mb(0, idioma),
                     )
-                else:
-                    status_var.set(
-                        texto("servico_inativo", estado["idioma"])
-                    )
-
-            # Restaura o botão de download conforme a seleção atual.
-            if not estado["baixando"]:
-                _atualizar_resumo()
-            return
-
-        if tipo == "servico_aguardando":
-            # Resultado da janela de tolerância: só depois dela o aviso
-            # modal de "Ollama indisponível" pode aparecer.
-            ativo = bool(evento.get("ativo"))
-            estado["servico_ativo"] = ativo
-            botao_verificar.state(["!disabled"])
-
-            if ativo:
-                botao_baixar_ollama.grid_remove()
+                )
+            elif etapa == "registrando":
+                barra_progresso["value"] = 100.0
+                status_var.set(texto("status_registrando", idioma))
+            elif etapa == "fallback":
+                barra_progresso["value"] = 0.0
                 status_var.set(
-                    texto("servico_ativo", estado["idioma"], host=host)
+                    texto(
+                        "status_fallback",
+                        idioma,
+                        modelo=evento.get("modelo")
+                        or MODELO_TECNICO_FALLBACK,
+                    )
                 )
-
-                if not estado["baixando"]:
-                    _atualizar_resumo()
-
-                _iniciar_download()
-                return
-
-            messagebox.showwarning(
-                texto("sem_ollama_titulo", estado["idioma"]),
-                texto(
-                    "sem_ollama_mensagem",
-                    estado["idioma"],
-                    host=host,
-                ),
-                parent=raiz,
-            )
-
-            if not estado["baixando"]:
-                _atualizar_resumo()
-
-            _iniciar_verificacao()
-            return
-
-        if tipo == "inicio":
-            estado["atual"] = {
-                "indice": evento.get("indice", 1),
-                "total": evento.get("total", 1),
-                "modelo": evento.get("modelo", ""),
-            }
-            barra_progresso["value"] = 0.0
-            progresso_var.set(
-                texto(
-                    "baixando",
-                    estado["idioma"],
-                    indice=estado["atual"]["indice"],
-                    total=estado["atual"]["total"],
-                    modelo=estado["atual"]["modelo"],
+            elif etapa == "fallback_andamento":
+                status_var.set(
+                    texto(
+                        "status_fallback_andamento",
+                        idioma,
+                        modelo=evento.get("modelo")
+                        or MODELO_TECNICO_FALLBACK,
+                    )
                 )
-            )
             return
 
         if tipo == "progresso":
@@ -2924,150 +2419,74 @@ def abrir_interface(forcar=False, oculta=False):
             if percentual is not None:
                 barra_progresso["value"] = float(percentual)
 
-            atual = estado.get("atual") or {
-                "indice": 1,
-                "total": 1,
-                "modelo": evento.get("modelo", ""),
-            }
+            estado["baixado_bytes"] = evento.get("baixado_bytes") or 0
+            estado["total_bytes"] = evento.get("total_bytes")
 
-            # Mantém "Baixando 1/2: qwen3:4b..." visível e acrescenta o
-            # andamento (percentual quando há total; senão o status).
-            mensagem = texto(
-                "baixando",
-                estado["idioma"],
-                indice=atual.get("indice", 1),
-                total=atual.get("total", 1),
-                modelo=atual.get("modelo", ""),
-            )
-
-            if percentual is not None:
-                mensagem += f" {float(percentual):.0f}%"
-            else:
-                status_modelo = str(evento.get("status") or "").strip()
-
-                if status_modelo:
-                    mensagem += f" ({status_modelo})"
-
-            progresso_var.set(mensagem)
-            return
-
-        if tipo == "concluido":
-            barra_progresso["value"] = 100.0
-            progresso_var.set(
-                texto(
-                    "concluido_modelo",
-                    estado["idioma"],
-                    modelo=evento.get("modelo", ""),
-                )
-            )
-            return
-
-        if tipo == "erro":
-            mensagem = str(evento.get("mensagem", ""))
-
-            if erro_de_permissao(mensagem):
-                # O detalhe completo (icacls/OLLAMA_MODELS) fica para o
-                # diálogo final; o rodapé mostra só o diagnóstico curto
-                # para não esticar a janela com um texto de várias linhas.
-                progresso_var.set(
-                    texto("permissao_modelos_titulo", estado["idioma"])
-                )
-            else:
-                progresso_var.set(
+            if estado["total_bytes"]:
+                status_var.set(
                     texto(
-                        "falha_modelo",
-                        estado["idioma"],
-                        modelo=evento.get("modelo", ""),
-                        mensagem=mensagem,
+                        "status_baixando_gguf",
+                        idioma,
+                        baixado=formatar_mb(
+                            estado["baixado_bytes"],
+                            idioma,
+                        ),
+                        total=formatar_mb(
+                            estado["total_bytes"],
+                            idioma,
+                        ),
+                    )
+                )
+            else:
+                status_var.set(
+                    texto(
+                        "status_baixando_gguf_sem_total",
+                        idioma,
+                        baixado=formatar_mb(
+                            estado["baixado_bytes"],
+                            idioma,
+                        ),
                     )
                 )
             return
 
-        if tipo == "falha_geral":
-            estado["baixando"] = False
-            botao_confirmar.state(["!disabled"])
+        if tipo == "erro":
+            estado["em_andamento"] = False
             botao_cancelar.state(["!disabled"])
             messagebox.showerror(
-                texto("falha_geral_titulo", estado["idioma"]),
+                texto("falha_titulo", idioma),
                 texto(
-                    "falha_geral_mensagem",
-                    estado["idioma"],
-                    mensagem=evento.get("mensagem", ""),
+                    "falha_mensagem",
+                    idioma,
+                    mensagem=evento.get("mensagem") or "",
                 ),
                 parent=raiz,
             )
             return
 
         if tipo == "finalizado":
-            estado["baixando"] = False
-            botao_cancelar.state(["!disabled"])
-
+            estado["em_andamento"] = False
             resultado = evento.get("resultado") or {}
-            instalados = resultado.get("instalados") or []
-            falhas = resultado.get("falhas") or {}
-            dados = evento.get("config") or {}
-            caminho_config = config.caminho_config_local()
+            modelo = resultado.get("modelo") or NOME_MODELO_LOCAL
 
-            if not instalados:
-                botao_confirmar.state(["!disabled"])
-                detalhes = "\n".join(
-                    f"- {modelo}: {motivo}"
-                    for modelo, motivo in falhas.items()
-                )
-                messagebox.showerror(
-                    texto("falha_geral_titulo", estado["idioma"]),
-                    texto(
-                        "falha_geral_mensagem",
-                        estado["idioma"],
-                        mensagem=detalhes or "sem detalhes",
-                    ),
-                    parent=raiz,
-                )
-                return
+            status_var.set(
+                texto("status_concluido", idioma, modelo=modelo)
+            )
+            barra_progresso["value"] = 100.0
 
-            if falhas:
-                detalhes = "\n".join(
-                    f"- {modelo}: {motivo}"
-                    for modelo, motivo in falhas.items()
-                )
-                messagebox.showwarning(
-                    texto("falhas_titulo", estado["idioma"]),
-                    texto(
-                        "falhas_mensagem",
-                        estado["idioma"],
-                        instalados=", ".join(instalados),
-                        falhas=detalhes,
-                    ),
-                    parent=raiz,
-                )
+            messagebox.showinfo(
+                texto("sucesso_titulo", idioma),
+                texto(
+                    "sucesso_mensagem",
+                    idioma,
+                    modelo=modelo,
+                    config=resultado.get("caminho_config")
+                    or str(config.caminho_config_local()),
+                ),
+                parent=raiz,
+            )
 
-            if evento.get("erro_config"):
-                messagebox.showwarning(
-                    texto("falha_config_titulo", estado["idioma"]),
-                    texto(
-                        "falha_config_mensagem",
-                        estado["idioma"],
-                        mensagem=evento["erro_config"],
-                    ),
-                    parent=raiz,
-                )
-            elif not falhas:
-                messagebox.showinfo(
-                    texto("sucesso_titulo", estado["idioma"]),
-                    texto(
-                        "sucesso_mensagem",
-                        estado["idioma"],
-                        modelos=", ".join(instalados),
-                        padrao=dados.get(
-                            "modelo_padrao",
-                            modelo_padrao(instalados),
-                        ),
-                        config=str(caminho_config),
-                    ),
-                    parent=raiz,
-                )
-
-            raiz.destroy()
+            _fechar(confirmar=False)
             return
 
     def _processar_fila():
@@ -3090,7 +2509,7 @@ def abrir_interface(forcar=False, oculta=False):
     def _fechar(confirmar=True):
         if (
             confirmar
-            and estado["baixando"]
+            and estado["em_andamento"]
             and not messagebox.askyesno(
                 texto("fechar_titulo", estado["idioma"]),
                 texto("fechar_baixando", estado["idioma"]),
@@ -3106,67 +2525,18 @@ def abrir_interface(forcar=False, oculta=False):
 
     raiz.protocol("WM_DELETE_WINDOW", _fechar)
 
-    botao_confirmar.configure(command=_iniciar_download)
-
-    _montar_modelos()
-    _aplicar_idioma()
-    _atualizar_resumo()
-
-    if estado["instalados"]:
-        progresso_var.set(
-            texto(
-                "instalados",
-                estado["idioma"],
-                modelos=", ".join(estado["instalados"]),
-            )
-        )
-    else:
-        progresso_var.set(texto("nenhum_instalado", estado["idioma"]))
-
-    # Oculta o botão do site até a verificação confirmar que falta o Ollama.
-    botao_baixar_ollama.grid_remove()
-
-    def _ajustar_altura_inicial():
-        """Encolhe a janela até o conteúdo, sem faixa branca no rodapé."""
-
-        try:
-            raiz.update_idletasks()
-            altura = max(ALTURA_MINIMA_JANELA, raiz.winfo_reqheight())
-            limite = raiz.winfo_screenheight() - 120
-
-            if limite > ALTURA_MINIMA_JANELA:
-                altura = min(altura, limite)
-
-            raiz.geometry(f"{LARGURA_INICIAL_JANELA}x{altura}")
-        except tk.TclError:  # pragma: no cover - janela exótica
-            pass
-
-    raiz.after(150, _processar_fila)
-    raiz.after(200, _iniciar_verificacao)
-
-    _ajustar_altura_inicial()
+    raiz.after(150, _iniciar)
+    raiz.after(200, _processar_fila)
 
     try:
         raiz.mainloop()
-    finally:
-        try:
-            canvas.unbind_all("<MouseWheel>")
-        except tk.TclError:  # pragma: no cover
-            pass
+    except tk.TclError:  # pragma: no cover - fechamento abrupto
+        return
 
 
 # ---------------------------------------------------------------------------
-# Seletor no terminal (fallback quando o Tkinter não está disponível)
-#
-# O Python Embeddable do Windows não traz ``tkinter``/Tcl-Tk por padrão.
-# O ``build_portatil.ps1`` copia esse suporte, mas em ambientes mínimos
-# (ou numa montagem antiga) a janela não abre. Nesse caso o assistente
-# continua configurando o modelo por ``input()`` no próprio terminal.
+# Fallback de terminal (sem Tkinter)
 # ---------------------------------------------------------------------------
-
-# Quantas tentativas o usuário tem para digitar uma opção válida.
-TENTATIVAS_ESCOLHA_CLI = 3
-
 
 def tkinter_disponivel():
     """Indica se o ``tkinter`` pode ser importado neste interpretador."""
@@ -3180,12 +2550,7 @@ def tkinter_disponivel():
 
 
 def interface_indisponivel(erro):
-    """Diz se a falha da janela justifica cair para o seletor CLI.
-
-    Cobre o ``ImportError`` (Embeddable sem tkinter/_tkinter/Tcl DLLs) e
-    o ``tkinter.TclError`` (pacote importável, mas Tcl/Tk sem dados).
-    Outros erros continuam sendo falha real e não abrem o CLI.
-    """
+    """Diz se a falha da janela justifica cair para o terminal."""
 
     if isinstance(erro, ImportError):
         return True
@@ -3197,253 +2562,6 @@ def interface_indisponivel(erro):
 
     return isinstance(erro, tkinter.TclError)
 
-
-def interpretar_escolha_cli(linha, recomendados=None):
-    """Converte a linha digitada em IDs do catálogo.
-
-    Aceita ``"1"``, ``"1,3"``, ``"1 3"`` e ``"1;3"``. Linha vazia devolve
-    a sugestão por RAM. Devolve ``None`` quando a entrada é inválida,
-    fora do intervalo ou não sobra nenhum modelo.
-    """
-
-    if recomendados is None:
-        recomendados = modelos_iniciais()
-
-    limpa = str(linha or "").strip().lower()
-
-    if not limpa:
-        return list(recomendados)
-
-    escolhidos = []
-
-    for parte in limpa.replace(",", " ").replace(";", " ").split():
-        if not parte.isdigit():
-            return None
-
-        indice = int(parte)
-
-        if not 1 <= indice <= len(CATALOGO_MODELOS):
-            return None
-
-        identificador = CATALOGO_MODELOS[indice - 1].identificador
-
-        if identificador not in escolhidos:
-            escolhidos.append(identificador)
-
-    return escolhidos or None
-
-
-def _tabela_modelos_cli(idioma=IDIOMA_PADRAO):
-    """Tabela numerada dos três modelos para o seletor de terminal."""
-
-    linhas = []
-
-    for indice, modelo in enumerate(CATALOGO_MODELOS, start=1):
-        linhas.append(
-            f"  {indice}) {modelo.identificador:<12} "
-            f"{modelo.ram_formatada(idioma):>10}  "
-            f"{modelo.perfil(idioma)}"
-        )
-
-    return "\n".join(linhas)
-
-
-def executar_seletor_cli(entrada=input, idioma=IDIOMA_PADRAO):
-    """Configura o modelo pelo terminal, sem depender do Tkinter.
-
-    Apresenta os três modelos numerados e pede a escolha por ``input()``
-    (ENTER usa a sugestão por RAM), verifica/inicia o Ollama, baixa os
-    modelos em sequência e grava o ``config_local.json``.
-
-    Devolve ``0`` quando a configuração foi gravada e ``1`` em qualquer
-    falha (Ollama inativo, download vazio, entrada cancelada etc.).
-    """
-
-    ram_total = memoria_total_gb()
-    recomendados = modelos_iniciais(ram_total)
-
-    _imprimir("")
-    _imprimir(texto("cli_titulo", idioma))
-
-    if ram_total is not None:
-        _imprimir(
-            texto("ram_total", idioma, ram=formatar_ram(ram_total, idioma))
-        )
-    else:
-        _imprimir(texto("ram_indisponivel", idioma))
-
-    _imprimir(texto("recomendado", idioma, modelos=", ".join(recomendados)))
-    _imprimir("")
-    _imprimir(_tabela_modelos_cli(idioma))
-    _imprimir("")
-
-    escolhidos = None
-
-    for _ in range(TENTATIVAS_ESCOLHA_CLI):
-        try:
-            linha = entrada(texto("cli_prompt", idioma))
-        except (EOFError, KeyboardInterrupt):
-            _imprimir("")
-            _imprimir(texto("cli_cancelado", idioma))
-            return 1
-
-        escolhidos = interpretar_escolha_cli(linha, recomendados)
-
-        if escolhidos:
-            break
-
-        _imprimir(texto("cli_invalido", idioma))
-
-    if not escolhidos:
-        _imprimir(texto("cli_cancelado", idioma))
-        return 1
-
-    host = HOST_OLLAMA_PADRAO
-
-    def _ao_progresso_ollama(evento):
-        etapa = evento.get("etapa")
-
-        if etapa == "ausente":
-            _imprimir(texto("ollama_ausente", idioma))
-        elif etapa == "baixando":
-            baixado = formatar_mb(evento.get("baixado_bytes") or 0, idioma)
-            total_bytes = evento.get("total_bytes")
-            percentual = evento.get("percentual")
-
-            if percentual is not None and total_bytes:
-                _imprimir(
-                    texto(
-                        "ollama_baixando",
-                        idioma,
-                        percentual=f"{float(percentual):.0f}",
-                        baixado=baixado,
-                        total=formatar_mb(total_bytes, idioma),
-                    )
-                )
-            else:
-                _imprimir(
-                    texto(
-                        "ollama_baixando_sem_total",
-                        idioma,
-                        baixado=baixado,
-                    )
-                )
-        elif etapa == "instalando":
-            _imprimir(texto("ollama_instalando", idioma))
-        elif etapa == "instalado":
-            _imprimir(
-                texto(
-                    "ollama_instalado",
-                    idioma,
-                    caminho=evento.get("caminho") or "",
-                )
-            )
-        elif etapa == "iniciando_servico":
-            _imprimir(
-                texto(
-                    "ollama_iniciando",
-                    idioma,
-                    host=evento.get("host") or host,
-                )
-            )
-        elif etapa == "erro":
-            _imprimir(
-                texto(
-                    "ollama_instalacao_falhou",
-                    idioma,
-                    mensagem=evento.get("mensagem") or "",
-                )
-            )
-
-    servico = garantir_servico_ollama(
-        host,
-        callback_progresso=_ao_progresso_ollama,
-    )
-
-    if not servico.get("ativo"):
-        _imprimir(texto("cli_ollama_inativo", idioma, host=host))
-        return 1
-
-    def _ao_progresso(evento):
-        tipo = evento.get("tipo")
-
-        if tipo == "inicio":
-            _imprimir(
-                texto(
-                    "baixando",
-                    idioma,
-                    indice=evento.get("indice", 1),
-                    total=evento.get("total", 1),
-                    modelo=evento.get("modelo", ""),
-                )
-            )
-        elif tipo == "concluido":
-            _imprimir(
-                texto(
-                    "concluido_modelo",
-                    idioma,
-                    modelo=evento.get("modelo", ""),
-                )
-            )
-        elif tipo == "erro":
-            _imprimir(
-                texto(
-                    "falha_modelo",
-                    idioma,
-                    modelo=evento.get("modelo", ""),
-                    mensagem=evento.get("mensagem", ""),
-                )
-            )
-
-    try:
-        resultado = baixar_modelos(
-            escolhidos,
-            ao_progresso=_ao_progresso,
-            idioma=idioma,
-        )
-    except Exception as erro:  # ErroDownload, rede, catálogo inválido
-        _imprimir(
-            texto(
-                "falha_geral_mensagem",
-                idioma,
-                mensagem=f"{type(erro).__name__}: {erro}",
-            )
-        )
-        return 1
-
-    instalados = resultado.get("instalados") or []
-
-    if not instalados:
-        _imprimir(texto("cli_sem_instalados", idioma))
-        return 1
-
-    try:
-        dados = persistir_selecao(instalados)
-    except Exception as erro:  # gravação local pode falhar
-        _imprimir(
-            texto(
-                "cli_falha_config",
-                idioma,
-                mensagem=f"{type(erro).__name__}: {erro}",
-            )
-        )
-        return 1
-
-    _imprimir(
-        texto(
-            "cli_sucesso",
-            idioma,
-            config=str(config.caminho_config_local()),
-            padrao=dados.get("modelo_padrao", modelo_padrao(instalados)),
-        )
-    )
-
-    return 0
-
-
-# ---------------------------------------------------------------------------
-# Entrada do script
-# ---------------------------------------------------------------------------
 
 def _imprimir(mensagem):
     """``print`` seguro em executável sem console (``sys.stdout`` nulo)."""
@@ -3459,41 +2577,222 @@ def _imprimir(mensagem):
         pass
 
 
-def principal(argv=None):
-    """Ponto de entrada com suporte a ``--forcar``.
+def _texto_status_cli(evento, idioma):
+    """Traduz um evento de status/progresso do fluxo para o terminal."""
 
-    Sem ``--forcar``, um ``config_local.json`` já configurado encerra o
-    script sem abrir janela: é o que o ``iniciar.bat`` executa em toda
-    abertura.
+    tipo = evento.get("tipo")
+
+    if tipo == "ollama":
+        etapa = evento.get("etapa")
+
+        if etapa == "ausente":
+            return texto("ollama_ausente", idioma)
+        if etapa == "baixando":
+            baixado = formatar_mb(evento.get("baixado_bytes") or 0, idioma)
+            percentual = evento.get("percentual")
+
+            if percentual is not None and evento.get("total_bytes"):
+                return texto(
+                    "ollama_baixando",
+                    idioma,
+                    percentual=f"{float(percentual):.0f}",
+                    baixado=baixado,
+                    total=formatar_mb(evento.get("total_bytes"), idioma),
+                )
+
+            return texto(
+                "ollama_baixando_sem_total",
+                idioma,
+                baixado=baixado,
+            )
+        if etapa == "instalando":
+            return texto("ollama_instalando", idioma)
+        if etapa == "instalado":
+            return texto(
+                "ollama_instalado",
+                idioma,
+                caminho=evento.get("caminho") or "",
+            )
+        if etapa == "iniciando_servico":
+            return texto(
+                "ollama_iniciando",
+                idioma,
+                host=evento.get("host") or HOST_OLLAMA_PADRAO,
+            )
+        if etapa == "erro":
+            return texto(
+                "ollama_instalacao_falhou",
+                idioma,
+                mensagem=evento.get("mensagem") or "",
+            )
+
+        return ""
+
+    if tipo == "status":
+        etapa = evento.get("etapa")
+
+        if etapa == "verificando":
+            return texto("status_verificando", idioma)
+        if etapa == "baixando_gguf":
+            return texto(
+                "status_baixando_gguf_sem_total",
+                idioma,
+                baixado=formatar_mb(0, idioma),
+            )
+        if etapa == "registrando":
+            return texto("status_registrando", idioma)
+        if etapa == "fallback":
+            return texto(
+                "status_fallback",
+                idioma,
+                modelo=evento.get("modelo") or MODELO_TECNICO_FALLBACK,
+            )
+        if etapa == "fallback_andamento":
+            return texto(
+                "status_fallback_andamento",
+                idioma,
+                modelo=evento.get("modelo") or MODELO_TECNICO_FALLBACK,
+            )
+
+        return ""
+
+    if tipo == "progresso":
+        total = evento.get("total_bytes")
+
+        if total:
+            return texto(
+                "status_baixando_gguf",
+                idioma,
+                baixado=formatar_mb(evento.get("baixado_bytes") or 0, idioma),
+                total=formatar_mb(total, idioma),
+            )
+
+        return texto(
+            "status_baixando_gguf_sem_total",
+            idioma,
+            baixado=formatar_mb(evento.get("baixado_bytes") or 0, idioma),
+        )
+
+    return ""
+
+
+def executar_fluxo_cli(idioma=IDIOMA_PADRAO, forcar=False):
+    """Executa o fluxo único no terminal, sem depender do Tkinter.
+
+    Devolve ``0`` quando o ``config_local.json`` foi gravado e
+    ``1`` em qualquer falha.
+    """
+
+    _imprimir("")
+    _imprimir(texto("cli_titulo", idioma))
+    _imprimir("")
+
+    ultimo = {"texto": "", "percentual": -10.0}
+
+    def _ao_progresso(evento):
+        # O terminal não precisa de uma linha por MB: imprime no máximo a
+        # cada 10% de avanço, além das mudanças de etapa.
+        if evento.get("tipo") == "progresso":
+            percentual = evento.get("percentual")
+
+            if percentual is not None:
+                if float(percentual) < ultimo["percentual"] + 10.0:
+                    return
+
+                ultimo["percentual"] = float(percentual)
+
+        mensagem = _texto_status_cli(evento, idioma)
+
+        if mensagem and mensagem != ultimo["texto"]:
+            ultimo["texto"] = mensagem
+            _imprimir(mensagem)
+
+    try:
+        resultado = garantir_modelo_oficial(
+            forcar=forcar,
+            idioma=idioma,
+            ao_progresso=_ao_progresso,
+        )
+    except Exception as erro:
+        _imprimir(
+            texto(
+                "cli_falha",
+                idioma,
+                mensagem=f"{type(erro).__name__}: {erro}",
+            )
+        )
+        return 1
+
+    _imprimir(
+        texto(
+            "cli_sucesso",
+            idioma,
+            config=resultado.get("caminho_config")
+            or str(config.caminho_config_local()),
+            modelo=resultado.get("modelo") or NOME_MODELO_LOCAL,
+        )
+    )
+
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# Entrada do script
+# ---------------------------------------------------------------------------
+
+def principal(argv=None):
+    """Ponto de entrada do fluxo único da v1.0.0.
+
+    Sem ``--forcar``, o modelo oficial já registrado no Ollama grava o
+    ``config_local.json`` e encerra sem abrir janela. GGUF local é
+    registrado automaticamente; só a ausência do arquivo abre a janela
+    de download.
     """
 
     analisador = argparse.ArgumentParser(
         prog="setup_llm.py",
         description=(
-            "Assistente de seleção e download dos modelos LLM locais "
-            f"(Ollama) do {config.APP_NAME} v{config.APP_VERSION}."
+            "Configurador do modelo local único do "
+            f"{config.APP_NAME} v{config.APP_VERSION} (Ollama)."
         ),
     )
     analisador.add_argument(
         "--forcar",
         action="store_true",
         help=(
-            "reabre o seletor mesmo quando a configuração já existe, "
-            "para baixar modelos adicionais"
+            "refaz a verificação e o registro mesmo quando o modelo "
+            "oficial já está configurado"
         ),
     )
 
     argumentos = analisador.parse_args(argv)
+    host = HOST_OLLAMA_PADRAO
 
-    if not argumentos.forcar and not precisa_configurar():
+    if not argumentos.forcar and modelo_local_registrado(host):
+        persistir_modelo(NOME_MODELO_LOCAL)
         _imprimir(texto("ja_configurado"))
         return 0
 
-    # Ambiente mínimo (Embeddable sem Tkinter/Tcl copiados): nem tenta
-    # abrir a janela, segue direto para o seletor do terminal.
+    gguf = caminho_gguf_local()
+
+    if gguf is not None:
+        registrado = registrar_modelo_local(host=host, gguf=gguf)
+
+        if registrado:
+            persistir_modelo(NOME_MODELO_LOCAL)
+            _imprimir(
+                texto(
+                    "cli_sucesso",
+                    IDIOMA_PADRAO,
+                    config=str(config.caminho_config_local()),
+                    modelo=NOME_MODELO_LOCAL,
+                )
+            )
+            return 0
+
     if not tkinter_disponivel():
         _imprimir(texto("sem_interface"))
-        return executar_seletor_cli()
+        return executar_fluxo_cli(forcar=argumentos.forcar)
 
     try:
         abrir_interface(forcar=argumentos.forcar)
@@ -3502,7 +2801,7 @@ def principal(argv=None):
         _imprimir(f"Detalhe: {type(erro).__name__}: {erro}")
 
         if interface_indisponivel(erro):
-            return executar_seletor_cli()
+            return executar_fluxo_cli(forcar=argumentos.forcar)
 
         return 1
 

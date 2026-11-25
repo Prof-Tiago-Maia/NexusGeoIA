@@ -1,0 +1,1580 @@
+{
+  "nome": "nexusgeoia_behavior_v2",
+  "versao": "2.0.0",
+  "arquivo_dataset": "nexusgeoia_behavior_v2.jsonl",
+  "sha256_dataset": "74a52f789726190f2a99eb84fa2b5afa089cfd806ab9aff6a1dd169561071ecc",
+  "total_pares": 150,
+  "total_registros": 300,
+  "politica": {
+    "agrupamento": "metadados.par",
+    "estratificacao": "tarefa",
+    "sal": "nexusgeoia-behavior-split-v2",
+    "fracoes": {
+      "treino": 0.7,
+      "validacao": 0.15,
+      "teste": 0.15
+    },
+    "ordenacao": "sha256(sal:par)"
+  },
+  "por_split": {
+    "treino": {
+      "pares": 103,
+      "registros": 206,
+      "por_tarefa": {
+        "governance_label": 58,
+        "sondagem_extract": 74,
+        "workflow_intent": 74
+      },
+      "por_idioma": {
+        "en": 103,
+        "pt": 103
+      },
+      "por_familia": {
+        "ambiguo": 32,
+        "incompleto": 34,
+        "negativo": 46,
+        "normal": 94
+      }
+    },
+    "validacao": {
+      "pares": 22,
+      "registros": 44,
+      "por_tarefa": {
+        "governance_label": 12,
+        "sondagem_extract": 16,
+        "workflow_intent": 16
+      },
+      "por_idioma": {
+        "en": 22,
+        "pt": 22
+      },
+      "por_familia": {
+        "ambiguo": 8,
+        "incompleto": 8,
+        "negativo": 12,
+        "normal": 16
+      }
+    },
+    "teste": {
+      "pares": 25,
+      "registros": 50,
+      "por_tarefa": {
+        "governance_label": 14,
+        "sondagem_extract": 18,
+        "workflow_intent": 18
+      },
+      "por_idioma": {
+        "en": 25,
+        "pt": 25
+      },
+      "por_familia": {
+        "ambiguo": 8,
+        "incompleto": 6,
+        "negativo": 12,
+        "normal": 24
+      }
+    }
+  },
+  "pares": [
+    {
+      "par": "gv-002",
+      "tarefa": "governance_label",
+      "familia": "normal",
+      "split": "treino",
+      "ids": [
+        "gv-en-002",
+        "gv-pt-002"
+      ]
+    },
+    {
+      "par": "gv-003",
+      "tarefa": "governance_label",
+      "familia": "normal",
+      "split": "treino",
+      "ids": [
+        "gv-en-003",
+        "gv-pt-003"
+      ]
+    },
+    {
+      "par": "gv-004",
+      "tarefa": "governance_label",
+      "familia": "normal",
+      "split": "treino",
+      "ids": [
+        "gv-en-004",
+        "gv-pt-004"
+      ]
+    },
+    {
+      "par": "gv-005",
+      "tarefa": "governance_label",
+      "familia": "normal",
+      "split": "treino",
+      "ids": [
+        "gv-en-005",
+        "gv-pt-005"
+      ]
+    },
+    {
+      "par": "gv-006",
+      "tarefa": "governance_label",
+      "familia": "normal",
+      "split": "treino",
+      "ids": [
+        "gv-en-006",
+        "gv-pt-006"
+      ]
+    },
+    {
+      "par": "gv-007",
+      "tarefa": "governance_label",
+      "familia": "normal",
+      "split": "treino",
+      "ids": [
+        "gv-en-007",
+        "gv-pt-007"
+      ]
+    },
+    {
+      "par": "gv-008",
+      "tarefa": "governance_label",
+      "familia": "normal",
+      "split": "treino",
+      "ids": [
+        "gv-en-008",
+        "gv-pt-008"
+      ]
+    },
+    {
+      "par": "gv-010",
+      "tarefa": "governance_label",
+      "familia": "normal",
+      "split": "treino",
+      "ids": [
+        "gv-en-010",
+        "gv-pt-010"
+      ]
+    },
+    {
+      "par": "gv-011",
+      "tarefa": "governance_label",
+      "familia": "ambiguo",
+      "split": "treino",
+      "ids": [
+        "gv-en-011",
+        "gv-pt-011"
+      ]
+    },
+    {
+      "par": "gv-012",
+      "tarefa": "governance_label",
+      "familia": "ambiguo",
+      "split": "treino",
+      "ids": [
+        "gv-en-012",
+        "gv-pt-012"
+      ]
+    },
+    {
+      "par": "gv-013",
+      "tarefa": "governance_label",
+      "familia": "ambiguo",
+      "split": "treino",
+      "ids": [
+        "gv-en-013",
+        "gv-pt-013"
+      ]
+    },
+    {
+      "par": "gv-014",
+      "tarefa": "governance_label",
+      "familia": "ambiguo",
+      "split": "treino",
+      "ids": [
+        "gv-en-014",
+        "gv-pt-014"
+      ]
+    },
+    {
+      "par": "gv-017",
+      "tarefa": "governance_label",
+      "familia": "incompleto",
+      "split": "treino",
+      "ids": [
+        "gv-en-017",
+        "gv-pt-017"
+      ]
+    },
+    {
+      "par": "gv-018",
+      "tarefa": "governance_label",
+      "familia": "incompleto",
+      "split": "treino",
+      "ids": [
+        "gv-en-018",
+        "gv-pt-018"
+      ]
+    },
+    {
+      "par": "gv-020",
+      "tarefa": "governance_label",
+      "familia": "incompleto",
+      "split": "treino",
+      "ids": [
+        "gv-en-020",
+        "gv-pt-020"
+      ]
+    },
+    {
+      "par": "gv-021",
+      "tarefa": "governance_label",
+      "familia": "incompleto",
+      "split": "treino",
+      "ids": [
+        "gv-en-021",
+        "gv-pt-021"
+      ]
+    },
+    {
+      "par": "gv-024",
+      "tarefa": "governance_label",
+      "familia": "negativo",
+      "split": "treino",
+      "ids": [
+        "gv-en-024",
+        "gv-pt-024"
+      ]
+    },
+    {
+      "par": "gv-026",
+      "tarefa": "governance_label",
+      "familia": "negativo",
+      "split": "treino",
+      "ids": [
+        "gv-en-026",
+        "gv-pt-026"
+      ]
+    },
+    {
+      "par": "gv-028",
+      "tarefa": "governance_label",
+      "familia": "negativo",
+      "split": "treino",
+      "ids": [
+        "gv-en-028",
+        "gv-pt-028"
+      ]
+    },
+    {
+      "par": "gv-030",
+      "tarefa": "governance_label",
+      "familia": "normal",
+      "split": "treino",
+      "ids": [
+        "gv-en-030",
+        "gv-pt-030"
+      ]
+    },
+    {
+      "par": "gv-032",
+      "tarefa": "governance_label",
+      "familia": "negativo",
+      "split": "treino",
+      "ids": [
+        "gv-en-032",
+        "gv-pt-032"
+      ]
+    },
+    {
+      "par": "gv-033",
+      "tarefa": "governance_label",
+      "familia": "incompleto",
+      "split": "treino",
+      "ids": [
+        "gv-en-033",
+        "gv-pt-033"
+      ]
+    },
+    {
+      "par": "gv-034",
+      "tarefa": "governance_label",
+      "familia": "ambiguo",
+      "split": "treino",
+      "ids": [
+        "gv-en-034",
+        "gv-pt-034"
+      ]
+    },
+    {
+      "par": "gv-035",
+      "tarefa": "governance_label",
+      "familia": "normal",
+      "split": "treino",
+      "ids": [
+        "gv-en-035",
+        "gv-pt-035"
+      ]
+    },
+    {
+      "par": "gv-036",
+      "tarefa": "governance_label",
+      "familia": "negativo",
+      "split": "treino",
+      "ids": [
+        "gv-en-036",
+        "gv-pt-036"
+      ]
+    },
+    {
+      "par": "gv-037",
+      "tarefa": "governance_label",
+      "familia": "negativo",
+      "split": "treino",
+      "ids": [
+        "gv-en-037",
+        "gv-pt-037"
+      ]
+    },
+    {
+      "par": "gv-038",
+      "tarefa": "governance_label",
+      "familia": "negativo",
+      "split": "treino",
+      "ids": [
+        "gv-en-038",
+        "gv-pt-038"
+      ]
+    },
+    {
+      "par": "gv-041",
+      "tarefa": "governance_label",
+      "familia": "normal",
+      "split": "treino",
+      "ids": [
+        "gv-en-041",
+        "gv-pt-041"
+      ]
+    },
+    {
+      "par": "gv-042",
+      "tarefa": "governance_label",
+      "familia": "negativo",
+      "split": "treino",
+      "ids": [
+        "gv-en-042",
+        "gv-pt-042"
+      ]
+    },
+    {
+      "par": "sd-001",
+      "tarefa": "sondagem_extract",
+      "familia": "normal",
+      "split": "treino",
+      "ids": [
+        "sd-en-001",
+        "sd-pt-001"
+      ]
+    },
+    {
+      "par": "sd-004",
+      "tarefa": "sondagem_extract",
+      "familia": "normal",
+      "split": "treino",
+      "ids": [
+        "sd-en-004",
+        "sd-pt-004"
+      ]
+    },
+    {
+      "par": "sd-005",
+      "tarefa": "sondagem_extract",
+      "familia": "normal",
+      "split": "treino",
+      "ids": [
+        "sd-en-005",
+        "sd-pt-005"
+      ]
+    },
+    {
+      "par": "sd-006",
+      "tarefa": "sondagem_extract",
+      "familia": "normal",
+      "split": "treino",
+      "ids": [
+        "sd-en-006",
+        "sd-pt-006"
+      ]
+    },
+    {
+      "par": "sd-008",
+      "tarefa": "sondagem_extract",
+      "familia": "normal",
+      "split": "treino",
+      "ids": [
+        "sd-en-008",
+        "sd-pt-008"
+      ]
+    },
+    {
+      "par": "sd-009",
+      "tarefa": "sondagem_extract",
+      "familia": "normal",
+      "split": "treino",
+      "ids": [
+        "sd-en-009",
+        "sd-pt-009"
+      ]
+    },
+    {
+      "par": "sd-010",
+      "tarefa": "sondagem_extract",
+      "familia": "normal",
+      "split": "treino",
+      "ids": [
+        "sd-en-010",
+        "sd-pt-010"
+      ]
+    },
+    {
+      "par": "sd-012",
+      "tarefa": "sondagem_extract",
+      "familia": "normal",
+      "split": "treino",
+      "ids": [
+        "sd-en-012",
+        "sd-pt-012"
+      ]
+    },
+    {
+      "par": "sd-013",
+      "tarefa": "sondagem_extract",
+      "familia": "normal",
+      "split": "treino",
+      "ids": [
+        "sd-en-013",
+        "sd-pt-013"
+      ]
+    },
+    {
+      "par": "sd-015",
+      "tarefa": "sondagem_extract",
+      "familia": "normal",
+      "split": "treino",
+      "ids": [
+        "sd-en-015",
+        "sd-pt-015"
+      ]
+    },
+    {
+      "par": "sd-017",
+      "tarefa": "sondagem_extract",
+      "familia": "normal",
+      "split": "treino",
+      "ids": [
+        "sd-en-017",
+        "sd-pt-017"
+      ]
+    },
+    {
+      "par": "sd-018",
+      "tarefa": "sondagem_extract",
+      "familia": "ambiguo",
+      "split": "treino",
+      "ids": [
+        "sd-en-018",
+        "sd-pt-018"
+      ]
+    },
+    {
+      "par": "sd-019",
+      "tarefa": "sondagem_extract",
+      "familia": "ambiguo",
+      "split": "treino",
+      "ids": [
+        "sd-en-019",
+        "sd-pt-019"
+      ]
+    },
+    {
+      "par": "sd-020",
+      "tarefa": "sondagem_extract",
+      "familia": "ambiguo",
+      "split": "treino",
+      "ids": [
+        "sd-en-020",
+        "sd-pt-020"
+      ]
+    },
+    {
+      "par": "sd-022",
+      "tarefa": "sondagem_extract",
+      "familia": "ambiguo",
+      "split": "treino",
+      "ids": [
+        "sd-en-022",
+        "sd-pt-022"
+      ]
+    },
+    {
+      "par": "sd-023",
+      "tarefa": "sondagem_extract",
+      "familia": "incompleto",
+      "split": "treino",
+      "ids": [
+        "sd-en-023",
+        "sd-pt-023"
+      ]
+    },
+    {
+      "par": "sd-025",
+      "tarefa": "sondagem_extract",
+      "familia": "incompleto",
+      "split": "treino",
+      "ids": [
+        "sd-en-025",
+        "sd-pt-025"
+      ]
+    },
+    {
+      "par": "sd-026",
+      "tarefa": "sondagem_extract",
+      "familia": "incompleto",
+      "split": "treino",
+      "ids": [
+        "sd-en-026",
+        "sd-pt-026"
+      ]
+    },
+    {
+      "par": "sd-028",
+      "tarefa": "sondagem_extract",
+      "familia": "incompleto",
+      "split": "treino",
+      "ids": [
+        "sd-en-028",
+        "sd-pt-028"
+      ]
+    },
+    {
+      "par": "sd-029",
+      "tarefa": "sondagem_extract",
+      "familia": "negativo",
+      "split": "treino",
+      "ids": [
+        "sd-en-029",
+        "sd-pt-029"
+      ]
+    },
+    {
+      "par": "sd-030",
+      "tarefa": "sondagem_extract",
+      "familia": "negativo",
+      "split": "treino",
+      "ids": [
+        "sd-en-030",
+        "sd-pt-030"
+      ]
+    },
+    {
+      "par": "sd-031",
+      "tarefa": "sondagem_extract",
+      "familia": "negativo",
+      "split": "treino",
+      "ids": [
+        "sd-en-031",
+        "sd-pt-031"
+      ]
+    },
+    {
+      "par": "sd-033",
+      "tarefa": "sondagem_extract",
+      "familia": "negativo",
+      "split": "treino",
+      "ids": [
+        "sd-en-033",
+        "sd-pt-033"
+      ]
+    },
+    {
+      "par": "sd-035",
+      "tarefa": "sondagem_extract",
+      "familia": "negativo",
+      "split": "treino",
+      "ids": [
+        "sd-en-035",
+        "sd-pt-035"
+      ]
+    },
+    {
+      "par": "sd-036",
+      "tarefa": "sondagem_extract",
+      "familia": "negativo",
+      "split": "treino",
+      "ids": [
+        "sd-en-036",
+        "sd-pt-036"
+      ]
+    },
+    {
+      "par": "sd-037",
+      "tarefa": "sondagem_extract",
+      "familia": "negativo",
+      "split": "treino",
+      "ids": [
+        "sd-en-037",
+        "sd-pt-037"
+      ]
+    },
+    {
+      "par": "sd-040",
+      "tarefa": "sondagem_extract",
+      "familia": "normal",
+      "split": "treino",
+      "ids": [
+        "sd-en-040",
+        "sd-pt-040"
+      ]
+    },
+    {
+      "par": "sd-041",
+      "tarefa": "sondagem_extract",
+      "familia": "normal",
+      "split": "treino",
+      "ids": [
+        "sd-en-041",
+        "sd-pt-041"
+      ]
+    },
+    {
+      "par": "sd-042",
+      "tarefa": "sondagem_extract",
+      "familia": "normal",
+      "split": "treino",
+      "ids": [
+        "sd-en-042",
+        "sd-pt-042"
+      ]
+    },
+    {
+      "par": "sd-044",
+      "tarefa": "sondagem_extract",
+      "familia": "ambiguo",
+      "split": "treino",
+      "ids": [
+        "sd-en-044",
+        "sd-pt-044"
+      ]
+    },
+    {
+      "par": "sd-045",
+      "tarefa": "sondagem_extract",
+      "familia": "negativo",
+      "split": "treino",
+      "ids": [
+        "sd-en-045",
+        "sd-pt-045"
+      ]
+    },
+    {
+      "par": "sd-048",
+      "tarefa": "sondagem_extract",
+      "familia": "negativo",
+      "split": "treino",
+      "ids": [
+        "sd-en-048",
+        "sd-pt-048"
+      ]
+    },
+    {
+      "par": "sd-049",
+      "tarefa": "sondagem_extract",
+      "familia": "incompleto",
+      "split": "treino",
+      "ids": [
+        "sd-en-049",
+        "sd-pt-049"
+      ]
+    },
+    {
+      "par": "sd-050",
+      "tarefa": "sondagem_extract",
+      "familia": "incompleto",
+      "split": "treino",
+      "ids": [
+        "sd-en-050",
+        "sd-pt-050"
+      ]
+    },
+    {
+      "par": "sd-051",
+      "tarefa": "sondagem_extract",
+      "familia": "ambiguo",
+      "split": "treino",
+      "ids": [
+        "sd-en-051",
+        "sd-pt-051"
+      ]
+    },
+    {
+      "par": "sd-053",
+      "tarefa": "sondagem_extract",
+      "familia": "normal",
+      "split": "treino",
+      "ids": [
+        "sd-en-053",
+        "sd-pt-053"
+      ]
+    },
+    {
+      "par": "sd-054",
+      "tarefa": "sondagem_extract",
+      "familia": "normal",
+      "split": "treino",
+      "ids": [
+        "sd-en-054",
+        "sd-pt-054"
+      ]
+    },
+    {
+      "par": "wf-002",
+      "tarefa": "workflow_intent",
+      "familia": "normal",
+      "split": "treino",
+      "ids": [
+        "wf-en-002",
+        "wf-pt-002"
+      ]
+    },
+    {
+      "par": "wf-005",
+      "tarefa": "workflow_intent",
+      "familia": "normal",
+      "split": "treino",
+      "ids": [
+        "wf-en-005",
+        "wf-pt-005"
+      ]
+    },
+    {
+      "par": "wf-007",
+      "tarefa": "workflow_intent",
+      "familia": "normal",
+      "split": "treino",
+      "ids": [
+        "wf-en-007",
+        "wf-pt-007"
+      ]
+    },
+    {
+      "par": "wf-009",
+      "tarefa": "workflow_intent",
+      "familia": "normal",
+      "split": "treino",
+      "ids": [
+        "wf-en-009",
+        "wf-pt-009"
+      ]
+    },
+    {
+      "par": "wf-010",
+      "tarefa": "workflow_intent",
+      "familia": "normal",
+      "split": "treino",
+      "ids": [
+        "wf-en-010",
+        "wf-pt-010"
+      ]
+    },
+    {
+      "par": "wf-011",
+      "tarefa": "workflow_intent",
+      "familia": "normal",
+      "split": "treino",
+      "ids": [
+        "wf-en-011",
+        "wf-pt-011"
+      ]
+    },
+    {
+      "par": "wf-012",
+      "tarefa": "workflow_intent",
+      "familia": "normal",
+      "split": "treino",
+      "ids": [
+        "wf-en-012",
+        "wf-pt-012"
+      ]
+    },
+    {
+      "par": "wf-013",
+      "tarefa": "workflow_intent",
+      "familia": "normal",
+      "split": "treino",
+      "ids": [
+        "wf-en-013",
+        "wf-pt-013"
+      ]
+    },
+    {
+      "par": "wf-014",
+      "tarefa": "workflow_intent",
+      "familia": "normal",
+      "split": "treino",
+      "ids": [
+        "wf-en-014",
+        "wf-pt-014"
+      ]
+    },
+    {
+      "par": "wf-015",
+      "tarefa": "workflow_intent",
+      "familia": "normal",
+      "split": "treino",
+      "ids": [
+        "wf-en-015",
+        "wf-pt-015"
+      ]
+    },
+    {
+      "par": "wf-016",
+      "tarefa": "workflow_intent",
+      "familia": "normal",
+      "split": "treino",
+      "ids": [
+        "wf-en-016",
+        "wf-pt-016"
+      ]
+    },
+    {
+      "par": "wf-017",
+      "tarefa": "workflow_intent",
+      "familia": "normal",
+      "split": "treino",
+      "ids": [
+        "wf-en-017",
+        "wf-pt-017"
+      ]
+    },
+    {
+      "par": "wf-018",
+      "tarefa": "workflow_intent",
+      "familia": "normal",
+      "split": "treino",
+      "ids": [
+        "wf-en-018",
+        "wf-pt-018"
+      ]
+    },
+    {
+      "par": "wf-019",
+      "tarefa": "workflow_intent",
+      "familia": "normal",
+      "split": "treino",
+      "ids": [
+        "wf-en-019",
+        "wf-pt-019"
+      ]
+    },
+    {
+      "par": "wf-020",
+      "tarefa": "workflow_intent",
+      "familia": "normal",
+      "split": "treino",
+      "ids": [
+        "wf-en-020",
+        "wf-pt-020"
+      ]
+    },
+    {
+      "par": "wf-021",
+      "tarefa": "workflow_intent",
+      "familia": "normal",
+      "split": "treino",
+      "ids": [
+        "wf-en-021",
+        "wf-pt-021"
+      ]
+    },
+    {
+      "par": "wf-024",
+      "tarefa": "workflow_intent",
+      "familia": "ambiguo",
+      "split": "treino",
+      "ids": [
+        "wf-en-024",
+        "wf-pt-024"
+      ]
+    },
+    {
+      "par": "wf-025",
+      "tarefa": "workflow_intent",
+      "familia": "ambiguo",
+      "split": "treino",
+      "ids": [
+        "wf-en-025",
+        "wf-pt-025"
+      ]
+    },
+    {
+      "par": "wf-028",
+      "tarefa": "workflow_intent",
+      "familia": "ambiguo",
+      "split": "treino",
+      "ids": [
+        "wf-en-028",
+        "wf-pt-028"
+      ]
+    },
+    {
+      "par": "wf-029",
+      "tarefa": "workflow_intent",
+      "familia": "incompleto",
+      "split": "treino",
+      "ids": [
+        "wf-en-029",
+        "wf-pt-029"
+      ]
+    },
+    {
+      "par": "wf-030",
+      "tarefa": "workflow_intent",
+      "familia": "incompleto",
+      "split": "treino",
+      "ids": [
+        "wf-en-030",
+        "wf-pt-030"
+      ]
+    },
+    {
+      "par": "wf-032",
+      "tarefa": "workflow_intent",
+      "familia": "incompleto",
+      "split": "treino",
+      "ids": [
+        "wf-en-032",
+        "wf-pt-032"
+      ]
+    },
+    {
+      "par": "wf-034",
+      "tarefa": "workflow_intent",
+      "familia": "incompleto",
+      "split": "treino",
+      "ids": [
+        "wf-en-034",
+        "wf-pt-034"
+      ]
+    },
+    {
+      "par": "wf-035",
+      "tarefa": "workflow_intent",
+      "familia": "negativo",
+      "split": "treino",
+      "ids": [
+        "wf-en-035",
+        "wf-pt-035"
+      ]
+    },
+    {
+      "par": "wf-038",
+      "tarefa": "workflow_intent",
+      "familia": "negativo",
+      "split": "treino",
+      "ids": [
+        "wf-en-038",
+        "wf-pt-038"
+      ]
+    },
+    {
+      "par": "wf-039",
+      "tarefa": "workflow_intent",
+      "familia": "negativo",
+      "split": "treino",
+      "ids": [
+        "wf-en-039",
+        "wf-pt-039"
+      ]
+    },
+    {
+      "par": "wf-040",
+      "tarefa": "workflow_intent",
+      "familia": "negativo",
+      "split": "treino",
+      "ids": [
+        "wf-en-040",
+        "wf-pt-040"
+      ]
+    },
+    {
+      "par": "wf-041",
+      "tarefa": "workflow_intent",
+      "familia": "normal",
+      "split": "treino",
+      "ids": [
+        "wf-en-041",
+        "wf-pt-041"
+      ]
+    },
+    {
+      "par": "wf-043",
+      "tarefa": "workflow_intent",
+      "familia": "normal",
+      "split": "treino",
+      "ids": [
+        "wf-en-043",
+        "wf-pt-043"
+      ]
+    },
+    {
+      "par": "wf-044",
+      "tarefa": "workflow_intent",
+      "familia": "normal",
+      "split": "treino",
+      "ids": [
+        "wf-en-044",
+        "wf-pt-044"
+      ]
+    },
+    {
+      "par": "wf-045",
+      "tarefa": "workflow_intent",
+      "familia": "ambiguo",
+      "split": "treino",
+      "ids": [
+        "wf-en-045",
+        "wf-pt-045"
+      ]
+    },
+    {
+      "par": "wf-046",
+      "tarefa": "workflow_intent",
+      "familia": "incompleto",
+      "split": "treino",
+      "ids": [
+        "wf-en-046",
+        "wf-pt-046"
+      ]
+    },
+    {
+      "par": "wf-049",
+      "tarefa": "workflow_intent",
+      "familia": "incompleto",
+      "split": "treino",
+      "ids": [
+        "wf-en-049",
+        "wf-pt-049"
+      ]
+    },
+    {
+      "par": "wf-050",
+      "tarefa": "workflow_intent",
+      "familia": "negativo",
+      "split": "treino",
+      "ids": [
+        "wf-en-050",
+        "wf-pt-050"
+      ]
+    },
+    {
+      "par": "wf-051",
+      "tarefa": "workflow_intent",
+      "familia": "normal",
+      "split": "treino",
+      "ids": [
+        "wf-en-051",
+        "wf-pt-051"
+      ]
+    },
+    {
+      "par": "wf-053",
+      "tarefa": "workflow_intent",
+      "familia": "negativo",
+      "split": "treino",
+      "ids": [
+        "wf-en-053",
+        "wf-pt-053"
+      ]
+    },
+    {
+      "par": "wf-054",
+      "tarefa": "workflow_intent",
+      "familia": "ambiguo",
+      "split": "treino",
+      "ids": [
+        "wf-en-054",
+        "wf-pt-054"
+      ]
+    },
+    {
+      "par": "gv-001",
+      "tarefa": "governance_label",
+      "familia": "normal",
+      "split": "validacao",
+      "ids": [
+        "gv-en-001",
+        "gv-pt-001"
+      ]
+    },
+    {
+      "par": "gv-009",
+      "tarefa": "governance_label",
+      "familia": "normal",
+      "split": "validacao",
+      "ids": [
+        "gv-en-009",
+        "gv-pt-009"
+      ]
+    },
+    {
+      "par": "gv-015",
+      "tarefa": "governance_label",
+      "familia": "ambiguo",
+      "split": "validacao",
+      "ids": [
+        "gv-en-015",
+        "gv-pt-015"
+      ]
+    },
+    {
+      "par": "gv-023",
+      "tarefa": "governance_label",
+      "familia": "negativo",
+      "split": "validacao",
+      "ids": [
+        "gv-en-023",
+        "gv-pt-023"
+      ]
+    },
+    {
+      "par": "gv-025",
+      "tarefa": "governance_label",
+      "familia": "negativo",
+      "split": "validacao",
+      "ids": [
+        "gv-en-025",
+        "gv-pt-025"
+      ]
+    },
+    {
+      "par": "gv-040",
+      "tarefa": "governance_label",
+      "familia": "incompleto",
+      "split": "validacao",
+      "ids": [
+        "gv-en-040",
+        "gv-pt-040"
+      ]
+    },
+    {
+      "par": "sd-002",
+      "tarefa": "sondagem_extract",
+      "familia": "normal",
+      "split": "validacao",
+      "ids": [
+        "sd-en-002",
+        "sd-pt-002"
+      ]
+    },
+    {
+      "par": "sd-011",
+      "tarefa": "sondagem_extract",
+      "familia": "normal",
+      "split": "validacao",
+      "ids": [
+        "sd-en-011",
+        "sd-pt-011"
+      ]
+    },
+    {
+      "par": "sd-014",
+      "tarefa": "sondagem_extract",
+      "familia": "normal",
+      "split": "validacao",
+      "ids": [
+        "sd-en-014",
+        "sd-pt-014"
+      ]
+    },
+    {
+      "par": "sd-021",
+      "tarefa": "sondagem_extract",
+      "familia": "ambiguo",
+      "split": "validacao",
+      "ids": [
+        "sd-en-021",
+        "sd-pt-021"
+      ]
+    },
+    {
+      "par": "sd-024",
+      "tarefa": "sondagem_extract",
+      "familia": "incompleto",
+      "split": "validacao",
+      "ids": [
+        "sd-en-024",
+        "sd-pt-024"
+      ]
+    },
+    {
+      "par": "sd-032",
+      "tarefa": "sondagem_extract",
+      "familia": "negativo",
+      "split": "validacao",
+      "ids": [
+        "sd-en-032",
+        "sd-pt-032"
+      ]
+    },
+    {
+      "par": "sd-034",
+      "tarefa": "sondagem_extract",
+      "familia": "negativo",
+      "split": "validacao",
+      "ids": [
+        "sd-en-034",
+        "sd-pt-034"
+      ]
+    },
+    {
+      "par": "sd-052",
+      "tarefa": "sondagem_extract",
+      "familia": "ambiguo",
+      "split": "validacao",
+      "ids": [
+        "sd-en-052",
+        "sd-pt-052"
+      ]
+    },
+    {
+      "par": "wf-004",
+      "tarefa": "workflow_intent",
+      "familia": "normal",
+      "split": "validacao",
+      "ids": [
+        "wf-en-004",
+        "wf-pt-004"
+      ]
+    },
+    {
+      "par": "wf-006",
+      "tarefa": "workflow_intent",
+      "familia": "normal",
+      "split": "validacao",
+      "ids": [
+        "wf-en-006",
+        "wf-pt-006"
+      ]
+    },
+    {
+      "par": "wf-022",
+      "tarefa": "workflow_intent",
+      "familia": "normal",
+      "split": "validacao",
+      "ids": [
+        "wf-en-022",
+        "wf-pt-022"
+      ]
+    },
+    {
+      "par": "wf-031",
+      "tarefa": "workflow_intent",
+      "familia": "incompleto",
+      "split": "validacao",
+      "ids": [
+        "wf-en-031",
+        "wf-pt-031"
+      ]
+    },
+    {
+      "par": "wf-033",
+      "tarefa": "workflow_intent",
+      "familia": "incompleto",
+      "split": "validacao",
+      "ids": [
+        "wf-en-033",
+        "wf-pt-033"
+      ]
+    },
+    {
+      "par": "wf-036",
+      "tarefa": "workflow_intent",
+      "familia": "negativo",
+      "split": "validacao",
+      "ids": [
+        "wf-en-036",
+        "wf-pt-036"
+      ]
+    },
+    {
+      "par": "wf-037",
+      "tarefa": "workflow_intent",
+      "familia": "negativo",
+      "split": "validacao",
+      "ids": [
+        "wf-en-037",
+        "wf-pt-037"
+      ]
+    },
+    {
+      "par": "wf-042",
+      "tarefa": "workflow_intent",
+      "familia": "ambiguo",
+      "split": "validacao",
+      "ids": [
+        "wf-en-042",
+        "wf-pt-042"
+      ]
+    },
+    {
+      "par": "gv-016",
+      "tarefa": "governance_label",
+      "familia": "incompleto",
+      "split": "teste",
+      "ids": [
+        "gv-en-016",
+        "gv-pt-016"
+      ]
+    },
+    {
+      "par": "gv-019",
+      "tarefa": "governance_label",
+      "familia": "incompleto",
+      "split": "teste",
+      "ids": [
+        "gv-en-019",
+        "gv-pt-019"
+      ]
+    },
+    {
+      "par": "gv-022",
+      "tarefa": "governance_label",
+      "familia": "negativo",
+      "split": "teste",
+      "ids": [
+        "gv-en-022",
+        "gv-pt-022"
+      ]
+    },
+    {
+      "par": "gv-027",
+      "tarefa": "governance_label",
+      "familia": "negativo",
+      "split": "teste",
+      "ids": [
+        "gv-en-027",
+        "gv-pt-027"
+      ]
+    },
+    {
+      "par": "gv-029",
+      "tarefa": "governance_label",
+      "familia": "negativo",
+      "split": "teste",
+      "ids": [
+        "gv-en-029",
+        "gv-pt-029"
+      ]
+    },
+    {
+      "par": "gv-031",
+      "tarefa": "governance_label",
+      "familia": "ambiguo",
+      "split": "teste",
+      "ids": [
+        "gv-en-031",
+        "gv-pt-031"
+      ]
+    },
+    {
+      "par": "gv-039",
+      "tarefa": "governance_label",
+      "familia": "negativo",
+      "split": "teste",
+      "ids": [
+        "gv-en-039",
+        "gv-pt-039"
+      ]
+    },
+    {
+      "par": "sd-003",
+      "tarefa": "sondagem_extract",
+      "familia": "normal",
+      "split": "teste",
+      "ids": [
+        "sd-en-003",
+        "sd-pt-003"
+      ]
+    },
+    {
+      "par": "sd-007",
+      "tarefa": "sondagem_extract",
+      "familia": "normal",
+      "split": "teste",
+      "ids": [
+        "sd-en-007",
+        "sd-pt-007"
+      ]
+    },
+    {
+      "par": "sd-016",
+      "tarefa": "sondagem_extract",
+      "familia": "normal",
+      "split": "teste",
+      "ids": [
+        "sd-en-016",
+        "sd-pt-016"
+      ]
+    },
+    {
+      "par": "sd-027",
+      "tarefa": "sondagem_extract",
+      "familia": "incompleto",
+      "split": "teste",
+      "ids": [
+        "sd-en-027",
+        "sd-pt-027"
+      ]
+    },
+    {
+      "par": "sd-038",
+      "tarefa": "sondagem_extract",
+      "familia": "normal",
+      "split": "teste",
+      "ids": [
+        "sd-en-038",
+        "sd-pt-038"
+      ]
+    },
+    {
+      "par": "sd-039",
+      "tarefa": "sondagem_extract",
+      "familia": "normal",
+      "split": "teste",
+      "ids": [
+        "sd-en-039",
+        "sd-pt-039"
+      ]
+    },
+    {
+      "par": "sd-043",
+      "tarefa": "sondagem_extract",
+      "familia": "normal",
+      "split": "teste",
+      "ids": [
+        "sd-en-043",
+        "sd-pt-043"
+      ]
+    },
+    {
+      "par": "sd-046",
+      "tarefa": "sondagem_extract",
+      "familia": "negativo",
+      "split": "teste",
+      "ids": [
+        "sd-en-046",
+        "sd-pt-046"
+      ]
+    },
+    {
+      "par": "sd-047",
+      "tarefa": "sondagem_extract",
+      "familia": "negativo",
+      "split": "teste",
+      "ids": [
+        "sd-en-047",
+        "sd-pt-047"
+      ]
+    },
+    {
+      "par": "wf-001",
+      "tarefa": "workflow_intent",
+      "familia": "normal",
+      "split": "teste",
+      "ids": [
+        "wf-en-001",
+        "wf-pt-001"
+      ]
+    },
+    {
+      "par": "wf-003",
+      "tarefa": "workflow_intent",
+      "familia": "normal",
+      "split": "teste",
+      "ids": [
+        "wf-en-003",
+        "wf-pt-003"
+      ]
+    },
+    {
+      "par": "wf-008",
+      "tarefa": "workflow_intent",
+      "familia": "normal",
+      "split": "teste",
+      "ids": [
+        "wf-en-008",
+        "wf-pt-008"
+      ]
+    },
+    {
+      "par": "wf-023",
+      "tarefa": "workflow_intent",
+      "familia": "normal",
+      "split": "teste",
+      "ids": [
+        "wf-en-023",
+        "wf-pt-023"
+      ]
+    },
+    {
+      "par": "wf-026",
+      "tarefa": "workflow_intent",
+      "familia": "ambiguo",
+      "split": "teste",
+      "ids": [
+        "wf-en-026",
+        "wf-pt-026"
+      ]
+    },
+    {
+      "par": "wf-027",
+      "tarefa": "workflow_intent",
+      "familia": "ambiguo",
+      "split": "teste",
+      "ids": [
+        "wf-en-027",
+        "wf-pt-027"
+      ]
+    },
+    {
+      "par": "wf-047",
+      "tarefa": "workflow_intent",
+      "familia": "normal",
+      "split": "teste",
+      "ids": [
+        "wf-en-047",
+        "wf-pt-047"
+      ]
+    },
+    {
+      "par": "wf-048",
+      "tarefa": "workflow_intent",
+      "familia": "normal",
+      "split": "teste",
+      "ids": [
+        "wf-en-048",
+        "wf-pt-048"
+      ]
+    },
+    {
+      "par": "wf-052",
+      "tarefa": "workflow_intent",
+      "familia": "ambiguo",
+      "split": "teste",
+      "ids": [
+        "wf-en-052",
+        "wf-pt-052"
+      ]
+    }
+  ]
+}

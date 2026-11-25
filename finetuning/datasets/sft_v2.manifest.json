@@ -1,0 +1,100 @@
+{
+  "anti_vazamento": {
+    "ids_intersecao": {
+      "treino": [],
+      "validacao": []
+    },
+    "intersecao_ids": 0,
+    "intersecao_pares": 0,
+    "ok": true,
+    "pares_intersecao": {
+      "treino": [],
+      "validacao": []
+    },
+    "split_avaliacao": "teste",
+    "teste_pares": 25,
+    "teste_registros": 50
+  },
+  "arquivos": {
+    "treino": {
+      "arquivo": "sft_v2_treino.jsonl",
+      "bytes": 1073025,
+      "linhas": 206,
+      "sha256": "9c7f0afedd8c4819330d20652a3e0a3ff6bb4313a306e36c61ac6d74875d8e34"
+    },
+    "validacao": {
+      "arquivo": "sft_v2_validacao.jsonl",
+      "bytes": 229086,
+      "linhas": 44,
+      "sha256": "818deea0d7f533026d1ecd8f28f6252876608a1515b35bb457cff183f6ed7edc"
+    }
+  },
+  "dataset": {
+    "arquivo": "nexusgeoia_behavior_v2.jsonl",
+    "pares": 150,
+    "registros": 300,
+    "sha256": "74a52f789726190f2a99eb84fa2b5afa089cfd806ab9aff6a1dd169561071ecc"
+  },
+  "formato": {
+    "papeis": [
+      "system",
+      "user",
+      "assistant"
+    ],
+    "prompts": "finetuning.benchmark._prompt_sistema/_prompt_usuario",
+    "resposta": "finetuning.contrato.json_compacto",
+    "tipo": "chat"
+  },
+  "gerado_por": "finetuning.exportar_sft",
+  "invariantes": {
+    "pares_exportados": 125,
+    "registros_exportados": 250,
+    "sem_vazamento_teste": true
+  },
+  "nome": "sft_v2",
+  "por_split": {
+    "treino": {
+      "pares": 103,
+      "por_idioma": {
+        "en": 103,
+        "pt": 103
+      },
+      "por_tarefa": {
+        "governance_label": 58,
+        "sondagem_extract": 74,
+        "workflow_intent": 74
+      },
+      "registros": 206
+    },
+    "validacao": {
+      "pares": 22,
+      "por_idioma": {
+        "en": 22,
+        "pt": 22
+      },
+      "por_tarefa": {
+        "governance_label": 12,
+        "sondagem_extract": 16,
+        "workflow_intent": 16
+      },
+      "registros": 44
+    }
+  },
+  "split": {
+    "arquivo": "nexusgeoia_behavior_v2.split.json",
+    "politica": {
+      "agrupamento": "metadados.par",
+      "estratificacao": "tarefa",
+      "fracoes": {
+        "teste": 0.15,
+        "treino": 0.7,
+        "validacao": 0.15
+      },
+      "ordenacao": "sha256(sal:par)",
+      "sal": "nexusgeoia-behavior-split-v2"
+    },
+    "sha256": "a780abf8dd0f9411c7ce8ade1c5c8c07d73ae545399dbd9c33c0edcefa79c2cf",
+    "sha256_dataset": "74a52f789726190f2a99eb84fa2b5afa089cfd806ab9aff6a1dd169561071ecc"
+  },
+  "versao": "2.0.0"
+}

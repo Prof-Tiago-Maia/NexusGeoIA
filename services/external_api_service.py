@@ -126,11 +126,21 @@ import urllib.parse
 import warnings
 import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FuturoTimeout
+from contextlib import contextmanager
 from datetime import datetime, timezone
+from functools import partial, wraps
 from pathlib import Path
 from xml.sax.saxutils import escape
 
 import requests
+
+from services.progress_service import (
+    ETAPA_INTL_GEO,
+    CancelamentoSolicitado,
+    evento_ativo,
+    verificar_cancelamento,
+)
 
 # Pesquisa na Web sem chave de API. O pacote ``ddgs`` substituiu
 # ``duckduckgo_search`` no PyPI; o import aceita os dois nomes para que
@@ -169,6 +179,247 @@ FONTE_RIGEO = "RIGeo"
 FONTE_GEOBUSCA = "GeoBusca"
 
 LOGGER = logging.getLogger(__name__)
+
+# Prazo HTTP padrao aplicado por requisicao_http quando o chamador nao
+# informa um timeout. Os conectores continuam podendo declarar o seu
+# (ANA usa orcamentos proprios, internacionais usam 7 s), mas nenhuma
+# requisicao fica sem prazo: um portal que nao responde vira falha
+# explicita em vez de travar a etapa silenciosamente.
+TIMEOUT_HTTP_PADRAO = 8.0
+
+# ---------------------------------------------------------------------------
+# Sessoes HTTP e cancelamento cooperativo (Fase D3a)
+# ---------------------------------------------------------------------------
+
+# O evento de cancelamento da consulta atual fica no thread-local porque
+# conectores publicos chamam helpers internos sem repassar o parametro em
+# todas as camadas. Cada thread de trabalho do orquestrador abre o seu
+# proprio contexto; nao ha estado compartilhado entre consultas.
+_ESTADO_CANCELAMENTO = threading.local()
+
+
+@contextmanager
+def contexto_cancelamento(cancelamento=None):
+    """Publica o evento de cancelamento para a thread atual."""
+
+    anterior = getattr(_ESTADO_CANCELAMENTO, "evento", None)
+
+    if cancelamento is None:
+        yield
+        return
+
+    _ESTADO_CANCELAMENTO.evento = cancelamento
+
+    try:
+        yield
+    finally:
+        _ESTADO_CANCELAMENTO.evento = anterior
+
+
+def cancelamento_atual(cancelamento=None):
+    """Devolve o evento explicito ou o do contexto da thread."""
+
+    if cancelamento is not None:
+        return cancelamento
+
+    return getattr(_ESTADO_CANCELAMENTO, "evento", None)
+
+
+def _operacao_cancelavel(funcao):
+    """Aceita cancelamento= nos conectores e verifica antes/depois.
+
+    O parametro e opcional e nao aparece na assinatura interna para nao
+    obrigar todos os chamadores antigos a mudar. A funcao decorada
+    recebe o evento pelo contexto e o devolve ao contexto anterior ao
+    terminar, inclusive quando levanta CancelamentoSolicitado.
+    """
+
+    @wraps(funcao)
+    def envolvida(*args, **kwargs):
+        cancelamento = kwargs.pop("cancelamento", None)
+
+        if cancelamento is None:
+            cancelamento = cancelamento_atual()
+
+        with contexto_cancelamento(cancelamento):
+            verificar_cancelamento(cancelamento)
+            resultado = funcao(*args, **kwargs)
+            verificar_cancelamento(cancelamento)
+            return resultado
+
+    return envolvida
+
+
+class RespostaHTTP:
+    """Resposta requests cujo ciclo de vida acompanha o cancelamento.
+
+    O corpo ja foi carregado pelo requests (stream=False), entao fechar a
+    resposta antes de ler .json()/.text e seguro. O fechamento remove o
+    proprio callback do Event, evitando manter respostas abertas (e
+    memorias associadas) depois do uso normal.
+    """
+
+    def __init__(self, resposta, sessao, cancelamento):
+        self._resposta = resposta
+        self._sessao = sessao
+        self._cancelamento = cancelamento
+        self._trava = threading.Lock()
+        self._fechada = False
+
+    def _encerrar(self):
+        with self._trava:
+            if self._fechada:
+                return
+
+            self._fechada = True
+
+        try:
+            self._resposta.close()
+        except Exception:  # noqa: BLE001, S110
+            pass
+
+        try:
+            self._sessao.close()
+        except Exception:  # noqa: BLE001, S110
+            pass
+
+        remover = getattr(self._cancelamento, "remover_fechamento", None)
+
+        if callable(remover):
+            # O Event guarda self.close; remover os dois nomes garante
+            # que uma leitura normal não deixe callback pendente.
+            remover(self._encerrar)
+            remover(self.close)
+
+    def close(self):
+        self._encerrar()
+
+    def raise_for_status(self):
+        try:
+            self._resposta.raise_for_status()
+        except Exception:
+            self._encerrar()
+            raise
+
+        return self
+
+    def json(self, *args, **kwargs):
+        try:
+            return self._resposta.json(*args, **kwargs)
+        finally:
+            self._encerrar()
+
+    @property
+    def text(self):
+        try:
+            return self._resposta.text
+        finally:
+            self._encerrar()
+
+    @property
+    def content(self):
+        try:
+            return self._resposta.content
+        finally:
+            self._encerrar()
+
+    @property
+    def status_code(self):
+        try:
+            return self._resposta.status_code
+        finally:
+            self._encerrar()
+
+    @property
+    def ok(self):
+        try:
+            return self._resposta.ok
+        finally:
+            self._encerrar()
+
+    @property
+    def encoding(self):
+        return self._resposta.encoding
+
+    @encoding.setter
+    def encoding(self, valor):
+        self._resposta.encoding = valor
+
+    def __getattr__(self, nome):
+        return getattr(self._resposta, nome)
+
+
+def requisicao_http(metodo, url, *, cancelamento=None, sessao=None, **kwargs):
+    """GET/POST com sessao e resposta vinculadas ao cancelamento.
+
+    Sem evento (chamadas legadas e testes que patcham requests.get), o
+    caminho e o mesmo de antes. Com evento, usa uma requests.Session
+    dedicada, registra o fechamento da sessao antes da chamada e o da
+    resposta assim que ela existe. Se o cancelamento chegar durante a
+    requisicao, a sessao e fechada por outra thread, a chamada falha e o
+    helper converte a falha em CancelamentoSolicitado.
+    """
+
+    evento = cancelamento_atual(cancelamento)
+    verificar_cancelamento(evento)
+
+    # Prazo explicito por etapa: sem timeout informado, vale o padrao.
+    # Assim os conectores publicos nunca dependem do default infinito do
+    # requests e uma fonte lenta falha em vez de travar a consulta.
+    if "timeout" not in kwargs:
+        kwargs["timeout"] = TIMEOUT_HTTP_PADRAO
+
+    if evento is None:
+        return getattr(requests, str(metodo).lower())(url, **kwargs)
+
+    sessao = sessao or requests.Session()
+    registrar = getattr(evento, "registrar_fechamento", None)
+    remover = getattr(evento, "remover_fechamento", None)
+    fechamento_sessao = sessao.close
+
+    if callable(registrar):
+        registrar(fechamento_sessao)
+
+    try:
+        resposta = sessao.request(metodo, url, **kwargs)
+    except BaseException:
+        if callable(remover):
+            remover(fechamento_sessao)
+
+        try:
+            sessao.close()
+        except Exception:  # noqa: BLE001, S110
+            pass
+
+        if evento_ativo(evento):
+            raise CancelamentoSolicitado() from None
+
+        raise
+
+    if evento_ativo(evento):
+        if callable(remover):
+            remover(fechamento_sessao)
+
+        try:
+            resposta.close()
+        finally:
+            try:
+                sessao.close()
+            except Exception:  # noqa: BLE001, S110
+                pass
+
+        raise CancelamentoSolicitado()
+
+    if callable(remover):
+        remover(fechamento_sessao)
+
+    final = RespostaHTTP(resposta, sessao, evento)
+
+    if callable(registrar):
+        registrar(final.close)
+
+    return final
+
 
 CAMINHO_BUSCA_RIGEO = "/server/api/discover/search/objects"
 CAMINHO_COMUNIDADES_RIGEO = "/server/api/core/communities"
@@ -934,7 +1185,7 @@ def _bitstreams_do_bundle(bundle):
         return []
 
     try:
-        resposta = requests.get(
+        resposta = requisicao_http("GET", 
             link,
             params={"size": MAX_BITSTREAMS_PDF},
             headers={"Accept": "application/json"},
@@ -974,7 +1225,7 @@ def _pdf_do_item(uuid):
     falhou = False
 
     try:
-        resposta = requests.get(
+        resposta = requisicao_http("GET", 
             url,
             params={
                 "embed": "bitstreams",
@@ -1053,13 +1304,16 @@ def _pdf_do_item(uuid):
     return resultado
 
 
-def _pdf_do_item_seguro(registro):
+def _pdf_do_item_seguro(registro, cancelamento=None):
     """Versão tolerante a falhas para uso no enriquecimento em lote."""
 
-    try:
-        return _pdf_do_item(registro.get("uuid") or "")
-    except Exception:
-        return "", ""
+    with contexto_cancelamento(cancelamento):
+        try:
+            return _pdf_do_item(registro.get("uuid") or "")
+        except CancelamentoSolicitado:
+            raise
+        except Exception:  # noqa: BLE001 - falha isolada da fonte
+            return "", ""
 
 
 def _preencher_links_pdf(registros):
@@ -1085,12 +1339,19 @@ def _preencher_links_pdf(registros):
         len(alvos)
     )
 
+    evento = cancelamento_atual()
+
     try:
         with ThreadPoolExecutor(max_workers=trabalhadores) as executor:
             resultados = list(
-                executor.map(_pdf_do_item_seguro, alvos)
+                executor.map(
+                    partial(_pdf_do_item_seguro, cancelamento=evento),
+                    alvos,
+                )
             )
-    except Exception:
+    except CancelamentoSolicitado:
+        raise
+    except Exception:  # noqa: BLE001 - lote best-effort
         return
 
     for registro, (link, nome) in zip(alvos, resultados):
@@ -1117,7 +1378,7 @@ def _carregar_comunidades():
     )
 
     try:
-        resposta = requests.get(
+        resposta = requisicao_http("GET", 
             url,
             params={"size": MAX_COMUNIDADES},
             headers={"Accept": "application/json"},
@@ -1194,7 +1455,7 @@ def _consultar_rigeo(consulta, limite, escopo=None):
         parametros["scope"] = escopo
 
     try:
-        resposta = requests.get(
+        resposta = requisicao_http("GET", 
             url,
             params=parametros,
             headers={"Accept": "application/json"},
@@ -1429,6 +1690,9 @@ def _consultar_geobusca(pergunta, limite):
         )
         return []
 
+    evento = cancelamento_atual()
+    verificar_cancelamento(evento)
+
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:
@@ -1450,11 +1714,17 @@ def _consultar_geobusca(pergunta, limite):
                 if not _preencher_busca(pagina, texto):
                     return []
 
-                pagina.wait_for_timeout(8000)
+                # Espera fatiada: o Event e conferido a cada 200 ms para
+                # o cancelamento nao ficar preso nos 8 s do fallback.
+                for _ in range(40):
+                    verificar_cancelamento(evento)
+                    pagina.wait_for_timeout(200)
 
                 return _extrair_geobusca(pagina, limite)
             finally:
                 navegador.close()
+    except CancelamentoSolicitado:
+        raise
     except Exception as erro:  # noqa: BLE001 - fallback nunca derruba o SGB
         LOGGER.info(
             "GeoBusca indisponível (%s); fallback ignorado.",
@@ -1507,6 +1777,7 @@ def _planejar_busca(pergunta, usar_llm=False, modelo=None):
     }
 
 
+@_operacao_cancelavel
 def consultar_sgb(
     pergunta: str,
     limite: int = 5,
@@ -1624,6 +1895,7 @@ def consultar_sgb(
                 f"{comunidade}."
             )
     elif not registros:
+        verificar_cancelamento(cancelamento_atual())
         alternativos = _consultar_geobusca(consultas[0], limite)
 
         if alternativos:
@@ -1637,6 +1909,7 @@ def consultar_sgb(
 
     # O PDF é enriquecido somente nos registros finais, depois da
     # deduplicação e do limite, para não consultar itens descartados.
+    verificar_cancelamento(cancelamento_atual())
     _preencher_links_pdf(registros)
 
     return {
@@ -2296,7 +2569,7 @@ def _tentativa_inventario_ana(transporte, parametros, envelope, timeout):
 
     try:
         if transporte == "soap":
-            resposta = requests.post(
+            resposta = requisicao_http("POST", 
                 ANA_URL_INVENTARIO,
                 data=envelope,
                 headers={
@@ -2307,7 +2580,7 @@ def _tentativa_inventario_ana(transporte, parametros, envelope, timeout):
                 timeout=timeout,
             )
         else:
-            resposta = requests.get(
+            resposta = requisicao_http("GET", 
                 f"{ANA_URL_INVENTARIO}{ANA_CAMINHO_GET}",
                 params=parametros,
                 headers={"Accept": "text/xml"},
@@ -2918,7 +3191,7 @@ def _consultar_rest_ana(uf, entidades, termos, tipo, limite):
             }
 
             try:
-                resposta = requests.get(
+                resposta = requisicao_http("GET", 
                     ANA_REST_URL,
                     params=parametros,
                     headers={"Accept": "application/json"},
@@ -3386,6 +3659,7 @@ def _descrever_recorte_ana(entidades, uf, termos):
     return " ".join(partes)
 
 
+@_operacao_cancelavel
 def consultar_ana_estacoes(
     termo: str,
     uf: str | None = None,
@@ -3616,6 +3890,7 @@ def consultar_ana_estacoes(
                 "salvo": False,
             },
         )
+        verificar_cancelamento(cancelamento_atual())
         arquivo = _salvar_cache_ana(chave_cache, resposta, validade)
 
         if arquivo is not None:
@@ -3839,8 +4114,10 @@ def _consultar_ddgs(consulta: str, limite: int):
         return None, motivo
 
     ultimo_erro = None
+    evento = cancelamento_atual()
 
     for tentativa in range(WEB_TENTATIVAS):
+        verificar_cancelamento(evento)
         cliente = None
 
         try:
@@ -3850,8 +4127,14 @@ def _consultar_ddgs(consulta: str, limite: int):
                 region=WEB_REGIAO,
                 max_results=limite
             )
+            verificar_cancelamento(evento)
             return list(resultados or []), None
-        except Exception as erro:
+        except CancelamentoSolicitado:
+            raise
+        except Exception as erro:  # noqa: BLE001 - falha do buscador
+            if evento_ativo(evento):
+                raise CancelamentoSolicitado() from None
+
             ultimo_erro = erro
         finally:
             # Versões recentes do DDGS expõem um gerenciador de contexto
@@ -3891,6 +4174,7 @@ def _montar_consulta_web(texto: str, apenas_tecnico: bool) -> str:
     return consulta
 
 
+@_operacao_cancelavel
 def consultar_web_detalhado(
     query: str,
     limite: int = WEB_LIMITE_PADRAO,
@@ -4237,7 +4521,7 @@ def _requisitar_json(url, parametros, timeout, fonte):
     """
 
     try:
-        resposta = requests.get(
+        resposta = requisicao_http("GET", 
             url,
             params=parametros,
             headers=CABECALHOS_EXTERNOS,
@@ -4265,6 +4549,7 @@ def _requisitar_json(url, parametros, timeout, fonte):
     return dados, None
 
 
+@_operacao_cancelavel
 def consultar_openalex_detalhado(
     termo_en: str,
     limite: int = EXTERNO_LIMITE_PADRAO
@@ -4892,7 +5177,7 @@ def _requisitar_geosgb(url, parametros, prazo):
         return None, False
 
     try:
-        resposta = requests.get(
+        resposta = requisicao_http("GET", 
             url,
             params=parametros,
             headers=CABECALHOS_EXTERNOS,
@@ -5410,6 +5695,7 @@ def _buscar_ocorrencias_espelho_geosgb(clausulas, limite):
     return _features_geojson(dados)
 
 
+@_operacao_cancelavel
 def consultar_geosgb_ocorrencias(
     substancia: str,
     uf: str | None = None,
@@ -5853,7 +6139,7 @@ def _requisitar_anm(url, parametros, prazo, timeout=ANM_TIMEOUT):
     for verificar, rotulo in tentativas:
         try:
             if verificar:
-                resposta = requests.get(
+                resposta = requisicao_http("GET", 
                     url,
                     params=parametros,
                     headers=CABECALHOS_EXTERNOS,
@@ -5865,7 +6151,7 @@ def _requisitar_anm(url, parametros, prazo, timeout=ANM_TIMEOUT):
                 # ``tls``, então não polui o log do aplicativo.
                 with warnings.catch_warnings():
                     warnings.simplefilter("ignore")
-                    resposta = requests.get(
+                    resposta = requisicao_http("GET", 
                         url,
                         params=parametros,
                         headers=CABECALHOS_EXTERNOS,
@@ -6685,6 +6971,7 @@ def _salvar_cache_anm(chave, resposta):
         _ANM_CACHE[chave] = (time.monotonic(), copy.deepcopy(resposta))
 
 
+@_operacao_cancelavel
 def consultar_anm_processos(
     substancia_ou_titular: str,
     uf: str | None = None,
@@ -6940,7 +7227,7 @@ def _requisitar_json_externo(url, parametros, prazo, timeout):
         return None, False
 
     try:
-        resposta = requests.get(
+        resposta = requisicao_http("GET", 
             url,
             params=parametros,
             headers=CABECALHOS_EXTERNOS,
@@ -7409,6 +7696,7 @@ def _unidades_macrostrat(parametros, prazo, caminho="units"):
     return [unidade for unidade in unidades if isinstance(unidade, dict)]
 
 
+@_operacao_cancelavel
 def consultar_macrostrat(
     termo_ou_unidade: str,
     lat: float | None = None,
@@ -8236,6 +8524,7 @@ def _registros_rimas(chave, sigla_uf, limite, prazo):
     return _registros_siagas(feicoes, limite, "RIMAS")
 
 
+@_operacao_cancelavel
 def consultar_siagas_pocos(
     municipio_ou_termo: str,
     uf: str | None = None,
@@ -8880,6 +9169,7 @@ def _registros_geossit(feicoes, limite):
     return registros
 
 
+@_operacao_cancelavel
 def consultar_geossit_inde(
     termo: str,
     uf: str | None = None,
@@ -9976,11 +10266,23 @@ def _geo_cache_ler(caminho, permitir_expirado=False):
 
 
 def _geo_cache_gravar(caminho, registros):
-    """Grava o cache em disco de forma atômica e silenciosa."""
+    """Grava o cache em disco de forma atômica e silenciosa.
+
+    Repetir a gravacao da mesma chave e idempotente: o destino e sempre
+    trocado por inteiro (os.replace) e nunca fica um JSON pela metade.
+    O temporario tem nome unico por processo/thread — duas consultas
+    iguais simultaneas nao disputam o mesmo arquivo — e e removido em
+    qualquer falha, para nao deixar artefato parcial no diretorio.
+    """
+
+    temporario = None
 
     try:
         caminho.parent.mkdir(parents=True, exist_ok=True)
-        temporario = caminho.with_suffix(".tmp")
+        temporario = caminho.with_name(
+            f"{caminho.name}.{os.getpid()}.{threading.get_ident()}.tmp"
+        )
+
         with temporario.open("w", encoding="utf-8") as arquivo:
             json.dump(
                 {
@@ -9990,8 +10292,17 @@ def _geo_cache_gravar(caminho, registros):
                 arquivo,
                 ensure_ascii=False,
             )
-        temporario.replace(caminho)
+            arquivo.flush()
+            os.fsync(arquivo.fileno())
+
+        os.replace(temporario, caminho)
     except (OSError, TypeError, ValueError):
+        if temporario is not None:
+            try:
+                temporario.unlink(missing_ok=True)
+            except OSError:
+                pass
+
         return
 
 
@@ -10011,13 +10322,18 @@ def _geo_com_cache(nome, parametros, produtor):
 
     try:
         registros = produtor() or []
-    except Exception:
+    except CancelamentoSolicitado:
+        raise
+    except Exception:  # noqa: BLE001 - cache de emergencia
         return _geo_cache_ler(caminho, permitir_expirado=True) or []
 
     registros = [registro for registro in registros if isinstance(registro, dict)]
 
     # Resultado vazio não é cacheado: o portal pode estar apenas
-    # oscilando e a próxima pergunta deve poder tentar de novo.
+    # oscilando e a próxima pergunta deve poder tentar de novo. Um
+    # cancelamento tambem não grava cache: o turno foi descartado.
+    verificar_cancelamento(cancelamento_atual())
+
     if registros:
         _geo_cache_gravar(caminho, registros)
 
@@ -10040,7 +10356,7 @@ def _geo_requisitar(url, parametros=None, formato="json", timeout=INTL_TIMEOUT):
                 "application/atom+xml,text/html;q=0.9,*/*;q=0.8"
             )
 
-        resposta = requests.get(
+        resposta = requisicao_http("GET", 
             url,
             params=parametros or {},
             headers=cabecalhos,
@@ -10055,7 +10371,12 @@ def _geo_requisitar(url, parametros=None, formato="json", timeout=INTL_TIMEOUT):
             return resposta.json()
 
         return resposta.text
-    except Exception:
+    except CancelamentoSolicitado:
+        raise
+    except Exception:  # noqa: BLE001 - portal externo tolerante
+        if evento_ativo(cancelamento_atual()):
+            raise CancelamentoSolicitado() from None
+
         return None
 
 
@@ -10899,6 +11220,7 @@ def _geo_consultar_wfs(
 # Conectores regionais
 # ---------------------------------------------------------------------------
 
+@_operacao_cancelavel
 def consultar_onegeology(
     termo: str,
     lat: float | None = None,
@@ -10982,6 +11304,7 @@ def consultar_onegeology(
     )
 
 
+@_operacao_cancelavel
 def consultar_usgs_sciencebase(
     termo: str,
     lat: float | None = None,
@@ -11020,6 +11343,7 @@ def consultar_usgs_sciencebase(
     )
 
 
+@_operacao_cancelavel
 def consultar_canada_nrcan(
     termo: str,
     lat: float | None = None,
@@ -11100,6 +11424,7 @@ def consultar_canada_nrcan(
     )
 
 
+@_operacao_cancelavel
 def consultar_egdi(
     termo: str,
     lat: float | None = None,
@@ -11161,6 +11486,7 @@ def consultar_egdi(
     )
 
 
+@_operacao_cancelavel
 def consultar_geoscience_australia(
     termo: str,
     lat: float | None = None,
@@ -11239,6 +11565,7 @@ def consultar_geoscience_australia(
     )
 
 
+@_operacao_cancelavel
 def consultar_gsj_japao(
     termo: str,
     lat: float | None = None,
@@ -11309,6 +11636,7 @@ def consultar_gsj_japao(
     )
 
 
+@_operacao_cancelavel
 def consultar_geonet_nz(
     termo: str,
     limite: int = 4
@@ -11437,6 +11765,7 @@ def consultar_geonet_nz(
     )
 
 
+@_operacao_cancelavel
 def consultar_africa_cgs(
     termo: str,
     lat: float | None = None,
@@ -11486,6 +11815,7 @@ def consultar_africa_cgs(
     )
 
 
+@_operacao_cancelavel
 def consultar_arabia_ngd(
     termo: str,
     lat: float | None = None,
@@ -11554,6 +11884,7 @@ def consultar_arabia_ngd(
     )
 
 
+@_operacao_cancelavel
 def consultar_india_gsi_wfs(
     termo: str,
     lat: float | None = None,
@@ -11634,7 +11965,9 @@ def _geo_executar_servico(servico, termo, lat, lon, limite):
             )
 
         return funcao(termo, limite=limite)
-    except Exception:
+    except CancelamentoSolicitado:
+        raise
+    except Exception:  # noqa: BLE001 - conector tolerante
         return []
 
 
@@ -11643,7 +11976,8 @@ def consultar_servicos_geologicos_internacionais(
     regioes_selecionadas: list[str] | None = None,
     lat: float | None = None,
     lon: float | None = None,
-    limite_total: int = 16
+    limite_total: int = 16,
+    cancelamento=None,
 ) -> list[dict]:
     """Consulta em paralelo os serviços geológicos internacionais escolhidos.
 
@@ -11682,6 +12016,8 @@ def consultar_servicos_geologicos_internacionais(
     if not termo:
         return []
 
+    verificar_cancelamento(cancelamento, ETAPA_INTL_GEO)
+
     try:
         total = int(limite_total)
     except (TypeError, ValueError):
@@ -11714,16 +12050,43 @@ def consultar_servicos_geologicos_internacionais(
     limite_por_servico = min(INTL_LIMITE_POR_SERVICO, total)
 
     def tarefa(servico):
-        return _geo_executar_servico(
-            servico,
-            termo,
-            lat,
-            lon,
-            limite_por_servico,
-        )
+        # Threads do executor nao herdam o thread-local do chamador: o
+        # evento precisa ser publicado dentro de cada worker para que
+        # requisicao_http registre as sessoes daquela fonte.
+        with contexto_cancelamento(cancelamento):
+            return _geo_executar_servico(
+                servico,
+                termo,
+                lat,
+                lon,
+                limite_por_servico,
+            )
 
-    with ThreadPoolExecutor(max_workers=6) as executor:
-        listas = list(executor.map(tarefa, servicos))
+    executor = ThreadPoolExecutor(max_workers=6)
+    futuros = [executor.submit(tarefa, servico) for servico in servicos]
+    listas = []
+
+    try:
+        # O polling curto permite cancelar os futuros pendentes bem antes
+        # do timeout de cada conector (7 s). O shutdown do finally nunca
+        # espera os workers: a UI nao pode ficar presa neles.
+        for futuro in futuros:
+            while True:
+                if evento_ativo(cancelamento):
+                    for pendente in futuros:
+                        pendente.cancel()
+
+                    raise CancelamentoSolicitado(ETAPA_INTL_GEO)
+
+                try:
+                    listas.append(futuro.result(timeout=0.25))
+                    break
+                except FuturoTimeout:
+                    continue
+    finally:
+        executor.shutdown(wait=False, cancel_futures=True)
+
+    verificar_cancelamento(cancelamento, ETAPA_INTL_GEO)
 
     listas_filtradas = []
 

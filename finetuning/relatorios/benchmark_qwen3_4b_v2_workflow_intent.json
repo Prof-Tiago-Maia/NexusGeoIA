@@ -1,0 +1,1746 @@
+{
+  "gerado_em": "2026-11-24T20:56:58+00:00",
+  "preditor": "ollama",
+  "modelo": "qwen3:4b",
+  "dataset": {
+    "arquivo": "D:\\curso IA\\projetos\\ia-generativa-python-integracoes\\ia-generativa-python-integracoes\\finetuning\\datasets\\nexusgeoia_behavior_v1.jsonl",
+    "total": 212,
+    "avaliados": 80,
+    "sha256": "fabb6c13e911e55edab11fb370175096cef9eed9d38de68a0eebd912908009c1"
+  },
+  "filtros": {
+    "tarefas": [
+      "workflow_intent"
+    ],
+    "idiomas": [],
+    "limite": null
+  },
+  "duracao_ms": 265600.083,
+  "prazo_registro_s": 180.0,
+  "metricas": {
+    "global": {
+      "total": 80,
+      "corretos": 70,
+      "acuracia": 0.875,
+      "esquema_ok": 79,
+      "acuracia_esquema": 0.9875,
+      "falhas_parsing": 0,
+      "taxa_falha_parsing": 0.0,
+      "erros_execucao": 1,
+      "taxa_erro_execucao": 0.0125,
+      "falhas_por_tipo": {
+        "divergencia_semantica": 9,
+        "timeout": 1
+      },
+      "latencia_ms": {
+        "media": 3319.964,
+        "p50": 2579.563,
+        "p95": 2616.344,
+        "min": 2490.037,
+        "max": 62051.676
+      }
+    },
+    "por_tarefa": {
+      "workflow_intent": {
+        "total": 80,
+        "corretos": 70,
+        "acuracia": 0.875,
+        "esquema_ok": 79,
+        "acuracia_esquema": 0.9875,
+        "falhas_parsing": 0,
+        "taxa_falha_parsing": 0.0,
+        "erros_execucao": 1,
+        "taxa_erro_execucao": 0.0125,
+        "falhas_por_tipo": {
+          "divergencia_semantica": 9,
+          "timeout": 1
+        },
+        "latencia_ms": {
+          "media": 3319.964,
+          "p50": 2579.563,
+          "p95": 2616.344,
+          "min": 2490.037,
+          "max": 62051.676
+        }
+      }
+    },
+    "por_idioma": {
+      "en": {
+        "total": 40,
+        "corretos": 35,
+        "acuracia": 0.875,
+        "esquema_ok": 40,
+        "acuracia_esquema": 1.0,
+        "falhas_parsing": 0,
+        "taxa_falha_parsing": 0.0,
+        "erros_execucao": 0,
+        "taxa_erro_execucao": 0.0,
+        "falhas_por_tipo": {
+          "divergencia_semantica": 5
+        },
+        "latencia_ms": {
+          "media": 2581.553,
+          "p50": 2586.261,
+          "p95": 2618.21,
+          "min": 2500.497,
+          "max": 2664.172
+        }
+      },
+      "pt": {
+        "total": 40,
+        "corretos": 35,
+        "acuracia": 0.875,
+        "esquema_ok": 39,
+        "acuracia_esquema": 0.975,
+        "falhas_parsing": 0,
+        "taxa_falha_parsing": 0.0,
+        "erros_execucao": 1,
+        "taxa_erro_execucao": 0.025,
+        "falhas_por_tipo": {
+          "divergencia_semantica": 4,
+          "timeout": 1
+        },
+        "latencia_ms": {
+          "media": 4058.374,
+          "p50": 2575.895,
+          "p95": 2608.45,
+          "min": 2490.037,
+          "max": 62051.676
+        }
+      }
+    },
+    "por_familia": {
+      "ambiguo": {
+        "total": 10,
+        "corretos": 5,
+        "acuracia": 0.5,
+        "esquema_ok": 10,
+        "acuracia_esquema": 1.0,
+        "falhas_parsing": 0,
+        "taxa_falha_parsing": 0.0,
+        "erros_execucao": 0,
+        "taxa_erro_execucao": 0.0,
+        "falhas_por_tipo": {
+          "divergencia_semantica": 5
+        },
+        "latencia_ms": {
+          "media": 2581.268,
+          "p50": 2594.392,
+          "p95": 2608.512,
+          "min": 2504.209,
+          "max": 2609.222
+        }
+      },
+      "incompleto": {
+        "total": 12,
+        "corretos": 11,
+        "acuracia": 0.916667,
+        "esquema_ok": 12,
+        "acuracia_esquema": 1.0,
+        "falhas_parsing": 0,
+        "taxa_falha_parsing": 0.0,
+        "erros_execucao": 0,
+        "taxa_erro_execucao": 0.0,
+        "falhas_por_tipo": {
+          "divergencia_semantica": 1
+        },
+        "latencia_ms": {
+          "media": 2578.577,
+          "p50": 2582.602,
+          "p95": 2610.906,
+          "min": 2533.817,
+          "max": 2614.397
+        }
+      },
+      "negativo": {
+        "total": 12,
+        "corretos": 12,
+        "acuracia": 1.0,
+        "esquema_ok": 12,
+        "acuracia_esquema": 1.0,
+        "falhas_parsing": 0,
+        "taxa_falha_parsing": 0.0,
+        "erros_execucao": 0,
+        "taxa_erro_execucao": 0.0,
+        "falhas_por_tipo": {},
+        "latencia_ms": {
+          "media": 2598.578,
+          "p50": 2601.307,
+          "p95": 2625.506,
+          "min": 2556.766,
+          "max": 2639.511
+        }
+      },
+      "normal": {
+        "total": 46,
+        "corretos": 42,
+        "acuracia": 0.913043,
+        "esquema_ok": 45,
+        "acuracia_esquema": 0.978261,
+        "falhas_parsing": 0,
+        "taxa_falha_parsing": 0.0,
+        "erros_execucao": 1,
+        "taxa_erro_execucao": 0.021739,
+        "falhas_por_tipo": {
+          "divergencia_semantica": 3,
+          "timeout": 1
+        },
+        "latencia_ms": {
+          "media": 3862.142,
+          "p50": 2569.275,
+          "p95": 2616.893,
+          "min": 2490.037,
+          "max": 62051.676
+        }
+      }
+    },
+    "confusao": {
+      "consulta_direta": {
+        "<falha>": 1,
+        "consulta_direta": 32,
+        "sondagem": 1
+      },
+      "triagem_area": {
+        "triagem_area": 12
+      },
+      "hidrogeologia": {
+        "hidrogeologia": 15,
+        "triagem_area": 1
+      },
+      "sondagem": {
+        "sondagem": 14,
+        "triagem_area": 2,
+        "hidrogeologia": 2
+      }
+    },
+    "falhas": [
+      {
+        "id": "wf-pt-001",
+        "tarefa": "workflow_intent",
+        "idioma": "pt",
+        "erro_execucao": "TimeoutError: timed out",
+        "tipo_falha": "timeout",
+        "diagnostico": "timeout no prazo do registro",
+        "falha_parsing": false,
+        "erro_parsing": null,
+        "erros_esquema": [],
+        "esperado": null,
+        "obtido": null
+      },
+      {
+        "id": "wf-pt-011",
+        "tarefa": "workflow_intent",
+        "idioma": "pt",
+        "erro_execucao": null,
+        "tipo_falha": "divergencia_semantica",
+        "diagnostico": "esquema válido, semântica divergente",
+        "falha_parsing": false,
+        "erro_parsing": null,
+        "erros_esquema": [],
+        "esperado": {
+          "intencao": "RIGEO_ONLY",
+          "workflow": "hidrogeologia"
+        },
+        "obtido": {
+          "workflow": "hidrogeologia",
+          "intencao": "HIBRIDO"
+        }
+      },
+      {
+        "id": "wf-pt-014",
+        "tarefa": "workflow_intent",
+        "idioma": "pt",
+        "erro_execucao": null,
+        "tipo_falha": "divergencia_semantica",
+        "diagnostico": "esquema válido, semântica divergente",
+        "falha_parsing": false,
+        "erro_parsing": null,
+        "erros_esquema": [],
+        "esperado": {
+          "intencao": "LOCAL_ONLY",
+          "workflow": "sondagem"
+        },
+        "obtido": {
+          "workflow": "sondagem",
+          "intencao": "HIBRIDO"
+        }
+      },
+      {
+        "id": "wf-en-014",
+        "tarefa": "workflow_intent",
+        "idioma": "en",
+        "erro_execucao": null,
+        "tipo_falha": "divergencia_semantica",
+        "diagnostico": "esquema válido, semântica divergente",
+        "falha_parsing": false,
+        "erro_parsing": null,
+        "erros_esquema": [],
+        "esperado": {
+          "intencao": "LOCAL_ONLY",
+          "workflow": "sondagem"
+        },
+        "obtido": {
+          "workflow": "sondagem",
+          "intencao": "HIBRIDO"
+        }
+      },
+      {
+        "id": "wf-en-024",
+        "tarefa": "workflow_intent",
+        "idioma": "en",
+        "erro_execucao": null,
+        "tipo_falha": "divergencia_semantica",
+        "diagnostico": "esquema válido, semântica divergente",
+        "falha_parsing": false,
+        "erro_parsing": null,
+        "erros_esquema": [],
+        "esperado": {
+          "intencao": "RIGEO_ONLY",
+          "workflow": "hidrogeologia"
+        },
+        "obtido": {
+          "workflow": "triagem_area",
+          "intencao": "RIGEO_ONLY"
+        }
+      },
+      {
+        "id": "wf-pt-026",
+        "tarefa": "workflow_intent",
+        "idioma": "pt",
+        "erro_execucao": null,
+        "tipo_falha": "divergencia_semantica",
+        "diagnostico": "esquema válido, semântica divergente",
+        "falha_parsing": false,
+        "erro_parsing": null,
+        "erros_esquema": [],
+        "esperado": {
+          "intencao": "RIGEO_ONLY",
+          "workflow": "sondagem"
+        },
+        "obtido": {
+          "workflow": "triagem_area",
+          "intencao": "RIGEO_ONLY"
+        }
+      },
+      {
+        "id": "wf-en-026",
+        "tarefa": "workflow_intent",
+        "idioma": "en",
+        "erro_execucao": null,
+        "tipo_falha": "divergencia_semantica",
+        "diagnostico": "esquema válido, semântica divergente",
+        "falha_parsing": false,
+        "erro_parsing": null,
+        "erros_esquema": [],
+        "esperado": {
+          "intencao": "RIGEO_ONLY",
+          "workflow": "sondagem"
+        },
+        "obtido": {
+          "workflow": "triagem_area",
+          "intencao": "RIGEO_ONLY"
+        }
+      },
+      {
+        "id": "wf-pt-027",
+        "tarefa": "workflow_intent",
+        "idioma": "pt",
+        "erro_execucao": null,
+        "tipo_falha": "divergencia_semantica",
+        "diagnostico": "esquema válido, semântica divergente",
+        "falha_parsing": false,
+        "erro_parsing": null,
+        "erros_esquema": [],
+        "esperado": {
+          "intencao": "HIBRIDO",
+          "workflow": "sondagem"
+        },
+        "obtido": {
+          "workflow": "hidrogeologia",
+          "intencao": "RIGEO_ONLY"
+        }
+      },
+      {
+        "id": "wf-en-027",
+        "tarefa": "workflow_intent",
+        "idioma": "en",
+        "erro_execucao": null,
+        "tipo_falha": "divergencia_semantica",
+        "diagnostico": "esquema válido, semântica divergente",
+        "falha_parsing": false,
+        "erro_parsing": null,
+        "erros_esquema": [],
+        "esperado": {
+          "intencao": "HIBRIDO",
+          "workflow": "sondagem"
+        },
+        "obtido": {
+          "workflow": "hidrogeologia",
+          "intencao": "HIBRIDO"
+        }
+      },
+      {
+        "id": "wf-en-034",
+        "tarefa": "workflow_intent",
+        "idioma": "en",
+        "erro_execucao": null,
+        "tipo_falha": "divergencia_semantica",
+        "diagnostico": "esquema válido, semântica divergente",
+        "falha_parsing": false,
+        "erro_parsing": null,
+        "erros_esquema": [],
+        "esperado": {
+          "intencao": "RIGEO_ONLY",
+          "workflow": "consulta_direta"
+        },
+        "obtido": {
+          "workflow": "sondagem",
+          "intencao": "RIGEO_ONLY"
+        }
+      }
+    ],
+    "total_falhas": 10
+  },
+  "db": {
+    "antes": {
+      "caminho": "D:\\curso IA\\projetos\\ia-generativa-python-integracoes\\ia-generativa-python-integracoes\\data\\nexusgeoia.db",
+      "origem": "config.DATA_DIR",
+      "principal": {
+        "caminho": "D:\\curso IA\\projetos\\ia-generativa-python-integracoes\\ia-generativa-python-integracoes\\data\\nexusgeoia.db",
+        "existe": true,
+        "tamanho": 131072,
+        "sha256": "cf876e9a49e07f8643e705b509dc080e43e42dcffdd41f20e269a08cc8564281"
+      },
+      "sidecars": [
+        {
+          "caminho": "D:\\curso IA\\projetos\\ia-generativa-python-integracoes\\ia-generativa-python-integracoes\\data\\nexusgeoia.db-wal",
+          "existe": true,
+          "tamanho": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "caminho": "D:\\curso IA\\projetos\\ia-generativa-python-integracoes\\ia-generativa-python-integracoes\\data\\nexusgeoia.db-shm",
+          "existe": true,
+          "tamanho": 32768,
+          "sha256": "fd4c9fda9cd3f9ae7c962b0ddf37232294d55580e1aa165aa06129b8549389eb"
+        }
+      ]
+    },
+    "depois": {
+      "caminho": "D:\\curso IA\\projetos\\ia-generativa-python-integracoes\\ia-generativa-python-integracoes\\data\\nexusgeoia.db",
+      "origem": "config.DATA_DIR",
+      "principal": {
+        "caminho": "D:\\curso IA\\projetos\\ia-generativa-python-integracoes\\ia-generativa-python-integracoes\\data\\nexusgeoia.db",
+        "existe": true,
+        "tamanho": 131072,
+        "sha256": "cf876e9a49e07f8643e705b509dc080e43e42dcffdd41f20e269a08cc8564281"
+      },
+      "sidecars": [
+        {
+          "caminho": "D:\\curso IA\\projetos\\ia-generativa-python-integracoes\\ia-generativa-python-integracoes\\data\\nexusgeoia.db-wal",
+          "existe": true,
+          "tamanho": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "caminho": "D:\\curso IA\\projetos\\ia-generativa-python-integracoes\\ia-generativa-python-integracoes\\data\\nexusgeoia.db-shm",
+          "existe": true,
+          "tamanho": 32768,
+          "sha256": "fd4c9fda9cd3f9ae7c962b0ddf37232294d55580e1aa165aa06129b8549389eb"
+        }
+      ]
+    },
+    "intocado": true,
+    "DB_INTOCADO": true,
+    "divergencias": [],
+    "diagnostico": {
+      "veredito": "INTOCADO",
+      "arquivos_comparados": 3,
+      "mensagem": "Banco intocado: tamanho e SHA-256 idênticos antes e depois (D:\\curso IA\\projetos\\ia-generativa-python-integracoes\\ia-generativa-python-integracoes\\data\\nexusgeoia.db; 3 arquivo(s) comparado(s))."
+    }
+  },
+  "db_intocado": true,
+  "resultados": [
+    {
+      "id": "wf-pt-001",
+      "tarefa": "workflow_intent",
+      "idioma": "pt",
+      "familia": "normal",
+      "latencia_ms": 62051.676,
+      "erro_execucao": "TimeoutError: timed out",
+      "tipo_falha": "timeout",
+      "diagnostico": "timeout no prazo do registro",
+      "falha_parsing": false,
+      "esquema_ok": false,
+      "correto": false,
+      "rotulo_esperado": "consulta_direta",
+      "rotulo_obtido": "<falha>"
+    },
+    {
+      "id": "wf-en-001",
+      "tarefa": "workflow_intent",
+      "idioma": "en",
+      "familia": "normal",
+      "latencia_ms": 2575.772,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "consulta_direta",
+      "rotulo_obtido": "consulta_direta"
+    },
+    {
+      "id": "wf-pt-002",
+      "tarefa": "workflow_intent",
+      "idioma": "pt",
+      "familia": "normal",
+      "latencia_ms": 2535.936,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "consulta_direta",
+      "rotulo_obtido": "consulta_direta"
+    },
+    {
+      "id": "wf-en-002",
+      "tarefa": "workflow_intent",
+      "idioma": "en",
+      "familia": "normal",
+      "latencia_ms": 2542.011,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "consulta_direta",
+      "rotulo_obtido": "consulta_direta"
+    },
+    {
+      "id": "wf-pt-003",
+      "tarefa": "workflow_intent",
+      "idioma": "pt",
+      "familia": "normal",
+      "latencia_ms": 2586.651,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "consulta_direta",
+      "rotulo_obtido": "consulta_direta"
+    },
+    {
+      "id": "wf-en-003",
+      "tarefa": "workflow_intent",
+      "idioma": "en",
+      "familia": "normal",
+      "latencia_ms": 2585.766,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "consulta_direta",
+      "rotulo_obtido": "consulta_direta"
+    },
+    {
+      "id": "wf-pt-004",
+      "tarefa": "workflow_intent",
+      "idioma": "pt",
+      "familia": "normal",
+      "latencia_ms": 2557.146,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "consulta_direta",
+      "rotulo_obtido": "consulta_direta"
+    },
+    {
+      "id": "wf-en-004",
+      "tarefa": "workflow_intent",
+      "idioma": "en",
+      "familia": "normal",
+      "latencia_ms": 2586.755,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "consulta_direta",
+      "rotulo_obtido": "consulta_direta"
+    },
+    {
+      "id": "wf-pt-005",
+      "tarefa": "workflow_intent",
+      "idioma": "pt",
+      "familia": "normal",
+      "latencia_ms": 2490.037,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "consulta_direta",
+      "rotulo_obtido": "consulta_direta"
+    },
+    {
+      "id": "wf-en-005",
+      "tarefa": "workflow_intent",
+      "idioma": "en",
+      "familia": "normal",
+      "latencia_ms": 2587.145,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "consulta_direta",
+      "rotulo_obtido": "consulta_direta"
+    },
+    {
+      "id": "wf-pt-006",
+      "tarefa": "workflow_intent",
+      "idioma": "pt",
+      "familia": "normal",
+      "latencia_ms": 2554.18,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "triagem_area",
+      "rotulo_obtido": "triagem_area"
+    },
+    {
+      "id": "wf-en-006",
+      "tarefa": "workflow_intent",
+      "idioma": "en",
+      "familia": "normal",
+      "latencia_ms": 2563.349,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "triagem_area",
+      "rotulo_obtido": "triagem_area"
+    },
+    {
+      "id": "wf-pt-007",
+      "tarefa": "workflow_intent",
+      "idioma": "pt",
+      "familia": "normal",
+      "latencia_ms": 2542.945,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "triagem_area",
+      "rotulo_obtido": "triagem_area"
+    },
+    {
+      "id": "wf-en-007",
+      "tarefa": "workflow_intent",
+      "idioma": "en",
+      "familia": "normal",
+      "latencia_ms": 2546.301,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "triagem_area",
+      "rotulo_obtido": "triagem_area"
+    },
+    {
+      "id": "wf-pt-008",
+      "tarefa": "workflow_intent",
+      "idioma": "pt",
+      "familia": "normal",
+      "latencia_ms": 2573.868,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "triagem_area",
+      "rotulo_obtido": "triagem_area"
+    },
+    {
+      "id": "wf-en-008",
+      "tarefa": "workflow_intent",
+      "idioma": "en",
+      "familia": "normal",
+      "latencia_ms": 2557.913,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "triagem_area",
+      "rotulo_obtido": "triagem_area"
+    },
+    {
+      "id": "wf-pt-009",
+      "tarefa": "workflow_intent",
+      "idioma": "pt",
+      "familia": "normal",
+      "latencia_ms": 2609.533,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "hidrogeologia",
+      "rotulo_obtido": "hidrogeologia"
+    },
+    {
+      "id": "wf-en-009",
+      "tarefa": "workflow_intent",
+      "idioma": "en",
+      "familia": "normal",
+      "latencia_ms": 2609.757,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "hidrogeologia",
+      "rotulo_obtido": "hidrogeologia"
+    },
+    {
+      "id": "wf-pt-010",
+      "tarefa": "workflow_intent",
+      "idioma": "pt",
+      "familia": "normal",
+      "latencia_ms": 2562.378,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "hidrogeologia",
+      "rotulo_obtido": "hidrogeologia"
+    },
+    {
+      "id": "wf-en-010",
+      "tarefa": "workflow_intent",
+      "idioma": "en",
+      "familia": "normal",
+      "latencia_ms": 2610.203,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "hidrogeologia",
+      "rotulo_obtido": "hidrogeologia"
+    },
+    {
+      "id": "wf-pt-011",
+      "tarefa": "workflow_intent",
+      "idioma": "pt",
+      "familia": "normal",
+      "latencia_ms": 2573.72,
+      "erro_execucao": null,
+      "tipo_falha": "divergencia_semantica",
+      "diagnostico": "esquema válido, semântica divergente",
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": false,
+      "rotulo_esperado": "hidrogeologia",
+      "rotulo_obtido": "hidrogeologia",
+      "erros_esquema": [],
+      "esperado": {
+        "intencao": "RIGEO_ONLY",
+        "workflow": "hidrogeologia"
+      },
+      "obtido": {
+        "workflow": "hidrogeologia",
+        "intencao": "HIBRIDO"
+      }
+    },
+    {
+      "id": "wf-en-011",
+      "tarefa": "workflow_intent",
+      "idioma": "en",
+      "familia": "normal",
+      "latencia_ms": 2569.916,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "hidrogeologia",
+      "rotulo_obtido": "hidrogeologia"
+    },
+    {
+      "id": "wf-pt-012",
+      "tarefa": "workflow_intent",
+      "idioma": "pt",
+      "familia": "normal",
+      "latencia_ms": 2541.391,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "sondagem",
+      "rotulo_obtido": "sondagem"
+    },
+    {
+      "id": "wf-en-012",
+      "tarefa": "workflow_intent",
+      "idioma": "en",
+      "familia": "normal",
+      "latencia_ms": 2558.071,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "sondagem",
+      "rotulo_obtido": "sondagem"
+    },
+    {
+      "id": "wf-pt-013",
+      "tarefa": "workflow_intent",
+      "idioma": "pt",
+      "familia": "normal",
+      "latencia_ms": 2584.55,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "sondagem",
+      "rotulo_obtido": "sondagem"
+    },
+    {
+      "id": "wf-en-013",
+      "tarefa": "workflow_intent",
+      "idioma": "en",
+      "familia": "normal",
+      "latencia_ms": 2523.386,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "sondagem",
+      "rotulo_obtido": "sondagem"
+    },
+    {
+      "id": "wf-pt-014",
+      "tarefa": "workflow_intent",
+      "idioma": "pt",
+      "familia": "normal",
+      "latencia_ms": 2585.827,
+      "erro_execucao": null,
+      "tipo_falha": "divergencia_semantica",
+      "diagnostico": "esquema válido, semântica divergente",
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": false,
+      "rotulo_esperado": "sondagem",
+      "rotulo_obtido": "sondagem",
+      "erros_esquema": [],
+      "esperado": {
+        "intencao": "LOCAL_ONLY",
+        "workflow": "sondagem"
+      },
+      "obtido": {
+        "workflow": "sondagem",
+        "intencao": "HIBRIDO"
+      }
+    },
+    {
+      "id": "wf-en-014",
+      "tarefa": "workflow_intent",
+      "idioma": "en",
+      "familia": "normal",
+      "latencia_ms": 2537.526,
+      "erro_execucao": null,
+      "tipo_falha": "divergencia_semantica",
+      "diagnostico": "esquema válido, semântica divergente",
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": false,
+      "rotulo_esperado": "sondagem",
+      "rotulo_obtido": "sondagem",
+      "erros_esquema": [],
+      "esperado": {
+        "intencao": "LOCAL_ONLY",
+        "workflow": "sondagem"
+      },
+      "obtido": {
+        "workflow": "sondagem",
+        "intencao": "HIBRIDO"
+      }
+    },
+    {
+      "id": "wf-pt-015",
+      "tarefa": "workflow_intent",
+      "idioma": "pt",
+      "familia": "normal",
+      "latencia_ms": 2553.103,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "sondagem",
+      "rotulo_obtido": "sondagem"
+    },
+    {
+      "id": "wf-en-015",
+      "tarefa": "workflow_intent",
+      "idioma": "en",
+      "familia": "normal",
+      "latencia_ms": 2500.497,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "sondagem",
+      "rotulo_obtido": "sondagem"
+    },
+    {
+      "id": "wf-pt-016",
+      "tarefa": "workflow_intent",
+      "idioma": "pt",
+      "familia": "normal",
+      "latencia_ms": 2538.436,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "hidrogeologia",
+      "rotulo_obtido": "hidrogeologia"
+    },
+    {
+      "id": "wf-en-016",
+      "tarefa": "workflow_intent",
+      "idioma": "en",
+      "familia": "normal",
+      "latencia_ms": 2544.65,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "hidrogeologia",
+      "rotulo_obtido": "hidrogeologia"
+    },
+    {
+      "id": "wf-pt-017",
+      "tarefa": "workflow_intent",
+      "idioma": "pt",
+      "familia": "normal",
+      "latencia_ms": 2604.942,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "consulta_direta",
+      "rotulo_obtido": "consulta_direta"
+    },
+    {
+      "id": "wf-en-017",
+      "tarefa": "workflow_intent",
+      "idioma": "en",
+      "familia": "normal",
+      "latencia_ms": 2664.172,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "consulta_direta",
+      "rotulo_obtido": "consulta_direta"
+    },
+    {
+      "id": "wf-pt-018",
+      "tarefa": "workflow_intent",
+      "idioma": "pt",
+      "familia": "normal",
+      "latencia_ms": 2573.258,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "consulta_direta",
+      "rotulo_obtido": "consulta_direta"
+    },
+    {
+      "id": "wf-en-018",
+      "tarefa": "workflow_intent",
+      "idioma": "en",
+      "familia": "normal",
+      "latencia_ms": 2601.105,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "consulta_direta",
+      "rotulo_obtido": "consulta_direta"
+    },
+    {
+      "id": "wf-pt-019",
+      "tarefa": "workflow_intent",
+      "idioma": "pt",
+      "familia": "normal",
+      "latencia_ms": 2577.812,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "triagem_area",
+      "rotulo_obtido": "triagem_area"
+    },
+    {
+      "id": "wf-en-019",
+      "tarefa": "workflow_intent",
+      "idioma": "en",
+      "familia": "normal",
+      "latencia_ms": 2605.801,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "triagem_area",
+      "rotulo_obtido": "triagem_area"
+    },
+    {
+      "id": "wf-pt-020",
+      "tarefa": "workflow_intent",
+      "idioma": "pt",
+      "familia": "normal",
+      "latencia_ms": 2551.587,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "sondagem",
+      "rotulo_obtido": "sondagem"
+    },
+    {
+      "id": "wf-en-020",
+      "tarefa": "workflow_intent",
+      "idioma": "en",
+      "familia": "normal",
+      "latencia_ms": 2526.409,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "sondagem",
+      "rotulo_obtido": "sondagem"
+    },
+    {
+      "id": "wf-pt-021",
+      "tarefa": "workflow_intent",
+      "idioma": "pt",
+      "familia": "normal",
+      "latencia_ms": 2545.38,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "hidrogeologia",
+      "rotulo_obtido": "hidrogeologia"
+    },
+    {
+      "id": "wf-en-021",
+      "tarefa": "workflow_intent",
+      "idioma": "en",
+      "familia": "normal",
+      "latencia_ms": 2616.305,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "hidrogeologia",
+      "rotulo_obtido": "hidrogeologia"
+    },
+    {
+      "id": "wf-pt-022",
+      "tarefa": "workflow_intent",
+      "idioma": "pt",
+      "familia": "normal",
+      "latencia_ms": 2564.012,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "consulta_direta",
+      "rotulo_obtido": "consulta_direta"
+    },
+    {
+      "id": "wf-en-022",
+      "tarefa": "workflow_intent",
+      "idioma": "en",
+      "familia": "normal",
+      "latencia_ms": 2601.65,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "consulta_direta",
+      "rotulo_obtido": "consulta_direta"
+    },
+    {
+      "id": "wf-pt-023",
+      "tarefa": "workflow_intent",
+      "idioma": "pt",
+      "familia": "normal",
+      "latencia_ms": 2568.634,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "triagem_area",
+      "rotulo_obtido": "triagem_area"
+    },
+    {
+      "id": "wf-en-023",
+      "tarefa": "workflow_intent",
+      "idioma": "en",
+      "familia": "normal",
+      "latencia_ms": 2617.089,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "triagem_area",
+      "rotulo_obtido": "triagem_area"
+    },
+    {
+      "id": "wf-pt-024",
+      "tarefa": "workflow_intent",
+      "idioma": "pt",
+      "familia": "ambiguo",
+      "latencia_ms": 2593.87,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "hidrogeologia",
+      "rotulo_obtido": "hidrogeologia"
+    },
+    {
+      "id": "wf-en-024",
+      "tarefa": "workflow_intent",
+      "idioma": "en",
+      "familia": "ambiguo",
+      "latencia_ms": 2609.222,
+      "erro_execucao": null,
+      "tipo_falha": "divergencia_semantica",
+      "diagnostico": "esquema válido, semântica divergente",
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": false,
+      "rotulo_esperado": "hidrogeologia",
+      "rotulo_obtido": "triagem_area",
+      "erros_esquema": [],
+      "esperado": {
+        "intencao": "RIGEO_ONLY",
+        "workflow": "hidrogeologia"
+      },
+      "obtido": {
+        "workflow": "triagem_area",
+        "intencao": "RIGEO_ONLY"
+      }
+    },
+    {
+      "id": "wf-pt-025",
+      "tarefa": "workflow_intent",
+      "idioma": "pt",
+      "familia": "ambiguo",
+      "latencia_ms": 2573.978,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "sondagem",
+      "rotulo_obtido": "sondagem"
+    },
+    {
+      "id": "wf-en-025",
+      "tarefa": "workflow_intent",
+      "idioma": "en",
+      "familia": "ambiguo",
+      "latencia_ms": 2544.014,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "sondagem",
+      "rotulo_obtido": "sondagem"
+    },
+    {
+      "id": "wf-pt-026",
+      "tarefa": "workflow_intent",
+      "idioma": "pt",
+      "familia": "ambiguo",
+      "latencia_ms": 2504.209,
+      "erro_execucao": null,
+      "tipo_falha": "divergencia_semantica",
+      "diagnostico": "esquema válido, semântica divergente",
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": false,
+      "rotulo_esperado": "sondagem",
+      "rotulo_obtido": "triagem_area",
+      "erros_esquema": [],
+      "esperado": {
+        "intencao": "RIGEO_ONLY",
+        "workflow": "sondagem"
+      },
+      "obtido": {
+        "workflow": "triagem_area",
+        "intencao": "RIGEO_ONLY"
+      }
+    },
+    {
+      "id": "wf-en-026",
+      "tarefa": "workflow_intent",
+      "idioma": "en",
+      "familia": "ambiguo",
+      "latencia_ms": 2601.456,
+      "erro_execucao": null,
+      "tipo_falha": "divergencia_semantica",
+      "diagnostico": "esquema válido, semântica divergente",
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": false,
+      "rotulo_esperado": "sondagem",
+      "rotulo_obtido": "triagem_area",
+      "erros_esquema": [],
+      "esperado": {
+        "intencao": "RIGEO_ONLY",
+        "workflow": "sondagem"
+      },
+      "obtido": {
+        "workflow": "triagem_area",
+        "intencao": "RIGEO_ONLY"
+      }
+    },
+    {
+      "id": "wf-pt-027",
+      "tarefa": "workflow_intent",
+      "idioma": "pt",
+      "familia": "ambiguo",
+      "latencia_ms": 2580.355,
+      "erro_execucao": null,
+      "tipo_falha": "divergencia_semantica",
+      "diagnostico": "esquema válido, semântica divergente",
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": false,
+      "rotulo_esperado": "sondagem",
+      "rotulo_obtido": "hidrogeologia",
+      "erros_esquema": [],
+      "esperado": {
+        "intencao": "HIBRIDO",
+        "workflow": "sondagem"
+      },
+      "obtido": {
+        "workflow": "hidrogeologia",
+        "intencao": "RIGEO_ONLY"
+      }
+    },
+    {
+      "id": "wf-en-027",
+      "tarefa": "workflow_intent",
+      "idioma": "en",
+      "familia": "ambiguo",
+      "latencia_ms": 2607.645,
+      "erro_execucao": null,
+      "tipo_falha": "divergencia_semantica",
+      "diagnostico": "esquema válido, semântica divergente",
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": false,
+      "rotulo_esperado": "sondagem",
+      "rotulo_obtido": "hidrogeologia",
+      "erros_esquema": [],
+      "esperado": {
+        "intencao": "HIBRIDO",
+        "workflow": "sondagem"
+      },
+      "obtido": {
+        "workflow": "hidrogeologia",
+        "intencao": "HIBRIDO"
+      }
+    },
+    {
+      "id": "wf-pt-028",
+      "tarefa": "workflow_intent",
+      "idioma": "pt",
+      "familia": "ambiguo",
+      "latencia_ms": 2594.915,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "hidrogeologia",
+      "rotulo_obtido": "hidrogeologia"
+    },
+    {
+      "id": "wf-en-028",
+      "tarefa": "workflow_intent",
+      "idioma": "en",
+      "familia": "ambiguo",
+      "latencia_ms": 2603.02,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "hidrogeologia",
+      "rotulo_obtido": "hidrogeologia"
+    },
+    {
+      "id": "wf-pt-029",
+      "tarefa": "workflow_intent",
+      "idioma": "pt",
+      "familia": "incompleto",
+      "latencia_ms": 2587.372,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "sondagem",
+      "rotulo_obtido": "sondagem"
+    },
+    {
+      "id": "wf-en-029",
+      "tarefa": "workflow_intent",
+      "idioma": "en",
+      "familia": "incompleto",
+      "latencia_ms": 2596.892,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "sondagem",
+      "rotulo_obtido": "sondagem"
+    },
+    {
+      "id": "wf-pt-030",
+      "tarefa": "workflow_intent",
+      "idioma": "pt",
+      "familia": "incompleto",
+      "latencia_ms": 2606.655,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "hidrogeologia",
+      "rotulo_obtido": "hidrogeologia"
+    },
+    {
+      "id": "wf-en-030",
+      "tarefa": "workflow_intent",
+      "idioma": "en",
+      "familia": "incompleto",
+      "latencia_ms": 2569.911,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "hidrogeologia",
+      "rotulo_obtido": "hidrogeologia"
+    },
+    {
+      "id": "wf-pt-031",
+      "tarefa": "workflow_intent",
+      "idioma": "pt",
+      "familia": "incompleto",
+      "latencia_ms": 2608.049,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "triagem_area",
+      "rotulo_obtido": "triagem_area"
+    },
+    {
+      "id": "wf-en-031",
+      "tarefa": "workflow_intent",
+      "idioma": "en",
+      "familia": "incompleto",
+      "latencia_ms": 2577.833,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "triagem_area",
+      "rotulo_obtido": "triagem_area"
+    },
+    {
+      "id": "wf-pt-032",
+      "tarefa": "workflow_intent",
+      "idioma": "pt",
+      "familia": "incompleto",
+      "latencia_ms": 2588.32,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "consulta_direta",
+      "rotulo_obtido": "consulta_direta"
+    },
+    {
+      "id": "wf-en-032",
+      "tarefa": "workflow_intent",
+      "idioma": "en",
+      "familia": "incompleto",
+      "latencia_ms": 2614.397,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "consulta_direta",
+      "rotulo_obtido": "consulta_direta"
+    },
+    {
+      "id": "wf-pt-033",
+      "tarefa": "workflow_intent",
+      "idioma": "pt",
+      "familia": "incompleto",
+      "latencia_ms": 2568.316,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "consulta_direta",
+      "rotulo_obtido": "consulta_direta"
+    },
+    {
+      "id": "wf-en-033",
+      "tarefa": "workflow_intent",
+      "idioma": "en",
+      "familia": "incompleto",
+      "latencia_ms": 2540.843,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "consulta_direta",
+      "rotulo_obtido": "consulta_direta"
+    },
+    {
+      "id": "wf-pt-034",
+      "tarefa": "workflow_intent",
+      "idioma": "pt",
+      "familia": "incompleto",
+      "latencia_ms": 2533.817,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "consulta_direta",
+      "rotulo_obtido": "consulta_direta"
+    },
+    {
+      "id": "wf-en-034",
+      "tarefa": "workflow_intent",
+      "idioma": "en",
+      "familia": "incompleto",
+      "latencia_ms": 2550.525,
+      "erro_execucao": null,
+      "tipo_falha": "divergencia_semantica",
+      "diagnostico": "esquema válido, semântica divergente",
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": false,
+      "rotulo_esperado": "consulta_direta",
+      "rotulo_obtido": "sondagem",
+      "erros_esquema": [],
+      "esperado": {
+        "intencao": "RIGEO_ONLY",
+        "workflow": "consulta_direta"
+      },
+      "obtido": {
+        "workflow": "sondagem",
+        "intencao": "RIGEO_ONLY"
+      }
+    },
+    {
+      "id": "wf-pt-035",
+      "tarefa": "workflow_intent",
+      "idioma": "pt",
+      "familia": "negativo",
+      "latencia_ms": 2608.393,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "consulta_direta",
+      "rotulo_obtido": "consulta_direta"
+    },
+    {
+      "id": "wf-en-035",
+      "tarefa": "workflow_intent",
+      "idioma": "en",
+      "familia": "negativo",
+      "latencia_ms": 2606.922,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "consulta_direta",
+      "rotulo_obtido": "consulta_direta"
+    },
+    {
+      "id": "wf-pt-036",
+      "tarefa": "workflow_intent",
+      "idioma": "pt",
+      "familia": "negativo",
+      "latencia_ms": 2601.085,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "consulta_direta",
+      "rotulo_obtido": "consulta_direta"
+    },
+    {
+      "id": "wf-en-036",
+      "tarefa": "workflow_intent",
+      "idioma": "en",
+      "familia": "negativo",
+      "latencia_ms": 2584.382,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "consulta_direta",
+      "rotulo_obtido": "consulta_direta"
+    },
+    {
+      "id": "wf-pt-037",
+      "tarefa": "workflow_intent",
+      "idioma": "pt",
+      "familia": "negativo",
+      "latencia_ms": 2582.539,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "consulta_direta",
+      "rotulo_obtido": "consulta_direta"
+    },
+    {
+      "id": "wf-en-037",
+      "tarefa": "workflow_intent",
+      "idioma": "en",
+      "familia": "negativo",
+      "latencia_ms": 2639.511,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "consulta_direta",
+      "rotulo_obtido": "consulta_direta"
+    },
+    {
+      "id": "wf-pt-038",
+      "tarefa": "workflow_intent",
+      "idioma": "pt",
+      "familia": "negativo",
+      "latencia_ms": 2595.802,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "consulta_direta",
+      "rotulo_obtido": "consulta_direta"
+    },
+    {
+      "id": "wf-en-038",
+      "tarefa": "workflow_intent",
+      "idioma": "en",
+      "familia": "negativo",
+      "latencia_ms": 2614.047,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "consulta_direta",
+      "rotulo_obtido": "consulta_direta"
+    },
+    {
+      "id": "wf-pt-039",
+      "tarefa": "workflow_intent",
+      "idioma": "pt",
+      "familia": "negativo",
+      "latencia_ms": 2578.771,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "consulta_direta",
+      "rotulo_obtido": "consulta_direta"
+    },
+    {
+      "id": "wf-en-039",
+      "tarefa": "workflow_intent",
+      "idioma": "en",
+      "familia": "negativo",
+      "latencia_ms": 2613.187,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "consulta_direta",
+      "rotulo_obtido": "consulta_direta"
+    },
+    {
+      "id": "wf-pt-040",
+      "tarefa": "workflow_intent",
+      "idioma": "pt",
+      "familia": "negativo",
+      "latencia_ms": 2601.529,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "consulta_direta",
+      "rotulo_obtido": "consulta_direta"
+    },
+    {
+      "id": "wf-en-040",
+      "tarefa": "workflow_intent",
+      "idioma": "en",
+      "familia": "negativo",
+      "latencia_ms": 2556.766,
+      "erro_execucao": null,
+      "tipo_falha": null,
+      "diagnostico": null,
+      "falha_parsing": false,
+      "esquema_ok": true,
+      "correto": true,
+      "rotulo_esperado": "consulta_direta",
+      "rotulo_obtido": "consulta_direta"
+    }
+  ]
+}

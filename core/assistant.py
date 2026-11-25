@@ -142,6 +142,16 @@ from services.external_api_service import (
 
 OPCAO_USGS_INTERNACIONAL = OPCOES_REGIOES_INTERNACIONAIS[2]
 from services.llm_service import gerar_resposta
+from services.progress_service import (
+    ETAPA_CONCLUIDA,
+    ETAPA_DOCUMENTOS,
+    ETAPA_POR_FONTE,
+    ETAPA_PREPARANDO,
+    ETAPA_ROTEAMENTO,
+    CancelamentoSolicitado,
+    relatar,
+    verificar_cancelamento,
+)
 from services.rag_service import consultar_documentos
 from utils.i18n import instrucao_idioma_resposta, normalizar_idioma
 
@@ -283,14 +293,19 @@ def _extrair_coordenadas(texto):
     return None, None
 
 
-def _coordenadas_da_consulta(pergunta, dados=None):
-    """Coordenadas da pergunta ou, na falta delas, de um documento local.
+def _coordenadas_de_trechos(pergunta, trechos=None):
+    """Coordenadas da pergunta ou, na falta delas, de um trecho local.
 
     A Macrostrat aceita um ponto e devolve a unidade geológica daquele
     local. O ponto pode estar escrito na pergunta ("-3,1, -60,0") ou no
     texto de um trecho recuperado dos documentos locais ativos — é onde
     o usuário costuma colar a coordenada de um afloramento. A pergunta
-    tem prioridade: se ela traz o par, os documentos não são varridos.
+    tem prioridade: se ela traz o par, os trechos não são varridos.
+
+    Recebe apenas a lista de trechos (referência leve) em vez do
+    dicionário de dados inteiro. O dicionário pode carregar centenas de
+    registros das fontes externas e não precisa ser repassado só para
+    procurar uma coordenada.
     """
 
     latitude, longitude = _extrair_coordenadas(pergunta)
@@ -298,9 +313,7 @@ def _coordenadas_da_consulta(pergunta, dados=None):
     if latitude is not None:
         return latitude, longitude
 
-    trechos = ((dados or {}).get("documentos") or {}).get("trechos") or []
-
-    for trecho in trechos:
+    for trecho in trechos or []:
         latitude, longitude = _extrair_coordenadas(
             (trecho or {}).get("texto")
         )
@@ -309,6 +322,20 @@ def _coordenadas_da_consulta(pergunta, dados=None):
             return latitude, longitude
 
     return None, None
+
+
+def _coordenadas_da_consulta(pergunta, dados=None):
+    """Compatibilidade: extrai os trechos do dicionário de dados.
+
+    Mantida para chamadores antigos. O fluxo interno usa
+    :func:_coordenadas_de_trechos e passa só a lista de trechos.
+    """
+
+    trechos = (
+        ((dados or {}).get("documentos") or {}).get("trechos") or []
+    )
+
+    return _coordenadas_de_trechos(pergunta, trechos)
 
 
 # Termos que indicam uma pergunta sobre distribuição geográfica ampla.
@@ -396,6 +423,23 @@ def _instrucao_metalogenetica_global(pergunta, dados):
     return INSTRUCAO_SINTESE_METALOGENETICA_GLOBAL
 
 
+def _iniciar_fonte(progresso, cancelamento, chave):
+    """Publica a etapa e verifica o cancelamento antes de uma fonte."""
+
+    etapa = ETAPA_POR_FONTE.get(chave, ETAPA_PREPARANDO)
+    relatar(progresso, etapa, None, "")
+    verificar_cancelamento(cancelamento, etapa)
+
+
+def _concluir_fonte(cancelamento, chave):
+    """Verifica o cancelamento depois de uma fonte terminar."""
+
+    verificar_cancelamento(
+        cancelamento,
+        ETAPA_POR_FONTE.get(chave, ETAPA_PREPARANDO),
+    )
+
+
 def consultar_fonte(
     pergunta,
     fontes,
@@ -425,7 +469,9 @@ def consultar_fonte(
     limite_geossit=GEOSSIT_LIMITE_PADRAO,
     usgs_enabled=None,
     intl_geo_enabled=None,
-    intl_geo_regioes=None
+    intl_geo_regioes=None,
+    progresso=None,
+    cancelamento=None,
 ):
     """Coleta os dados das fontes que a pergunta exige.
 
@@ -488,14 +534,21 @@ def consultar_fonte(
     ``dados["anm"]``. É o par regulatório do GeoSGB, não um substituto:
     as duas bases podem ser ligadas na mesma consulta.
 
-    ``usar_macrostrat``, ``usar_siagas`` e ``usar_geossit`` ligam os
-    três conectores geológicos da última fase, também com toggles
-    próprios. A Macrostrat usa as coordenadas da pergunta ou de
-    um documento local recuperado nesta consulta (``dados`` já traz os
-    trechos porque este bloco roda depois da busca local). Os limites de
-    cada conector são validados por eles mesmos; um ``ValueError`` vira
-    fonte vazia com o motivo em ``aviso``, nunca uma exceção na
-    interface.
+    usar_macrostrat, usar_siagas e usar_geossit ligam os três
+    conectores geológicos da última fase, também com toggles próprios. A
+    Macrostrat usa as coordenadas da pergunta ou de um documento local
+    recuperado nesta consulta (só a lista de trechos é repassada, não o
+    dicionário inteiro). Os limites de cada conector são validados por
+    eles mesmos; um ValueError vira fonte vazia com o motivo em aviso,
+    nunca uma exceção na interface.
+
+    Prazos e cancelamento por etapa: cada fonte publica a etapa com
+    _iniciar_fonte e verifica o evento com _concluir_fonte. Os
+    conectores têm prazo HTTP explícito (TIMEOUT_HTTP_PADRAO, 8 s, e
+    valores próprios em ANA, ANM, GeoSGB e serviços internacionais),
+    então um portal lento vira fonte vazia com aviso em vez de travar a
+    consulta. CancelamentoSolicitado sempre propaga: é fluxo normal, não
+    falha de fonte.
     """
 
     # Compatibilidade com chamadores antigos que usam os nomes das
@@ -534,6 +587,7 @@ def consultar_fonte(
         # A consulta é planejada aqui para que o termo efetivo esteja
         # pronto antes da chamada HTTP: é ele que a interface exibe no
         # st.status e é ele que ``consultar_sgb`` reaproveita.
+        _iniciar_fonte(progresso, cancelamento, "sgb")
         busca = extrair_termos(
             pergunta,
             usar_llm=usar_llm_termos,
@@ -544,25 +598,36 @@ def consultar_fonte(
             pergunta,
             limite=limite,
             comunidade=comunidade,
-            termos=busca
+            termos=busca,
+            cancelamento=cancelamento,
         )
         dados["busca"] = busca
+        _concluir_fonte(cancelamento, "sgb")
 
     if "documentos" in fontes:
         # A busca local é bilíngue: a mesma pergunta é consultada em
         # português e em inglês antes de os trechos serem unidos. O
         # modelo escolhido na barra lateral também gera as queries.
+        _iniciar_fonte(progresso, cancelamento, "documentos")
         dados["documentos"] = consultar_documentos(
             pergunta,
-            modelo=modelo
+            modelo=modelo,
+            progresso=progresso,
+            cancelamento=cancelamento,
         )
+        _concluir_fonte(cancelamento, "documentos")
 
     if usar_ana:
         # O conector é opcional e independente do roteamento: mesmo no
         # modo "Conhecimento geral" ele pode enriquecer a resposta com
         # estações. ``consultar_ana_estacoes`` nunca levanta exceção por
         # falha de rede; o motivo fica em ``aviso``.
-        dados["ana"] = consultar_ana_estacoes(pergunta)
+        _iniciar_fonte(progresso, cancelamento, "ana")
+        dados["ana"] = consultar_ana_estacoes(
+            pergunta,
+            cancelamento=cancelamento,
+        )
+        _concluir_fonte(cancelamento, "ana")
 
     if usar_web:
         # A Web é uma fonte adicional, não um modo: por isso roda em
@@ -570,11 +635,14 @@ def consultar_fonte(
         # tendo prioridade na resposta. A versão "detalhada" é usada
         # para que o aviso (sem pacote, sem internet, sem resultados)
         # chegue ao st.status da interface.
+        _iniciar_fonte(progresso, cancelamento, "web")
         dados["web"] = consultar_web_detalhado(
             pergunta,
             limite=limite_web,
-            apenas_tecnico=web_apenas_tecnico
+            apenas_tecnico=web_apenas_tecnico,
+            cancelamento=cancelamento,
         )
+        _concluir_fonte(cancelamento, "web")
 
     if usar_openalex or usar_usgs or usar_intl_geo:
         # A tradução PT→EN é feita uma única vez e reaproveitada pelas
@@ -585,10 +653,13 @@ def consultar_fonte(
         termo_en = busca_externa["termo_en"]
 
         if usar_openalex:
+            _iniciar_fonte(progresso, cancelamento, "openalex")
+
             try:
                 dados["openalex"] = consultar_openalex_detalhado(
                     termo_en,
-                    limite=limite_externo
+                    limite=limite_externo,
+                    cancelamento=cancelamento,
                 )
             except ValueError as erro:
                 # Um parâmetro inválido não pode derrubar a resposta
@@ -596,6 +667,8 @@ def consultar_fonte(
                 dados["openalex"] = _base_externa_indisponivel(
                     "OpenAlex", termo_en, limite_externo, erro
                 )
+
+            _concluir_fonte(cancelamento, "openalex")
 
         if usar_intl_geo or usar_usgs:
             # O USGS ScienceBase é um dos dez serviços do grupo
@@ -620,8 +693,16 @@ def consultar_fonte(
             if not regioes:
                 regioes = [REGIAO_TODAS]
 
-            latitude, longitude = _coordenadas_da_consulta(pergunta, dados)
+            latitude, longitude = _coordenadas_de_trechos(
+                pergunta,
+                ((dados.get("documentos") or {}).get("trechos")),
+            )
             erro_intl = None
+            _iniciar_fonte(
+                progresso,
+                cancelamento,
+                "intl_geo" if usar_intl_geo else "usgs",
+            )
 
             try:
                 registros_intl = consultar_servicos_geologicos_internacionais(
@@ -630,7 +711,10 @@ def consultar_fonte(
                     lat=latitude,
                     lon=longitude,
                     limite_total=18,
+                    cancelamento=cancelamento,
                 )
+            except CancelamentoSolicitado:
+                raise
             except Exception as erro:
                 # O orquestrador já contém falhas por conector; esta
                 # proteção extra cobre um chamador substituto ou um
@@ -694,78 +778,112 @@ def consultar_fonte(
                     ),
                 }
 
+            _concluir_fonte(
+                cancelamento,
+                "intl_geo" if usar_intl_geo else "usgs",
+            )
+
     if usar_geosgb:
         # A extração de substância e UF acontece dentro do conector, a
         # partir da própria pergunta. Como nas bases internacionais, um
         # parâmetro inválido vira fonte vazia com o motivo no aviso.
+        _iniciar_fonte(progresso, cancelamento, "geosgb")
+
         try:
             dados["geosgb"] = consultar_geosgb_ocorrencias(
                 pergunta,
-                limite=limite_geosgb
+                limite=limite_geosgb,
+                cancelamento=cancelamento,
             )
         except ValueError as erro:
             dados["geosgb"] = _base_externa_indisponivel(
                 "GeoSGB WFS", pergunta, limite_geosgb, erro
             )
 
+        _concluir_fonte(cancelamento, "geosgb")
+
     if usar_anm:
         # O recorte (substância, titular ou UF) é decidido dentro do
         # conector. A ANM oscila e apresenta cadeia de certificados
         # incompleta: o conector já devolve lista vazia com o motivo em
         # ``aviso`` em vez de levantar exceção de rede.
+        _iniciar_fonte(progresso, cancelamento, "anm")
+
         try:
             dados["anm"] = consultar_anm_processos(
                 pergunta,
-                limite=limite_anm
+                limite=limite_anm,
+                cancelamento=cancelamento,
             )
         except ValueError as erro:
             dados["anm"] = _base_externa_indisponivel(
                 "ANM / SIGMINE", pergunta, limite_anm, erro
             )
 
+        _concluir_fonte(cancelamento, "anm")
+
     if usar_macrostrat:
         # As coordenadas saem da pergunta ou de um trecho de documento
         # local já recuperado acima. Sem coordenada, a consulta é por
         # nome de unidade litoestratigráfica — o conector decide.
-        latitude, longitude = _coordenadas_da_consulta(pergunta, dados)
+        latitude, longitude = _coordenadas_de_trechos(
+            pergunta,
+            ((dados.get("documentos") or {}).get("trechos")),
+        )
+        _iniciar_fonte(progresso, cancelamento, "macrostrat")
 
         try:
             dados["macrostrat"] = consultar_macrostrat(
                 pergunta,
                 lat=latitude,
                 lon=longitude,
-                limite=limite_macrostrat
+                limite=limite_macrostrat,
+                cancelamento=cancelamento,
             )
         except ValueError as erro:
             dados["macrostrat"] = _base_externa_indisponivel(
                 "Macrostrat", pergunta, limite_macrostrat, erro
             )
 
+        _concluir_fonte(cancelamento, "macrostrat")
+
     if usar_siagas:
         # O município e a UF são extraídos dentro do conector, sem
         # concatenar a frase inteira no filtro CQL do WFS.
+        _iniciar_fonte(progresso, cancelamento, "siagas")
+
         try:
             dados["siagas"] = consultar_siagas_pocos(
                 pergunta,
-                limite=limite_siagas
+                limite=limite_siagas,
+                cancelamento=cancelamento,
             )
         except ValueError as erro:
             dados["siagas"] = _base_externa_indisponivel(
                 "SIAGAS / SGB", pergunta, limite_siagas, erro
             )
 
+        _concluir_fonte(cancelamento, "siagas")
+
     if usar_geossit:
         # Como no SIAGAS, o recorte geográfico é definido pelo conector
         # a partir da pergunta.
+        _iniciar_fonte(progresso, cancelamento, "geossit")
+
         try:
             dados["geossit"] = consultar_geossit_inde(
                 pergunta,
-                limite=limite_geossit
+                limite=limite_geossit,
+                cancelamento=cancelamento,
             )
         except ValueError as erro:
             dados["geossit"] = _base_externa_indisponivel(
                 "INDE / GEOSSIT", pergunta, limite_geossit, erro
             )
+
+        _concluir_fonte(cancelamento, "geossit")
+
+    verificar_cancelamento(cancelamento, ETAPA_DOCUMENTOS)
 
     return dados if dados else None
 
@@ -804,7 +922,10 @@ def responder(
     usgs_enabled=None,
     intl_geo_enabled=None,
     intl_geo_regioes=None,
-    idioma: str = "pt"
+    idioma: str = "pt",
+    progresso=None,
+    cancelamento=None,
+    ao_token=None,
 ):
     """Responde à pergunta combinando as fontes externas e o LLM local.
 
@@ -913,6 +1034,9 @@ def responder(
     Idiomas desconhecidos caem no padrão ``"pt"``.
     """
 
+    verificar_cancelamento(cancelamento, ETAPA_PREPARANDO)
+    relatar(progresso, ETAPA_PREPARANDO, 0.0, "")
+
     # Aliases de compatibilidade: a interface e chamadores antigos podem
     # informar as chaves de sessão diretamente, em vez dos parâmetros
     # ``usar_*``/``regioes_*``.
@@ -924,6 +1048,8 @@ def responder(
 
     if intl_geo_regioes is not None:
         regioes_intl_geo = list(intl_geo_regioes)
+
+    relatar(progresso, ETAPA_ROTEAMENTO, None, "")
 
     # 1. A classificação de intenção continua rodando para registrar a
     #    justificativa e o recorte da pergunta, mas não decide mais
@@ -938,7 +1064,9 @@ def responder(
             pergunta,
             documentos=documentos,
             modelo=modelo,
-            historico=historico
+            historico=historico,
+            progresso=progresso,
+            cancelamento=cancelamento,
         )
 
         fontes = []
@@ -992,8 +1120,12 @@ def responder(
         usar_siagas=usar_siagas,
         limite_siagas=limite_siagas,
         usar_geossit=usar_geossit,
-        limite_geossit=limite_geossit
+        limite_geossit=limite_geossit,
+        progresso=progresso,
+        cancelamento=cancelamento,
     )
+
+    verificar_cancelamento(cancelamento, ETAPA_ROTEAMENTO)
 
     # O system prompt é montado na camada de orquestração e reflete
     # apenas as fontes que realmente retornaram dados nesta consulta. A
@@ -1024,13 +1156,23 @@ def responder(
         parte for parte in partes_prompt if parte
     )
 
+    verificar_cancelamento(cancelamento, ETAPA_ROTEAMENTO)
+
     resposta = gerar_resposta(
         pergunta=pergunta,
         dados=dados,
         historico=historico,
         prompt_sistema=prompt_sistema,
-        modelo=modelo
+        modelo=modelo,
+        progresso=progresso,
+        cancelamento=cancelamento,
+        ao_token=ao_token,
     )
+
+    # Um cancelamento que chegue depois da última geração não pode
+    # devolver resposta parcial como se fosse conclusão.
+    verificar_cancelamento(cancelamento, ETAPA_CONCLUIDA)
+    relatar(progresso, ETAPA_CONCLUIDA, 1.0, "")
 
     # O rótulo da fonte ANA acompanha a origem real do dado: quando o
     # conector devolveu do cache local, a interface, o histórico e o

@@ -12,6 +12,7 @@ from unittest.mock import patch
 from streamlit.testing.v1 import AppTest
 
 from services.external_api_service import REGIAO_TODAS
+from tests._apptest_isolation import isolar_ambiente_apptest
 from utils.i18n import NOMES_IDIOMA, ROTULOS_IDIOMA
 
 RAIZ = Path(__file__).resolve().parent.parent
@@ -32,9 +33,11 @@ class TestSeletorBilingue(unittest.TestCase):
     """Botões de bandeira, tradução da interface e idioma do LLM."""
 
     def setUp(self):
+        isolar_ambiente_apptest(self)
+
         self._patch_modelos = patch(
             "services.llm_service.listar_modelos_locais",
-            return_value=["qwen3:14b"],
+            return_value=["nexusgeo-qwen3-4b-v2-q4"],
         )
         self._patch_modelos.start()
         self.addCleanup(self._patch_modelos.stop)
@@ -160,9 +163,6 @@ class TestSeletorBilingue(unittest.TestCase):
             "core.assistant.responder",
             side_effect=fake_responder,
         ), patch(
-            "services.history_service.salvar_conversa",
-            return_value="data/historico/teste.json",
-        ), patch(
             "services.history_service.gerar_titulo",
             return_value="Pergunta de teste",
         ):
@@ -174,7 +174,7 @@ class TestSeletorBilingue(unittest.TestCase):
 
             # O rótulo exibido acompanha o idioma...
             self.assertEqual(
-                list(seletor.options)[0],
+                next(iter(seletor.options)),
                 "🌎 All Regions (Global)",
             )
             self.assertEqual(seletor.value, ["🌎 All Regions (Global)"])
@@ -211,9 +211,6 @@ class TestSeletorBilingue(unittest.TestCase):
         with patch(
             "core.assistant.responder",
             side_effect=fake_responder,
-        ), patch(
-            "services.history_service.salvar_conversa",
-            return_value="data/historico/teste.json",
         ), patch(
             "services.history_service.gerar_titulo",
             return_value="Pergunta de teste",
