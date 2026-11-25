@@ -138,5 +138,11 @@ $RECYCLE.BIN/
 finetuning/adaptadores/
 *.safetensors
 *.pt
+*.pth
+*.ckpt
+*.bin
 *.gguf
 
+# Caches de upload e credenciais do Hugging Face (nunca versionar)
+.huggingface/
+huggingface/.cache/

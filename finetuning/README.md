@@ -158,6 +158,25 @@ GGUF — ou manualmente:
 Em outro PC, copie o GGUF e rode novamente `setup_llm.py`. Nenhum benchmark
 Ollama é executado automaticamente.
 
+## Hugging Face (repositório oficial do GGUF)
+
+Os pesos `Q4_K_M` também são distribuídos oficialmente no Hugging Face, sob
+licença **Apache-2.0**:
+
+- Repositório: <https://huggingface.co/tiagotmaia/nexusgeo-qwen3-4b-v2-GGUF>
+- Arquivo: `nexusgeo-qwen3-4b-v2-Q4_K_M.gguf` (2,33 GiB / ~2,50 GB)
+- Cartão de modelo: `finetuning/huggingface/README.md`
+
+Registro direto no Ollama, sem cópia local do GGUF:
+
+    ollama run hf.co/tiagotmaia/nexusgeo-qwen3-4b-v2-GGUF:Q4_K_M
+
+Para preservar `temperature 0`, `seed 42` e `num_ctx 32000`, use `FROM`
+apontando para `hf.co/tiagotmaia/nexusgeo-qwen3-4b-v2-GGUF:Q4_K_M` e registre
+com `ollama create nexusgeo-qwen3-4b-v2-q4 -f <Modelfile>`. O `setup_llm.py`
+desta versão continua baixando o GGUF dos GitHub Releases; o caminho do
+Hugging Face é manual.
+
 ## Resultado validado da v1.0.0
 
 Benchmark determinístico no `split=teste` (50 casos, 25 pares PT-BR/EN),
