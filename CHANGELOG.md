@@ -32,6 +32,12 @@ Windows autoverificável.
     `seed=42`): **62,00%** de acurácia e **100,00%** de conformidade de esquema
     JSON, contra **58,00%** de `qwen3:4b`; `p50 = 2.681 ms` e
     `p95 = 2.994 ms`, com **0,00%** de falha de parsing.
+  - **Publicação oficial do GGUF no Hugging Face** — pesos `Q4_K_M` em
+    [`tiagotmaia/nexusgeo-qwen3-4b-v2-GGUF`](https://huggingface.co/tiagotmaia/nexusgeo-qwen3-4b-v2-GGUF)
+    sob licença **Apache-2.0**, instaláveis com
+    `ollama run hf.co/tiagotmaia/nexusgeo-qwen3-4b-v2-GGUF:Q4_K_M`. O
+    `setup_llm.py` continua baixando dos GitHub Releases; o caminho do Hugging
+    Face é a alternativa manual documentada.
 - **Persistência e Concorrência (`SQLite WAL`)** — migração do armazenamento
   de histórico, sessões e metadados para SQLite em modo WAL, com
   `journal_mode=WAL`, `foreign_keys=ON` e `busy_timeout=30000`.
@@ -69,10 +75,9 @@ Windows autoverificável.
   PyInstaller (`packaging/assistente.spec`).
   - Modo `--self-test` embutido no `launcher_desktop.py`, executado em modo
     headless e validado automaticamente pelo `packaging/smoke_exe.py` ao final
-    do `build_portatil.ps1` e do `build_installer.ps1`.
+    do `build_portatil.ps1`.
   - O self-test verifica recursos de runtime, banco SQLite WAL temporário,
-    modelo oficial e imports de topo de `app.py` antes de gerar o `.zip` ou o
-    instalador.
+    modelo oficial e imports de topo de `app.py` antes de gerar o `.zip`.
 
 ### Changed
 
@@ -82,8 +87,16 @@ Windows autoverificável.
   escolha interativa de catálogo e sem detecção de perfil de RAM.
 - A distribuição Windows passou a ser bloqueante: o build só conclui quando o
   executável compilado passa integralmente no `--self-test`.
+- A distribuição oficial da `v1.0.0` passou a ser **exclusivamente** o Build
+  Portátil Windows (`.zip`, `build_portatil.ps1` / `NexusGeoIA.exe` /
+  `iniciar.bat` / `encerrar.bat`) e a instalação/execução via código-fonte
+  (`git clone`, `venv`, `pip install -r requirements.txt`, `python
+  setup_llm.py`, `streamlit run app.py`). O Build Portátil (`.zip`) é o
+  **único artefato compilado** da release `v1.0.0`.
 - A documentação de release, o `README.md`, o `AGENTS.md` e o protocolo de
   pesquisa foram alinhados ao estado final da `v1.0.0`.
+- A documentação principal ganhou a versão inglesa sincronizada
+  `README.en.md`, com seletor de idioma no topo dos dois arquivos.
 
 ### Removed
 
@@ -113,8 +126,8 @@ Release de consolidação que serviu de linha de base para a `v1.0.0`.
 - RAG documental com OCR leve em CPU, extração de tabelas e geração de
   pareceres técnicos em `.docx` e `.md`.
 - Parser espacial de coordenadas decimais, GMS e folhas CIM.
-- Empacotamento Windows em `--onedir`, com pacote portátil e instalador
-  Inno Setup, além da suíte offline de empacotamento.
+- Empacotamento Windows em `--onedir` com pacote portátil, além da suíte
+  offline de empacotamento.
 
 ### Changed
 

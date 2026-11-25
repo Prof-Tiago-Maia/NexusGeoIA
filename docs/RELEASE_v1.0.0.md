@@ -61,6 +61,11 @@ technical fallback to `qwen3:4b`.
   **62,00%** de acurácia e **100,00%** de conformidade de esquema JSON, contra
   **58,00%** de `qwen3:4b`; `p50 = 2.681 ms`, `p95 = 2.994 ms` e **0,00%**
   de falha de parsing.
+- **Publicação oficial no Hugging Face:** os pesos GGUF estão em
+  [`tiagotmaia/nexusgeo-qwen3-4b-v2-GGUF`](https://huggingface.co/tiagotmaia/nexusgeo-qwen3-4b-v2-GGUF)
+  sob licença **Apache-2.0**, com cartão de modelo completo. A instalação
+  direta dispensa o download manual do GGUF:
+  `ollama run hf.co/tiagotmaia/nexusgeo-qwen3-4b-v2-GGUF:Q4_K_M`.
 
 ### 2. Persistência e concorrência com SQLite WAL
 
@@ -112,22 +117,28 @@ technical fallback to `qwen3:4b`.
   internos** no PyInstaller (`packaging/assistente.spec`).
 - Modo **`--self-test`** embutido no `launcher_desktop.py`.
 - `packaging/smoke_exe.py` executa `NexusGeoIA.exe --self-test` em modo
-  headless ao final do `build_portatil.ps1` e do `build_installer.ps1`.
+  headless ao final do `build_portatil.ps1`.
 - O autodiagnóstico valida recursos de runtime, banco SQLite WAL temporário,
   modelo oficial e imports de topo de `app.py`. Se qualquer verificação
-  falhar, o `.zip` e o instalador **não** são gerados.
+  falhar, nenhum `.zip` é gerado.
 
 ---
 
-## Assets obrigatórios da Release
+## Distribuição oficial e Assets da Release
 
-Anexe os **três arquivos** abaixo em **Assets** na Release `v1.0.0`:
+A `v1.0.0` tem **dois modos oficiais** de uso e distribuição, e apenas dois:
+
+| # | Modo oficial | Como obter | Público-alvo |
+| --- | --- | --- | --- |
+| **1** | **Build Portátil Windows (`.zip`)** | Asset `NexusGeoIA_v1.0.0_Portatil.zip` → `iniciar.bat` (ou `NexusGeoIA.exe`), com `encerrar.bat` para encerrar | Usuários finais no Windows, sem Python instalado |
+| **2** | **Instalação/Execução via Código-Fonte** | `git clone` → `venv` → `pip install -r requirements.txt` → `python setup_llm.py` → `streamlit run app.py` | Desenvolvedores, auditores e execução em outros ambientes Python |
+
+Anexe os **dois arquivos** abaixo em **Assets** na Release `v1.0.0`:
 
 | # | Arquivo | Descrição | Tamanho aprox. |
 | --- | --- | --- | --- |
-| 1 | **`NexusGeoIA_v1.0.0_Portatil.zip`** | Pacote portátil Windows sem instalação: `NexusGeoIA.exe` + `_internal/`, `iniciar.bat`, `setup_llm.py`, `prompts/`, `.streamlit/`, `README.md` e `PROTOCOLO_PESQUISA.md`. | ~210 MB (sem modelos) |
-| 2 | **`NexusGeoIA_v1.0.0_Setup.exe`** | Instalador completo Windows (Inno Setup), com atalhos, desinstalador e o mesmo conteúdo `--onedir`. | — |
-| 3 | **`nexusgeo-qwen3-4b-v2-Q4_K_M.gguf`** | Pesos quantizados do modelo oficial. É baixado automaticamente pelo `setup_llm.py` na primeira execução do pacote portátil. | ~2,5 GB |
+| 1 | **`NexusGeoIA_v1.0.0_Portatil.zip`** | Build Portátil Windows: `NexusGeoIA.exe` + `_internal/`, `iniciar.bat`, `encerrar.bat`, `setup_llm.py`, `prompts/`, `.streamlit/`, `ui/`, `finetuning/`, `README.md` e `PROTOCOLO_PESQUISA.md`. | ~210 MB (sem modelos) |
+| 2 | **`nexusgeo-qwen3-4b-v2-Q4_K_M.gguf`** | Pesos quantizados do modelo oficial. É baixado automaticamente pelo `setup_llm.py` na primeira execução do Build Portátil. | ~2,5 GB |
 
 > **Por que o GGUF é obrigatório:** o pacote portátil é leve e **não** embute
 > o modelo. Na primeira execução, o `setup_llm.py` procura o GGUF em
@@ -135,10 +146,13 @@ Anexe os **três arquivos** abaixo em **Assets** na Release `v1.0.0`:
 > exatamente este asset da Release `v1.0.0` e o registra no Ollama via
 > `ollama create`. Sem o asset, o fluxo cai no fallback `qwen3:4b`.
 
-> **Nota de publicação:** o GitHub impõe limite de tamanho por asset. Se o
-> GGUF exceder o limite da conta, publique-o em um espelho estável e ajuste
-> `URL_GGUF_OFICIAL` em `setup_llm.py` para a mesma URL divulgada nesta
-> Release.
+> **Nota de publicação:** o GitHub impõe limite de tamanho por asset. Como o
+> GGUF já está publicado oficialmente no Hugging Face
+> ([`tiagotmaia/nexusgeo-qwen3-4b-v2-GGUF`](https://huggingface.co/tiagotmaia/nexusgeo-qwen3-4b-v2-GGUF),
+> Apache-2.0), esse repositório é o espelho estável de referência. O asset do
+> GitHub Releases continua sendo a origem automática usada por
+> `URL_GGUF_OFICIAL` em `setup_llm.py`; ao trocar de espelho, ajuste essa
+> constante para a mesma URL divulgada nesta Release.
 
 ---
 
@@ -153,10 +167,11 @@ Anexe os **três arquivos** abaixo em **Assets** na Release `v1.0.0`:
 | Internet | Apenas no primeiro uso (download do GGUF) | — |
 | Navegador | Edge, Chrome ou Firefox atualizado | — |
 | Privilégios | Nenhum administrador necessário | — |
+| Python (somente modo código-fonte) | 3.13 ou 3.14 | 3.14 no Windows |
 
 ---
 
-## Início rápido — Pacote portátil (Windows)
+## Início rápido — Modo 1: Build Portátil Windows (`.zip`)
 
 1. Baixe **`NexusGeoIA_v1.0.0_Portatil.zip`** em **Assets**.
 2. Extraia **todo** o conteúdo para uma pasta curta e gravável, por exemplo
@@ -164,7 +179,7 @@ Anexe os **três arquivos** abaixo em **Assets** na Release `v1.0.0`:
 3. Abra a pasta e execute **`iniciar.bat`** (recomendado) ou
    **`NexusGeoIA.exe`**.
 4. Na primeira execução, o configurador do modelo local abre automaticamente:
-   ele baixa o GGUF oficial (asset 3), registra o modelo no Ollama e grava o
+   ele baixa o GGUF oficial (asset 2), registra o modelo no Ollama e grava o
    `config_local.json`. Em falha de rede, aplica o fallback `qwen3:4b`.
 5. O navegador abre em `http://localhost:8501` (ou na próxima porta livre
    entre 8501 e 8510).
@@ -173,19 +188,44 @@ Anexe os **três arquivos** abaixo em **Assets** na Release `v1.0.0`:
 > o aviso "O Windows protegeu o computador", clique em **Mais informações** →
 > **Executar assim mesmo**. O código-fonte é público e auditável.
 
-## Início rápido — Instalador (Windows)
+---
 
-1. Baixe **`NexusGeoIA_v1.0.0_Setup.exe`** em **Assets**.
-2. Execute o instalador. A instalação é **por usuário**, sem UAC
-   (`PrivilegesRequired=lowest`).
-3. Abra o NexusGeo IA pelo atalho do Menu Iniciar ou da Área de Trabalho.
-4. Na primeira execução, o assistente de modelo baixa o GGUF oficial e o
-   registra no Ollama, como no pacote portátil.
-5. Os dados do usuário ficam em `%LOCALAPPDATA%\NexusGeoIA`.
+## Início rápido — Modo 2: Código-Fonte (Python/Streamlit)
 
-> **Requisito comum:** o **Ollama** precisa estar instalado e em execução. Se
-> ele não estiver disponível, o aplicativo orienta a instalação e mantém a
-> interface funcional para consulta às fontes públicas.
+1. Clone o repositório e entre na pasta do projeto:
+
+   ```powershell
+   git clone https://github.com/Prof-Tiago-Maia/NexusGeoIA.git
+   cd NexusGeoIA
+   ```
+
+2. Crie e ative o ambiente virtual (Python 3.13/3.14):
+
+   ```powershell
+   python -m venv .venv
+   .\.venv\Scripts\Activate.ps1
+   ```
+
+3. Instale as dependências e configure o modelo oficial:
+
+   ```powershell
+   python -m pip install --upgrade pip
+   python -m pip install -r requirements.txt
+   python setup_llm.py
+   ```
+
+4. Inicie a interface:
+
+   ```powershell
+   streamlit run app.py
+   ```
+
+5. A interface abre em `http://localhost:8501`; os dados ficam na pasta do
+   projeto (`data/`) ou no caminho definido por `ASSISTENTE_DATA_DIR`.
+
+> **Requisito comum aos dois modos:** o **Ollama** precisa estar instalado e
+> em execução. Se ele não estiver disponível, o aplicativo orienta a
+> instalação e mantém a interface funcional para consulta às fontes públicas.
 
 ---
 
@@ -215,14 +255,44 @@ ollama list
 
 O nome esperado é **`nexusgeo-qwen3-4b-v2-q4`**.
 
+### Instalação direta pelo Hugging Face
+
+O GGUF oficial também está publicado no Hugging Face sob **Apache-2.0**:
+[`tiagotmaia/nexusgeo-qwen3-4b-v2-GGUF`](https://huggingface.co/tiagotmaia/nexusgeo-qwen3-4b-v2-GGUF).
+Para registrar o modelo sem passar pelo `setup_llm.py`:
+
+```powershell
+ollama run hf.co/tiagotmaia/nexusgeo-qwen3-4b-v2-GGUF:Q4_K_M
+```
+
+Para manter a decodificação determinística da release (`temperature 0`,
+`seed 42`, `num_ctx 32000`), crie o modelo a partir do template versionado:
+
+```text
+FROM hf.co/tiagotmaia/nexusgeo-qwen3-4b-v2-GGUF:Q4_K_M
+PARAMETER temperature 0
+PARAMETER seed 42
+PARAMETER num_ctx 32000
+PARAMETER num_predict 1024
+```
+
+```powershell
+ollama create nexusgeo-qwen3-4b-v2-q4 -f Modelfile
+```
+
+> O `setup_llm.py` continua baixando o GGUF dos GitHub Releases (asset 2)
+> quando ele não existe localmente; o caminho do Hugging Face é a alternativa
+> manual e equivalente, não um fluxo automático desta versão.
+
 ---
 
 ## Validação da release
 
-- O pacote compilado passou pela **validação manual** dos fluxos de instalação,
-  primeira execução, download/registro do modelo e abertura da interface.
+- O Build Portátil compilado passou pela **validação manual** dos fluxos de
+  extração, primeira execução, download/registro do modelo, abertura da
+  interface e encerramento por `encerrar.bat`.
 - O build é **autoverificável**: `packaging/smoke_exe.py` executa
-  `NexusGeoIA.exe --self-test` antes de gerar o `.zip` e o instalador.
+  `NexusGeoIA.exe --self-test` antes de gerar o `.zip`.
 - O self-test cobre os **37 módulos internos**, os recursos de runtime
   (`.streamlit/`, `prompts/`, `ui/`, `finetuning/Modelfile.*`), um banco
   SQLite WAL temporário, a resolução do modelo oficial e os imports de topo de
@@ -233,11 +303,15 @@ O nome esperado é **`nexusgeo-qwen3-4b-v2-q4`**.
 
 ## English quick start
 
-1. Download **`NexusGeoIA_v1.0.0_Portatil.zip`** (portable) or
-   **`NexusGeoIA_v1.0.0_Setup.exe`** (installer) from **Assets**.
-2. Portable: extract the full archive to a short writable path such as
-   `C:\NexusGeoIA` and run `iniciar.bat`. Installer: run the setup and open
-   the Start Menu shortcut.
+`v1.0.0` has exactly two official modes — the Windows Portable Build and
+running from source code.
+
+**Mode 1 — Windows Portable Build (`.zip`).**
+
+1. Download **`NexusGeoIA_v1.0.0_Portatil.zip`** from **Assets**.
+2. Extract the full archive to a short writable path such as
+   `C:\NexusGeoIA` and run `iniciar.bat` (or `NexusGeoIA.exe`); use
+   `encerrar.bat` to shut down.
 3. On first launch, `setup_llm.py` downloads
    **`nexusgeo-qwen3-4b-v2-Q4_K_M.gguf`** from this Release, registers
    `nexusgeo-qwen3-4b-v2-q4` in Ollama, and writes `config_local.json`. If
@@ -246,7 +320,21 @@ O nome esperado é **`nexusgeo-qwen3-4b-v2-q4`**.
 5. Requirements: **Windows 10/11 64-bit**, **Ollama installed**, **8 GB+ RAM**
    (16 GB recommended), and **~10 GB free disk**.
 
-For the full documentation, see [README.md](../README.md) and
+**Mode 2 — Source code (Python/Streamlit).**
+
+1. Clone the repository: `git clone https://github.com/Prof-Tiago-Maia/NexusGeoIA.git`.
+2. Run `python -m venv .venv` and activate it with
+   `.\.venv\Scripts\Activate.ps1`.
+3. Run `python -m pip install -r requirements.txt` and `python setup_llm.py`.
+4. Run `streamlit run app.py` and open `http://localhost:8501`.
+
+**Direct Hugging Face install (Apache-2.0):**
+`ollama run hf.co/tiagotmaia/nexusgeo-qwen3-4b-v2-GGUF:Q4_K_M` — this
+registers the same GGUF without downloading it manually, but it does not write
+`config_local.json`; run `setup_llm.py` once to persist the choice.
+
+For the full documentation, see [README.en.md](../README.en.md) (English),
+[README.md](../README.md) (Portuguese), and
 [PROTOCOLO_PESQUISA.md](../PROTOCOLO_PESQUISA.md).
 
 ---
@@ -254,7 +342,9 @@ For the full documentation, see [README.md](../README.md) and
 ## Documentação e suporte
 
 - [README.md](../README.md) — instalação, uso, arquitetura e solução de
-  problemas.
+  problemas (português do Brasil).
+- [README.en.md](../README.en.md) — instalação, uso, arquitetura e solução de
+  problemas (inglês).
 - [PROTOCOLO_PESQUISA.md](../PROTOCOLO_PESQUISA.md) — protocolo de pesquisa,
   citação e rastreabilidade.
 - [CHANGELOG.md](../CHANGELOG.md) — histórico completo de versões.
